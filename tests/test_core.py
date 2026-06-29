@@ -55,6 +55,23 @@ def test_world_grid_segments_guards():
     assert grid.world_grid_segments(1, 0, 0, 1, 0.1) == []          # degenerate bound
 
 
+# --- grid: shape points ------------------------------------------------------
+
+def test_ngon_points():
+    # a square (4 sides) around the origin with the first vertex on +x
+    pts = grid.ngon_points((0.0, 0.0), (1.0, 0.0), 4)
+    assert len(pts) == 4
+    # every corner sits on the circumradius defined by the edge point
+    for x, y in pts:
+        assert math.isclose(math.hypot(x, y), 1.0, abs_tol=1e-9)
+    # first vertex points toward the edge point
+    assert math.isclose(pts[0][0], 1.0, abs_tol=1e-9)
+    assert math.isclose(pts[0][1], 0.0, abs_tol=1e-9)
+    # sides < 3 is clamped to a triangle; sides count is respected otherwise
+    assert len(grid.ngon_points((0, 0), (2, 0), 1)) == 3
+    assert len(grid.ngon_points((0, 0), (2, 0), 6)) == 6
+
+
 # --- grid: angle lock --------------------------------------------------------
 
 def test_snap_angle_locks_to_step():

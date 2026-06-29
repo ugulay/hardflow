@@ -1,11 +1,12 @@
 # Main draw operator: draw a shape on screen, project to 3D, apply boolean.
 #
-# SHAPE: BOX / CIRCLE / POLY      MODE: CUT / SLICE / MAKE
+# SHAPE: BOX / CIRCLE / POLY / NGON      MODE: CUT / SLICE / MAKE
 # Shortcuts (inside modal):
 #   Left click    place point / start-finish shape
 #   Enter         close POLY and apply
 #   Backspace     delete last POLY point
-#   Q/W/E         shape = BOX / CIRCLE / POLY
+#   Q/W/E/R       shape = BOX / CIRCLE / POLY / NGON
+#   [ / ]         decrease / increase N-gon side count
 #   1/2/3         mode  = CUT / SLICE / MAKE
 #   X             toggle snap
 #   Right click / ESC  cancel
@@ -23,6 +24,7 @@ _SHAPES = [
     ('BOX', "Box", "Rectangle"),
     ('CIRCLE', "Circle", "Circle"),
     ('POLY', "Polygon", "Freeform polygon"),
+    ('NGON', "N-gon", "Regular polygon (side count from preferences / [ ])"),
 ]
 _MODES = [
     ('CUT', "Cut", "Boolean DIFFERENCE"),
@@ -63,6 +65,7 @@ class HARDFLOW_OT_draw(Operator):
         self.geo = prefs.geo_snap        # vertex/edge snap (overrides grid)
         self.nd = prefs.non_destructive  # non-destructive: leave a live modifier
         self.plane = 'VIEW'              # projection plane: VIEW / X / Y / Z
+        self.sides = prefs.ngon_sides    # N-gon side count (adjust live with [ ])
         self.points = []          # confirmed screen points
         self.cursor = (0, 0)      # current (snapped) mouse point
         self._snap_hit = None     # (screen_point, kind) -- for visual marker
@@ -109,9 +112,15 @@ class HARDFLOW_OT_draw(Operator):
             if self.points:
                 self.points.pop()
 
-        elif event.type in {'Q', 'W', 'E'} and event.value == 'PRESS':
-            self.shape = {'Q': 'BOX', 'W': 'CIRCLE', 'E': 'POLY'}[event.type]
+        elif event.type in {'Q', 'W', 'E', 'R'} and event.value == 'PRESS':
+            self.shape = {'Q': 'BOX', 'W': 'CIRCLE', 'E': 'POLY',
+                          'R': 'NGON'}[event.type]
             self.points = []
+
+        elif (event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}
+              and event.value == 'PRESS'):
+            step = 1 if event.type == 'RIGHT_BRACKET' else -1
+            self.sides = max(3, min(64, self.sides + step))
 
         elif event.type in {'ONE', 'TWO', 'THREE', 'FOUR'} and event.value == 'PRESS':
             self.mode = {'ONE': 'CUT', 'TWO': 'SLICE', 'THREE': 'MAKE',
@@ -294,6 +303,8 @@ class HARDFLOW_OT_draw(Operator):
             return grid.box_points(a, b)
         if self.shape == 'CIRCLE':
             return grid.circle_points(a, b)
+        if self.shape == 'NGON':
+            return grid.ngon_points(a, b, self.sides)
         return []
 
     def _draw_px(self, context):
@@ -326,7 +337,8 @@ class HARDFLOW_OT_draw(Operator):
         # Hints split into two short lines -> roomier than one long line.
         lines = [
             status,
-            ("Q/W/E shape    1-4 mode    < > plane    Shift angle-lock", dim),
+            ("Q/W/E/R shape    [ ] sides    1-4 mode    < > plane    Shift angle-lock",
+             dim),
             ("X grid    V vertex    N non-destructive    Enter apply    Esc cancel",
              dim),
         ]
@@ -357,6 +369,9 @@ class HARDFLOW_OT_draw(Operator):
         if self.shape == 'CIRCLE':
             r = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
             return "Radius:  %.3f m   Diameter:  %.3f m" % (r, 2 * r)
+        if self.shape == 'NGON':
+            r = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+            return "Sides:  %d   Radius:  %.3f m" % (self.sides, r)
         # POLY: point count + last segment length
         last = uv(self.points[-1])
         cur = uv(self.cursor)

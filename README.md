@@ -10,8 +10,8 @@ Compatible with the Blender 4.2+ extension system.
 
 ## Features
 
-- **Boolean via modal drawing** — Box / Circle / Polygon shapes; Cut, Slice
-  (split in two), Make (add), and Face (create a surface) modes.
+- **Boolean via modal drawing** — Box / Circle / Polygon / N-gon shapes; Cut,
+  Slice (split in two), Make (add), and Face (create a surface) modes.
 - **World-scale grid snap** — a camera-independent grid that stays consistent in
   meters (Grid Modeler's "absolute size" logic); plane switches with `←/→`
   between VIEW / X / Y / Z.
@@ -48,7 +48,8 @@ In drawing mode:
 | Left click | Place point / start-finish shape |
 | Enter | Close the POLY shape and apply |
 | Backspace | Delete the last POLY point |
-| Q / W / E | Shape: Box / Circle / Polygon |
+| Q / W / E / R | Shape: Box / Circle / Polygon / N-gon |
+| [ / ] | Decrease / increase N-gon side count |
 | 1 / 2 / 3 / 4 | Mode: Cut / Slice / Make / Face |
 | ← / → | Drawing plane: VIEW / X / Y / Z |
 | X | Toggle world-scale grid snap |

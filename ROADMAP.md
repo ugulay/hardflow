@@ -50,6 +50,9 @@ This is where Grid Modeler's real power lies.
 - [x] Create face — `FACE` mode in the drawing operator (key `4`): a single
       n-gon surface object from the drawn shape (`geometry.build_face`). Extrude
       with native `E`.
+- [x] **N-gon draw shape** — regular-polygon primitive (shape key `R`); side
+      count from the `ngon_sides` preference, live `[`/`]` adjust. Pure-core
+      `core/grid.py ngon_points` (tested). Later: rotation handle, star/slot.
 - [x] **Advanced bevel** — `HARDFLOW_OT_bevel` modal/interactive (drag = width,
       wheel = segments) + profile, angle limit, width-type, and **Weighted
       Normal** modifier (clean hard-surface shading). Later: custom profile

@@ -53,6 +53,12 @@ class HARDFLOW_Preferences(AddonPreferences):
         description="Round cross-section radius of the pipe tool",
         default=0.05, min=0.001, soft_max=1.0,
     )
+    ngon_sides: IntProperty(
+        name="N-gon Sides",
+        description="Default side count for the N-gon draw shape; adjust live "
+                    "with [ and ] while drawing",
+        default=6, min=3, max=64,
+    )
     non_destructive: BoolProperty(
         name="Non-Destructive",
         description="Leave a live modifier instead of applying the boolean; stash "
@@ -100,6 +106,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "geo_snap")
         col.prop(self, "snap_pixels")
         col.prop(self, "angle_step")
+        col.prop(self, "ngon_sides")
         col.prop(self, "pipe_radius")
         col.prop(self, "non_destructive")
         col.prop(self, "multi_object")

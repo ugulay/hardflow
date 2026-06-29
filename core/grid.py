@@ -94,6 +94,24 @@ def box_points(a, b):
     return [(a[0], a[1]), (b[0], a[1]), (b[0], b[1]), (a[0], b[1])]
 
 
+def ngon_points(center, edge, sides, rotation=0.0):
+    """Screen-space regular-polygon corners from a center and an edge point.
+    The edge point sets the circumradius and the orientation of the first
+    vertex (so dragging rotates the n-gon); `rotation` adds an extra angular
+    offset in radians. `sides` is clamped to at least 3."""
+    sides = max(3, int(sides))
+    dx = edge[0] - center[0]
+    dy = edge[1] - center[1]
+    r = math.hypot(dx, dy)
+    base = math.atan2(dy, dx) + rotation
+    pts = []
+    for i in range(sides):
+        a = base + (i / sides) * math.tau
+        pts.append((center[0] + math.cos(a) * r,
+                    center[1] + math.sin(a) * r))
+    return pts
+
+
 def _orient(a, b, c):
     """Sign of the a->b->c turn (>0 CCW, <0 CW, 0 collinear)."""
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])

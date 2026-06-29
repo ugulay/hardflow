@@ -6,6 +6,9 @@ logic; since the project is pre-1.0, minor versions add features.
 ## [Unreleased]
 
 ### Added
+- **N-gon draw shape** — a regular-polygon primitive in the draw tool (shape key
+  `R`); side count from the `ngon_sides` preference, adjustable live with `[` and
+  `]`. Pure-core `grid.ngon_points` (tested).
 - **World-scale grid snap** — snap now operates on the projection plane's local
   (u,v) meter axes instead of screen pixels; a consistent grid independent of
   camera/zoom. Preference: `grid_world` (meters).
