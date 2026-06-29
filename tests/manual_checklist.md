@@ -124,6 +124,13 @@ Setup: same as Push/Pull.
       expected modifier / change.
 - [ ] Decals: place one on a surface; it sticks (shrinkwrap) and shows its material.
 - [ ] Assets: place an INSERT from a `.blend`; mark an object as an asset.
+- [ ] **Singular-matrix guard** (hardening, `inverted_safe`): scale an object to
+      **0 on one axis** (e.g. `S X 0`), then run **Cut**, **Push/Pull**, **Offset**,
+      and **Array** on it. The tools must report/no-op gracefully — **no
+      `ValueError: matrix does not have an inverse`** in the console.
+- [ ] **Modal handler guard:** if a draw/Push/Pull/Offset/Pipe modal ever fails to
+      start, the viewport must not keep drawing a ghost HUD/cage afterwards (no
+      orphaned draw handler).
 
 ---
 
