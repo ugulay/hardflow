@@ -7,8 +7,9 @@ context in every session.
 
 Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
 Blender 4.2+. The goal: deliver the core workflows of Grid Modeler, Boxcutter,
-and Hard Ops for free. Currently at **v0.1** — the basic architecture is in
-place and a handful of features work. The full roadmap is in `ROADMAP.md`.
+and Hard Ops for free. Currently at **v0.6** — the core boolean/snap/cutter
+workflows are implemented; live Blender verification is still ongoing. The full
+roadmap is in `ROADMAP.md`.
 
 ## FIRST TASK: smoke test inside Blender
 

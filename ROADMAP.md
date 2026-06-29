@@ -4,7 +4,7 @@ The features of competing tools and where/how they fit into Hardflow. Each item
 is isolated to a single module as much as possible, so that contributors can make
 progress without colliding with one another.
 
-## v0.1 — Current (core loop working)
+## v0.1 — Initial release (core loop working)
 - [x] Modal drawing operator (Box / Circle / Polygon)
 - [x] Cut / Slice / Make modes (boolean DIFFERENCE / INTERSECT / UNION)
 - [x] Screen-space grid snap + live GPU drawing + HUD
@@ -64,7 +64,7 @@ This is where Grid Modeler's real power lies.
       `pipe_radius`. Profile is round for now; square/custom cross-sections
       later.
 
-## v0.6 — UX polish
+## v0.6 — UX polish (current release)
 - [x] N-panel: tools + settings + active cutter list (`ui/panel.py`).
 - [x] HUD measurement display — the drawn shape's size in meters (Box W×H,
       Circle radius/diameter, Poly point count + last segment).
