@@ -78,6 +78,8 @@ class HARDFLOW_OT_place_decal(Operator):
         self._image = bpy.data.images.get(self.image_name) if self.image_name else None
         self._hit = None          # (location, normal, object)
         self._screen = None       # cursor screen pos for the HUD marker
+        self._preview = None      # live, real decal object that follows the cursor
+        self._preview_key = None  # (target, size, trim) -- rebuild when it changes
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
@@ -127,6 +129,7 @@ class HARDFLOW_OT_place_decal(Operator):
         elif event.type in {'MIDDLEMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM'}:
             return {'PASS_THROUGH'}
 
+        self._update_preview(context)
         return {'RUNNING_MODAL'}
 
     def _tangent(self, normal):
@@ -195,39 +198,74 @@ class HARDFLOW_OT_place_decal(Operator):
 
         hud.draw_hud(region, lines)
 
-    def _commit(self, context):
+    def _build_decal(self, context):
+        """Create the real decal object for the current hit + params (the live
+        preview and the final result are one and the same object)."""
         location, normal, obj = self._hit
+        if obj is None:
+            return None
         prefs = get_prefs(context)
-        try:
-            tangent = self._tangent(normal)
-            w, h = self._wh()
-            if self._image is not None:
-                new = decal.make_image_decal(
-                    context, obj, location, normal, tangent, self._image,
-                    width=w, height=h, offset=prefs.decal_offset,
-                    uv_rect=self._uv_rect())
-            else:
-                new = decal.make_decal(
-                    context, obj, location, normal, tangent,
-                    width=w, height=h,
-                    decal_type=self.decal_type, offset=prefs.decal_offset)
-            for o in list(context.selected_objects):
-                o.select_set(False)
-            new.select_set(True)
-            context.view_layer.objects.active = new
-        except Exception as ex:  # noqa: BLE001
-            self.report({'ERROR'}, f"Hardflow Decal: {ex}")
+        tangent = self._tangent(normal)
+        w, h = self._wh()
+        if self._image is not None:
+            return decal.make_image_decal(
+                context, obj, location, normal, tangent, self._image,
+                width=w, height=h, offset=prefs.decal_offset,
+                uv_rect=self._uv_rect())
+        return decal.make_decal(
+            context, obj, location, normal, tangent, width=w, height=h,
+            decal_type=self.decal_type, offset=prefs.decal_offset)
+
+    def _delete_preview(self):
+        if self._preview is not None and self._preview.name in bpy.data.objects:
+            bpy.data.objects.remove(self._preview, do_unlink=True)
+        self._preview = None
+
+    def _update_preview(self, context):
+        """Keep a real decal under the cursor: rebuild it when the target object,
+        size, or trim cell changes (mesh/material differ); otherwise just move it
+        (cheap, every mouse move)."""
+        if self._hit is None:
+            return
+        location, normal, obj = self._hit
+        key = (obj.name if obj is not None else None,
+               round(self.size, 6), self.trim_index)
+        if self._preview is None or key != self._preview_key:
+            self._delete_preview()
+            try:
+                self._preview = self._build_decal(context)
+            except Exception as ex:  # noqa: BLE001
+                self.report({'WARNING'}, "Decal preview: %s" % ex)
+                self._preview = None
+            self._preview_key = key
+        if self._preview is not None:
+            self._preview.matrix_world = decal.decal_matrix(
+                location, normal, self._tangent(normal))
+
+    def _commit(self, context):
+        if self._preview is None:           # not built yet -> build at the hit
+            self._update_preview(context)
+        new = self._preview
+        if new is None:
+            self.report({'ERROR'}, "Hardflow Decal: could not place")
             self._cleanup(context)
             return {'CANCELLED'}
+        self._preview = None                # release: cleanup must keep it
+        for o in list(context.selected_objects):
+            o.select_set(False)
+        new.select_set(True)
+        context.view_layer.objects.active = new
         self._cleanup(context)
         return {'FINISHED'}
 
     def _cleanup(self, context):
+        self._delete_preview()              # no-op once committed (released above)
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
             pass
-        context.area.tag_redraw()
+        if context.area is not None:
+            context.area.tag_redraw()
 
 
 class HARDFLOW_OT_select_decal(Operator):

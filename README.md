@@ -40,6 +40,9 @@ free under GPLv3. Compatible with the Blender 4.2+ extension system.
   part can be a plain decoration, a boolean cutter, conformed to the surface
   (shrinkwrap), and/or given the surface's material/shading. Browse a kit folder
   as a grid, and mark objects as Blender assets for the Asset Browser.
+- **Live placement preview** — both the decal and asset tools show the **real**
+  object under the cursor (not just a wireframe outline) before you click, so you
+  see exactly what you'll get; Esc discards it.
 - **Decals** — stick Info / Panel / Subset decals onto any surface; they adhere
   via shrinkwrap and follow the target (the DECALmachine spirit). Wheel scales,
   `[ ]` roll, click places; managed from the N-panel "Decals" section. Each type

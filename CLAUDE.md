@@ -7,13 +7,14 @@ context in every session.
 
 Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
 Blender 4.2+. The goal: deliver the core workflows of Grid Modeler, Boxcutter,
-Hard Ops, DECALmachine, and KitOps for free. Currently at **v1.0** — the core
+Hard Ops, DECALmachine, and KitOps for free. Currently at **v1.1** — the core
 boolean/snap/cutter workflows, the full decal subsystem (placement, PBR material,
 bake, image library, trim sheets, atlasing), the asset/kitbash system (INSERT
-placement, boolean INSERTs, .blend library, conform, asset-browser mark), and the
+placement, boolean INSERTs, .blend library, conform, asset-browser mark), the
 Hard Ops modeling tools (boolean-from-selection, array, radial array, symmetrize,
-sharpen) are all implemented; live Blender verification is still ongoing. The
-full roadmap is in `ROADMAP.md`.
+sharpen), and a live placement preview for decals + assets (the real object
+follows the cursor before commit) are all implemented; live Blender verification
+is still ongoing. The full roadmap is in `ROADMAP.md`.
 
 ## FIRST TASK: smoke test inside Blender
 
@@ -64,7 +65,7 @@ ops ─┘
 | `core/atlas.py` | Pure UV-rect + pixel math for trim sheets + atlasing (`slice_grid`, `cell_rect`, `rect_pixels`, `pack_shelves`, `remap_uv`, `blit_pixels`, `rect_to_uv`, `next_pow2`) |
 | `core/decal.py` | Decal build/stick/material (`make_decal`, `make_image_decal`, `build_decal_mesh`, `decal_matrix`, `add_shrinkwrap`, `decal_material`/`image_decal_material` + shared PBR node group `_decal_node_group`/`HF_DecalShader` with base/metallic/roughness/AO/normal/height+depth/emission/alpha, bake helpers `bake_image`/`ensure_material`/`bake_image_node`, atlas image `atlas_image`, `decal_collection`, `DECAL_TYPES`) |
 | `core/asset_lib.py` | Pure `.blend` kit-library scan, stdlib only (`scan_assets`, `is_asset_file`) |
-| `core/asset.py` | INSERT append/orient/bind, bpy-data only (`load_blend_objects`, `asset_matrix`, `place_asset`, `make_asset_cutter`, `conform_asset`, `transfer_shading`, `asset_collection`) |
+| `core/asset.py` | INSERT append/orient/bind, bpy-data only (`load_blend_objects`, `asset_matrix`, `place_asset`, `make_asset_cutter`, `bind_cutters`, `flatten_objects`, `conform_asset`, `transfer_shading`, `asset_collection`) |
 | `operators/draw_cut.py` | Main modal drawing operator (`HARDFLOW_OT_draw`): cut/slice/make/face, plane rotation, measurement HUD |
 | `operators/modifiers.py` | Bevel + mirror + clean + symmetrize + sharpen (`HARDFLOW_OT_bevel/mirror/clean/symmetrize/sharpen`) |
 | `operators/boolean_ops.py` | Boolean from selected objects, active = cutter (`HARDFLOW_OT_boolean`) |

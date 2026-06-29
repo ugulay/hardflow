@@ -3,6 +3,25 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic; since the project is pre-1.0, minor versions add features.
 
+## [1.1.0] — 2026-06-29
+
+### Added
+- **Live placement preview (decals & assets)** — the decal and asset placement
+  tools now show the **real object** under the cursor instead of a flat wireframe
+  outline, so you see exactly what you'll get before clicking (the DECALmachine /
+  BoxCutter / KitOps flow).
+  - Decals (`HARDFLOW_OT_place_decal`): the actual textured/material decal is
+    materialised on the first surface hit and follows the cursor; it is rebuilt
+    only when the target object, size, or trim cell changes and merely re-oriented
+    on every mouse move. The preview **is** the final decal on click; Esc deletes
+    it.
+  - Assets (`HARDFLOW_OT_place_asset`): the `.blend` part is appended **once** on
+    invoke and the real geometry follows the cursor; on click it is finalised in
+    place (decoration) or re-bound as boolean cutters, and on Esc the preview is
+    discarded. New `core/asset.py` helpers `bind_cutters` (shared cutter binding)
+    and `flatten_objects` (drop preview parenting, keep world pose) support the
+    reuse; `make_asset_cutter` now delegates to `bind_cutters`.
+
 ## [1.0.0] — 2026-06-29
 
 The v1.0 milestone: the KitOps-style asset/kitbash system lands and the Hard Ops

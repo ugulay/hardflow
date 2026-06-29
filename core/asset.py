@@ -75,21 +75,12 @@ def place_asset(context, objects, location, normal, tangent, scale=1.0,
     return root
 
 
-def make_asset_cutter(context, objects, target, location, normal, tangent,
-                      scale=1.0, operation='DIFFERENCE', solver='EXACT',
-                      non_destructive=True):
-    """Bind a kit part to the target as a boolean: orient every mesh object of the
-    INSERT to the surface and make each a cutter (CUT/MAKE/INTERSECT). In
+def bind_cutters(context, meshes, target, operation='DIFFERENCE', solver='EXACT',
+                 non_destructive=True):
+    """Make each (already surface-placed) mesh a boolean cutter on the target. In
     non-destructive mode the live modifier stays and the cutter is stashed (the
     Boxcutter flow); otherwise the boolean is applied and the cutter deleted.
-    Returns the list of mesh cutters acted on."""
-    mat = asset_matrix(location, normal, tangent, scale)
-    coll = asset_collection(context)
-    meshes = [o for o in objects if o.type == 'MESH']
-    for o in objects:
-        coll.objects.link(o)
-        o.matrix_world = mat @ o.matrix_world      # authored pose -> placed pose
-
+    Shared by make_asset_cutter and the live-preview commit. Returns `meshes`."""
     for m in meshes:
         if non_destructive:
             boolean.add_boolean(target, m, operation, solver)
@@ -98,7 +89,35 @@ def make_asset_cutter(context, objects, target, location, normal, tangent,
             boolean.apply_boolean(context, target, m, operation, solver)
     if not non_destructive:
         for m in meshes:
-            bpy.data.objects.remove(m, do_unlink=True)
+            if m.name in bpy.data.objects:
+                bpy.data.objects.remove(m, do_unlink=True)
+    return meshes
+
+
+def flatten_objects(objects):
+    """Drop parenting while preserving each object's world pose, so a previewed
+    INSERT (parented under an oriented root) can be re-bound as independent
+    cutters. World matrices are captured first, so inter-object parenting is safe."""
+    worlds = {o: o.matrix_world.copy() for o in objects}
+    for o in objects:
+        o.parent = None
+        o.matrix_world = worlds[o]
+
+
+def make_asset_cutter(context, objects, target, location, normal, tangent,
+                      scale=1.0, operation='DIFFERENCE', solver='EXACT',
+                      non_destructive=True):
+    """Bind a kit part to the target as a boolean: orient every mesh object of the
+    INSERT to the surface and make each a cutter (CUT/MAKE/INTERSECT) via
+    bind_cutters. Returns the list of mesh cutters acted on."""
+    mat = asset_matrix(location, normal, tangent, scale)
+    coll = asset_collection(context)
+    meshes = [o for o in objects if o.type == 'MESH']
+    for o in objects:
+        coll.objects.link(o)
+        o.matrix_world = mat @ o.matrix_world      # authored pose -> placed pose
+
+    bind_cutters(context, meshes, target, operation, solver, non_destructive)
     # non-mesh helpers (empties/curves) of a cutter kit are dropped destructively
     if not non_destructive:
         for o in objects:

@@ -499,6 +499,35 @@ def test_make_asset_cutter_nondestructive():
     assert coll is not None and part.name in coll.objects   # stashed
 
 
+def test_flatten_objects_preserves_world():
+    # a preview INSERT parented under a moved/scaled root is flattened to
+    # independent objects that keep their world pose (so they can be re-bound)
+    _reset()
+    from mathutils import Matrix
+    root = bpy.data.objects.new("Root", None)
+    bpy.context.collection.objects.link(root)
+    root.matrix_world = Matrix.Translation((2, 0, 1)) @ Matrix.Scale(2.0, 4)
+    child = _add_cube("Child", size=1.0)
+    child.parent = root
+    child.matrix_parent_inverse = Matrix()
+    before = child.matrix_world.copy()
+    asset.flatten_objects([root, child])
+    assert child.parent is None
+    after = child.matrix_world
+    assert all(abs(a - b) < 1e-6 for a, b in zip(before.translation, after.translation))
+
+
+def test_bind_cutters_nondestructive():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    part = _add_cube("Part", size=1.0, location=(1, 0, 0))
+    asset.bind_cutters(bpy.context, [part], target, operation='DIFFERENCE',
+                       non_destructive=True)
+    assert any(m.type == 'BOOLEAN' and m.object is part for m in target.modifiers)
+    coll = bpy.data.collections.get(boolean.CUTTER_COLLECTION)
+    assert coll is not None and part.name in coll.objects   # stashed
+
+
 def test_conform_and_transfer_shading():
     _reset()
     target = _add_cube("Target", size=2.0)

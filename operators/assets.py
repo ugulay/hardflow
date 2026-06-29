@@ -65,6 +65,16 @@ class HARDFLOW_OT_place_asset(Operator):
         self.roll = 0.0
         self._hit = None          # (location, normal, object)
         self._screen = None
+        self._root = None         # oriented Empty the previewed INSERT hangs under
+        self._finalized = False
+        try:
+            self._objects = asset.load_blend_objects(self.filepath, link=False)
+        except Exception as ex:   # noqa: BLE001
+            self.report({'ERROR'}, "Could not load asset: %s" % ex)
+            return {'CANCELLED'}
+        if not self._objects:
+            self.report({'WARNING'}, "Asset .blend has no objects")
+            return {'CANCELLED'}
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
@@ -106,6 +116,7 @@ class HARDFLOW_OT_place_asset(Operator):
         elif event.type in {'MIDDLEMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM'}:
             return {'PASS_THROUGH'}
 
+        self._update_preview(context)
         return {'RUNNING_MODAL'}
 
     def _tangent(self, normal):
@@ -142,34 +153,56 @@ class HARDFLOW_OT_place_asset(Operator):
 
         hud.draw_hud(region, lines)
 
+    def _update_preview(self, context):
+        """Keep the real (already-loaded) INSERT under the cursor: create the
+        oriented root on the first hit, then just re-orient it as the cursor and
+        scale/roll change. The previewed objects become the placed result."""
+        if self._hit is None:
+            return
+        location, normal, obj = self._hit
+        tangent = self._tangent(normal)
+        if self._root is None:
+            name = bpy.path.display_name_from_filepath(self.filepath)
+            self._root = asset.place_asset(context, self._objects, location,
+                                           normal, tangent, scale=self.size,
+                                           name=name)
+        else:
+            self._root.matrix_world = asset.asset_matrix(
+                location, normal, tangent, self.size)
+
     def _commit(self, context):
+        if self._hit is None:
+            self.report({'WARNING'}, "No surface under the cursor")
+            return {'RUNNING_MODAL'}
+        if self._root is None:                  # never previewed -> place now
+            self._update_preview(context)
         location, normal, obj = self._hit
         prefs = get_prefs(context)
         try:
-            objects = asset.load_blend_objects(self.filepath, link=False)
-            if not objects:
-                self.report({'WARNING'}, "Asset .blend has no objects")
-                self._cleanup(context)
-                return {'CANCELLED'}
-            tangent = self._tangent(normal)
-            name = bpy.path.display_name_from_filepath(self.filepath)
-
             if prefs.asset_as_cutter and obj is not None and obj.type == 'MESH':
+                # re-bind the previewed parts as independent boolean cutters
+                asset.flatten_objects(self._objects)
+                if self._root is not None and self._root.name in bpy.data.objects:
+                    bpy.data.objects.remove(self._root, do_unlink=True)
+                    self._root = None
+                meshes = [o for o in self._objects if o.type == 'MESH']
                 op = 'DIFFERENCE' if prefs.asset_boolean == 'CUT' else 'UNION'
-                meshes = asset.make_asset_cutter(
-                    context, objects, obj, location, normal, tangent,
-                    scale=self.size, operation=op, solver=prefs.default_solver,
-                    non_destructive=prefs.non_destructive)
+                asset.bind_cutters(context, meshes, obj, operation=op,
+                                   solver=prefs.default_solver,
+                                   non_destructive=prefs.non_destructive)
+                if not prefs.non_destructive:
+                    for o in self._objects:
+                        if o.type != 'MESH' and o.name in bpy.data.objects:
+                            bpy.data.objects.remove(o, do_unlink=True)
                 self._select(context, meshes[0] if meshes else obj)
             else:
-                root = asset.place_asset(context, objects, location, normal,
-                                         tangent, scale=self.size, name=name)
                 if prefs.asset_conform and obj is not None and obj.type == 'MESH':
-                    asset.conform_asset(objects, obj)
+                    asset.conform_asset(self._objects, obj)
                 if prefs.asset_transfer_shading and obj is not None \
                         and obj.type == 'MESH':
-                    asset.transfer_shading(obj, objects)
-                self._select(context, root)
+                    asset.transfer_shading(obj, self._objects)
+                self._select(context, self._root)
+            self._finalized = True
         except Exception as ex:  # noqa: BLE001
             self.report({'ERROR'}, "Hardflow Asset: %s" % ex)
             self._cleanup(context)
@@ -185,11 +218,19 @@ class HARDFLOW_OT_place_asset(Operator):
             context.view_layer.objects.active = active
 
     def _cleanup(self, context):
+        if not self._finalized:                 # cancelled -> discard the preview
+            for o in list(getattr(self, "_objects", [])):
+                if o.name in bpy.data.objects:
+                    bpy.data.objects.remove(o, do_unlink=True)
+            if self._root is not None and self._root.name in bpy.data.objects:
+                bpy.data.objects.remove(self._root, do_unlink=True)
+            self._root = None
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
             pass
-        context.area.tag_redraw()
+        if context.area is not None:
+            context.area.tag_redraw()
 
 
 class HARDFLOW_OT_load_asset(Operator, ImportHelper):
