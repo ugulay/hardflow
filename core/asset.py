@@ -86,7 +86,8 @@ def bind_cutters(context, meshes, target, operation='DIFFERENCE', solver='EXACT'
             boolean.add_boolean(target, m, operation, solver)
             boolean.stash_cutter(context, m, target)
         else:
-            boolean.apply_boolean(context, target, m, operation, solver)
+            # Robust apply: fall back to the FAST solver on messy targets.
+            boolean.apply_boolean_fallback(context, target, m, operation, solver)
     if not non_destructive:
         for m in meshes:
             if m.name in bpy.data.objects:
@@ -140,6 +141,63 @@ def conform_asset(objects, target, offset=0.0):
         mod.offset = offset
         mods.append(mod)
     return mods
+
+
+# --- KitOps extras (v1.8) -----------------------------------------------
+
+
+def bound_size(objects):
+    """Largest world-space bounding extent across the mesh objects of an INSERT
+    (a proxy for the part's overall size). Used by the auto/smart-scale fit.
+    Returns 0.0 when there is no mesh."""
+    best = 0.0
+    for o in objects:
+        if o.type == 'MESH':
+            best = max(best, max(o.dimensions))
+    return best
+
+
+def surface_feature_size(obj):
+    """A proxy for the target's local feature size: its smallest non-zero
+    world dimension. The INSERT is scaled to a fraction of this on placement."""
+    dims = [d for d in obj.dimensions if d > 1e-6]
+    return min(dims) if dims else 0.0
+
+
+def load_blend_materials(filepath, link=False):
+    """Append (or link) every material from a .blend library -- a material-only
+    INSERT (KitOps material kpack). Returns the new material data-blocks."""
+    with bpy.data.libraries.load(filepath, link=link) as (data_from, data_to):
+        data_to.materials = list(data_from.materials)
+    return [m for m in data_to.materials if m is not None]
+
+
+def apply_material(obj, mat):
+    """Give a mesh object `mat` as its sole material (material INSERT). Returns
+    True on success."""
+    if obj.type != 'MESH' or mat is None:
+        return False
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+    return True
+
+
+def write_objects_blend(filepath, objects):
+    """Write the given objects (and their mesh/curve data + materials) to a .blend
+    library -- KPACK-style INSERT export into the asset library. Returns the
+    filepath, or None when there is nothing to write."""
+    blocks = set()
+    for o in objects:
+        blocks.add(o)
+        if o.data is not None:
+            blocks.add(o.data)
+        for slot in getattr(o, "material_slots", []):
+            if slot.material is not None:
+                blocks.add(slot.material)
+    if not blocks:
+        return None
+    bpy.data.libraries.write(filepath, blocks, fake_user=True, compress=True)
+    return filepath
 
 
 def transfer_shading(target, objects):

@@ -2,18 +2,23 @@
 # tube (pipe) or a sagging cable. Simplified versions of the Grid Modeler
 # "pipes" flow plus a hanging-cable tool.
 #
-# Both share one modal (the _CurveDraw mixin). The key precision fix over the
-# old single-plane projection: every clicked point is ray-cast onto the actual
-# surface under the cursor, so the tube hugs the model instead of sinking into
-# it; when the ray misses (empty space) it falls back to a fixed view plane.
+# Both share one modal (the _CurveDraw mixin). Two precision fixes over the old
+# version:
+#   * Burying: every point is lifted by the tube's own RADIUS (+ a clearance)
+#     along the surface normal, so the round section rests on the surface instead
+#     of sinking half-in.
+#   * Routing: the pipe is DRAPED -- each span is re-sampled and snapped onto the
+#     nearest surface (core.snapping.drape_path) so the tube hugs contours and
+#     wraps edges instead of cutting straight through the model. The cable keeps
+#     a free-hanging catenary sag (it is meant to span gaps, not follow the wall).
+#
+# The real curve object is built and updated LIVE under the cursor, so the tube
+# you see while clicking is exactly what gets committed (Esc discards it).
 #
 # Shortcuts (modal): LMB add point, Enter create, Backspace undo, Esc/RMB
-#   cancel, Wheel radius, Ctrl+Wheel surface offset, Tab/S toggle surface snap,
-#   V vertex/edge snap, X grid snap, (cable only) Shift+Wheel sag, MMB navigation.
-#
-# Snapping is the shared chain (core.snapping): vertex/edge -> surface/face ->
-# grid -> free plane, each layer independently toggleable -- the same model the
-# ADD draw tool uses, so every tool sticks/aligns the same way.
+#   cancel, Wheel radius, Ctrl+Wheel clearance, Tab/S toggle surface snap,
+#   V vertex/edge snap, X grid snap, F follow-surface (pipe), (cable only)
+#   Shift+Wheel sag, MMB navigation.
 import bpy
 from bpy.types import Operator
 
@@ -24,11 +29,13 @@ from ..ui import draw as hud
 
 class _CurveDraw:
     """Shared modal logic for drawing a poly-line on surfaces. Subclasses set
-    `_title`, `_has_sag`, and override `_init_params` and `_commit`. Not an
-    Operator itself -- the concrete tools mix it with bpy.types.Operator."""
+    `_title`, `_has_sag`, override `_init_params`, `_route_points` and `_commit`.
+    Not an Operator itself -- the concrete tools mix it with bpy.types.Operator."""
 
     _title = "Pipe"
     _has_sag = False
+    _can_follow = True
+    _has_profile = False   # pipe overrides: square/rect swept cross-sections
 
     @classmethod
     def poll(cls, context):
@@ -45,10 +52,12 @@ class _CurveDraw:
         self._origin = (obj.matrix_world.translation if obj is not None
                         else context.scene.cursor.location.copy())
         self._normal = raycast.view_direction(rv3d)
-        self._pts = []            # confirmed 3D points (Vectors)
+        self._pts = []            # confirmed 3D points (Vectors), already lifted
         self._cursor3d = None     # current 3D point
         self._on_surface = False  # did the last sample hit a surface?
         self._snap_kind = None    # VERT/MID/EDGE/FACE/GRID/None -- HUD marker
+        self._preview = None      # live curve object (becomes the result)
+        self._finalized = False
 
         prefs = get_prefs(context)
         # Session-local snap toggles, seeded from prefs and flipped live with the
@@ -56,6 +65,9 @@ class _CurveDraw:
         self._surface_lock = prefs.surface_snap
         self._geo_snap = prefs.geo_snap
         self._grid_snap = prefs.snap_enabled
+        self._follow = self._can_follow and prefs.pipe_follow_surface
+        self._follow_segs = prefs.pipe_follow_segments
+        self._profile = prefs.pipe_profile if self._has_profile else 'ROUND'
         self._geo = snapping.collect_geo(context, prefs.snap_target)
 
         self._init_params(prefs)
@@ -66,17 +78,23 @@ class _CurveDraw:
         return {'RUNNING_MODAL'}
 
     def _init_params(self, prefs):
-        """Pull the starting radius/offset/sag from preferences. Subclasses
+        """Pull the starting radius/clearance/sag from preferences. Subclasses
         override to read their own keys."""
         self._radius = prefs.pipe_radius
         self._offset = prefs.pipe_offset
         self._sag = 0.0
         self._segments = 12
 
+    def _lift(self):
+        """Distance to push each point off the surface along its normal: the
+        tube's radius (so the round section rests ON the surface) plus the user
+        clearance. This is the core fix for the tube sinking into the model."""
+        return self._radius + self._offset
+
     def _sample(self, context, event):
         """Resolve the mouse to a 3D point through the shared snap chain:
-        vertex/edge (exact) -> surface/face (offset along normal) -> grid ->
-        free fallback plane. Each tier is independently toggleable."""
+        vertex/edge (exact) -> surface/face (lifted by radius+clearance) ->
+        grid -> free fallback plane. Each tier is independently toggleable."""
         region, rv3d = context.region, context.region_data
         coord = (event.mouse_region_x, event.mouse_region_y)
         prefs = get_prefs(context)
@@ -90,14 +108,14 @@ class _CurveDraw:
                 self._snap_kind = hit[1]
                 return hit[0].copy()
 
-        # 2) surface / face snap -- lift off the surface along its normal
+        # 2) surface / face snap -- lift off the surface by radius + clearance
         if self._surface_lock:
             surf = raycast.ray_cast_surface(context, region, rv3d, coord)
             if surf is not None:
                 location, normal, _obj = surf
                 self._on_surface = True
                 self._snap_kind = 'FACE'
-                return location + normal.normalized() * self._offset
+                return location + normal.normalized() * self._lift()
 
         # 3) free point on the fallback plane, optionally locked to the grid
         point = raycast.ray_to_plane(region, rv3d, coord,
@@ -109,42 +127,132 @@ class _CurveDraw:
         return point
 
     def _adjust(self, event, sign):
-        """Wheel live-tuning: bare = radius, Ctrl = surface offset, Shift =
-        sag (cable only)."""
+        """Wheel live-tuning: bare = radius, Ctrl = clearance, Shift = sag
+        (cable only)."""
         if event.ctrl:
-            self._offset += sign * 0.005
+            self._offset = max(0.0, self._offset + sign * 0.005)
         elif event.shift and self._has_sag:
             self._sag = max(0.0, self._sag + sign * 0.02)
         else:
             self._radius = max(0.001, self._radius + sign * 0.005)
 
+    # --- routing ---------------------------------------------------------
+
+    def _route_points(self, context, anchors):
+        """Convert clicked anchors into the final dense point list. Pipe drapes
+        over the surface; the cable subclass overrides this to hang a catenary."""
+        if self._follow and len(anchors) >= 2:
+            return snapping.drape_path(context, anchors, self._follow_segs,
+                                       self._lift())
+        return list(anchors)
+
+    def _anchor_list(self, include_cursor):
+        anchors = list(self._pts)
+        if include_cursor and self._cursor3d is not None:
+            anchors = anchors + [self._cursor3d]
+        return anchors
+
+    # --- live preview ----------------------------------------------------
+
+    def _build_data(self, context, anchors):
+        """Build the tube datablock for the given anchors. ROUND uses a curve
+        bevel; SQUARE/RECT sweep a mesh cross-section (build_pipe_mesh). Returns
+        (data, is_mesh) or (None, False)."""
+        if len(anchors) < 2:
+            return None, False
+        pts = self._route_points(context, anchors)
+        name = "Hardflow_%s" % self._title
+        prof = geometry.profile_points(self._profile, self._radius)
+        if prof is None:
+            return geometry.build_pipe(pts, radius=self._radius, name=name), False
+        return geometry.build_pipe_mesh(pts, prof, name=name), True
+
+    def _set_preview_data(self, context, data, is_mesh):
+        """Swap the preview object's data in place; recreate the object when the
+        data TYPE changed (curve <-> mesh), since an object's type is fixed."""
+        if self._preview is not None and (
+                (is_mesh and self._preview.type != 'MESH')
+                or (not is_mesh and self._preview.type != 'CURVE')):
+            self._clear_preview()
+        if self._preview is None:
+            self._preview = bpy.data.objects.new(data.name, data)
+            context.collection.objects.link(self._preview)
+        else:
+            old = self._preview.data
+            self._preview.data = data
+            self._free_data(old)
+
+    def _rebuild_preview(self, context):
+        """Build / refresh the real tube object so the committed result is exactly
+        what is shown."""
+        data, is_mesh = self._build_data(context, self._anchor_list(True))
+        if data is None:
+            self._clear_preview()
+            return
+        self._set_preview_data(context, data, is_mesh)
+
+    @staticmethod
+    def _free_data(data):
+        if data is None or data.users != 0:
+            return
+        if isinstance(data, bpy.types.Mesh):
+            bpy.data.meshes.remove(data)
+        elif isinstance(data, bpy.types.Curve):
+            bpy.data.curves.remove(data)
+
+    def _clear_preview(self):
+        if self._preview is not None and self._preview.name in bpy.data.objects:
+            data = self._preview.data
+            bpy.data.objects.remove(self._preview, do_unlink=True)
+            self._free_data(data)
+        self._preview = None
+
+    # --- event loop ------------------------------------------------------
+
     def modal(self, context, event):
         context.area.tag_redraw()
+        dirty = False
 
         if event.type == 'MOUSEMOVE':
             self._cursor3d = self._sample(context, event)
+            dirty = True
 
         elif event.type == 'WHEELUPMOUSE' and event.value == 'PRESS':
             self._adjust(event, +1)
+            dirty = True
 
         elif event.type == 'WHEELDOWNMOUSE' and event.value == 'PRESS':
             self._adjust(event, -1)
+            dirty = True
 
         elif event.type in {'TAB', 'S'} and event.value == 'PRESS':
             self._surface_lock = not self._surface_lock
             self._cursor3d = self._sample(context, event)
+            dirty = True
 
         elif event.type == 'V' and event.value == 'PRESS':
             self._geo_snap = not self._geo_snap
             self._cursor3d = self._sample(context, event)
+            dirty = True
 
         elif event.type == 'X' and event.value == 'PRESS':
             self._grid_snap = not self._grid_snap
             self._cursor3d = self._sample(context, event)
+            dirty = True
+
+        elif (event.type == 'F' and event.value == 'PRESS' and self._can_follow):
+            self._follow = not self._follow
+            dirty = True
+
+        elif (event.type == 'P' and event.value == 'PRESS' and self._has_profile):
+            self._profile = {'ROUND': 'SQUARE', 'SQUARE': 'RECT',
+                             'RECT': 'ROUND'}[self._profile]
+            dirty = True
 
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             if self._cursor3d is not None:
                 self._pts.append(self._cursor3d.copy())
+                dirty = True
 
         elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
             if len(self._pts) >= 2:
@@ -153,6 +261,7 @@ class _CurveDraw:
         elif event.type == 'BACK_SPACE' and event.value == 'PRESS':
             if self._pts:
                 self._pts.pop()
+                dirty = True
 
         elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
             self._cleanup(context)
@@ -161,13 +270,15 @@ class _CurveDraw:
         elif event.type in {'MIDDLEMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM'}:
             return {'PASS_THROUGH'}
 
+        if dirty:
+            self._rebuild_preview(context)
         return {'RUNNING_MODAL'}
+
+    # --- HUD -------------------------------------------------------------
 
     def _screen_points(self, context):
         region, rv3d = context.region, context.region_data
-        pts3d = list(self._pts)
-        if self._cursor3d is not None:
-            pts3d = pts3d + [self._cursor3d]
+        pts3d = self._anchor_list(include_cursor=True)
         out = []
         for p in pts3d:
             s = raycast.world_to_screen(region, rv3d, p)
@@ -178,9 +289,15 @@ class _CurveDraw:
     def _hud_lines(self):
         def onoff(flag):
             return "ON" if flag else "OFF"
-        controls = ("Wheel radius · Ctrl+Wheel offset · "
+        controls = ("Wheel radius · Ctrl+Wheel clearance · "
                     "V vertex · S/Tab surface · X grid")
-        params = "Radius %.3f m · Offset %.3f m" % (self._radius, self._offset)
+        params = "Radius %.3f m · Clearance %.3f m" % (self._radius, self._offset)
+        if self._can_follow:
+            controls += " · F follow"
+            params += " · Follow %s" % onoff(self._follow)
+        if self._has_profile:
+            controls += " · P profile"
+            params += " · Profile %s" % self._profile
         if self._has_sag:
             controls += " · Shift+Wheel sag"
             params += " · Sag %.3f m" % self._sag
@@ -197,7 +314,6 @@ class _CurveDraw:
     def _draw_px(self, context):
         prefs = get_prefs(context)
         pts = self._screen_points(context)
-        hud.draw_shape(pts, tuple(prefs.line_color), closed=False)
         hud.draw_points(pts[:len(self._pts)], tuple(prefs.line_color))
         # Color the live cursor by the active snap kind, matching the ADD tool.
         if self._cursor3d is not None and self._snap_kind is not None:
@@ -208,22 +324,41 @@ class _CurveDraw:
                 hud.draw_points([(s[0], s[1])], col, size=11.0)
         hud.draw_hud(context.region, self._hud_lines())
 
-    def _finish_curve(self, context, curve):
-        if curve is None:
-            return
-        obj = bpy.data.objects.new(curve.name, curve)
-        context.collection.objects.link(obj)
+    # --- commit / cleanup ------------------------------------------------
+
+    def _finalize_preview(self, context):
+        """Promote the live preview object to the committed result: drop the
+        hovering cursor point, rebuild from the clicked anchors only, select it."""
+        anchors = self._anchor_list(include_cursor=False)
+        data, is_mesh = self._build_data(context, anchors)
+        if data is None:
+            return False
+        self._set_preview_data(context, data, is_mesh)
         for o in list(context.selected_objects):
             o.select_set(False)
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
+        self._preview.select_set(True)
+        context.view_layer.objects.active = self._preview
+        self._finalized = True
+        return True
+
+    def _commit(self, context):
+        try:
+            if not self._finalize_preview(context):
+                self.report({'WARNING'}, "%s: need at least 2 points" % self._title)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, "Hardflow %s: %s" % (self._title, ex))
+        self._cleanup(context)
+        return {'FINISHED'}
 
     def _cleanup(self, context):
+        if not self._finalized:
+            self._clear_preview()
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
             pass
-        context.area.tag_redraw()
+        if context.area is not None:
+            context.area.tag_redraw()
 
 
 class HARDFLOW_OT_pipe(_CurveDraw, Operator):
@@ -234,15 +369,8 @@ class HARDFLOW_OT_pipe(_CurveDraw, Operator):
 
     _title = "Pipe"
     _has_sag = False
-
-    def _commit(self, context):
-        try:
-            curve = geometry.build_pipe(self._pts, radius=self._radius)
-            self._finish_curve(context, curve)
-        except Exception as ex:  # noqa: BLE001
-            self.report({'ERROR'}, f"Hardflow Pipe: {ex}")
-        self._cleanup(context)
-        return {'FINISHED'}
+    _can_follow = True
+    _has_profile = True
 
 
 class HARDFLOW_OT_cable(_CurveDraw, Operator):
@@ -254,6 +382,7 @@ class HARDFLOW_OT_cable(_CurveDraw, Operator):
 
     _title = "Cable"
     _has_sag = True
+    _can_follow = False   # a cable hangs free; it does not drape over the wall
 
     def _init_params(self, prefs):
         self._radius = prefs.cable_radius
@@ -261,15 +390,7 @@ class HARDFLOW_OT_cable(_CurveDraw, Operator):
         self._sag = prefs.cable_sag
         self._segments = prefs.cable_segments
 
-    def _commit(self, context):
-        try:
-            anchors = [(p[0], p[1], p[2]) for p in self._pts]
-            pts = transform.cable_chain(
-                anchors, segments=self._segments, sag=self._sag, axis=2)
-            curve = geometry.build_pipe(pts, radius=self._radius,
-                                        name="Hardflow_Cable")
-            self._finish_curve(context, curve)
-        except Exception as ex:  # noqa: BLE001
-            self.report({'ERROR'}, f"Hardflow Cable: {ex}")
-        self._cleanup(context)
-        return {'FINISHED'}
+    def _route_points(self, context, anchors):
+        return transform.cable_chain(
+            [(p[0], p[1], p[2]) for p in anchors],
+            segments=self._segments, sag=self._sag, axis=2)

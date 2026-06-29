@@ -73,11 +73,35 @@ class HARDFLOW_Preferences(AddonPreferences):
         default=0.05, min=0.001, soft_max=1.0,
     )
     pipe_offset: FloatProperty(
-        name="Pipe/Cable Offset (m)",
-        description="How far each drawn point is lifted along the surface "
-                    "normal; raise it so the tube rests on top of the surface "
-                    "instead of sinking in. Live-adjust with Ctrl+Wheel",
+        name="Pipe/Cable Clearance (m)",
+        description="Extra gap between the tube's OUTER surface and the model "
+                    "surface. The tube is always lifted by its own radius first "
+                    "(so it rests on the surface, never sinks in); this adds a "
+                    "further clearance on top. Live-adjust with Ctrl+Wheel",
         default=0.0, min=0.0, soft_max=1.0,
+    )
+    pipe_follow_surface: BoolProperty(
+        name="Pipe Follows Surface",
+        description="Drape the pipe over the model: each span is re-sampled and "
+                    "snapped onto the nearest surface so the tube hugs contours "
+                    "and wraps edges instead of cutting straight through. Toggle "
+                    "live with F (pipe only; the cable always hangs free)",
+        default=True,
+    )
+    pipe_profile: EnumProperty(
+        name="Pipe Profile",
+        description="Cross-section of the pipe tool; SQUARE/RECT sweep a mesh "
+                    "tube, ROUND uses a curve bevel. Cycle live with P",
+        items=[('ROUND', "Round", "Round curve bevel (classic pipe)"),
+               ('SQUARE', "Square", "Square swept cross-section"),
+               ('RECT', "Rectangular", "Wide rectangular swept cross-section")],
+        default='ROUND',
+    )
+    pipe_follow_segments: IntProperty(
+        name="Pipe Follow Segments",
+        description="Sub-divisions per span when draping the pipe over a "
+                    "surface; more = tighter contour following, slightly slower",
+        default=8, min=1, max=64,
     )
     cable_radius: FloatProperty(
         name="Cable Radius (m)",
@@ -156,6 +180,29 @@ class HARDFLOW_Preferences(AddonPreferences):
                ('MAKE', "Make", "UNION -- merge the part into the surface")],
         default='CUT',
     )
+    asset_auto_scale: BoolProperty(
+        name="Auto Scale",
+        description="Scale the INSERT to a fraction of the target's local feature "
+                    "size on the first surface hit (KitOps smart scale)",
+        default=False,
+    )
+    asset_fit_fraction: FloatProperty(
+        name="Fit Fraction",
+        description="Auto-scale target: the INSERT's largest side becomes this "
+                    "fraction of the target's smallest dimension",
+        default=0.25, min=0.01, soft_max=2.0,
+    )
+    asset_grid_snap: BoolProperty(
+        name="Insert Grid Snap",
+        description="Snap INSERT placement to a world grid or to existing insert "
+                    "anchors, for clean greeble arrays (KitOps factory snapping)",
+        default=False,
+    )
+    asset_grid_spacing: FloatProperty(
+        name="Insert Grid Spacing (m)",
+        description="World grid spacing for insert factory snapping",
+        default=0.25, min=0.001, soft_max=10.0,
+    )
     asset_conform: BoolProperty(
         name="Conform Asset",
         description="Wrap placed parts onto the surface with a shrinkwrap "
@@ -221,6 +268,9 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "build_grid_extent")
         col.prop(self, "pipe_radius")
         col.prop(self, "pipe_offset")
+        col.prop(self, "pipe_profile")
+        col.prop(self, "pipe_follow_surface")
+        col.prop(self, "pipe_follow_segments")
         col.prop(self, "cable_radius")
         col.prop(self, "cable_sag")
         col.prop(self, "cable_segments")
@@ -232,6 +282,10 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "asset_library_path")
         col.prop(self, "asset_as_cutter")
         col.prop(self, "asset_boolean")
+        col.prop(self, "asset_auto_scale")
+        col.prop(self, "asset_fit_fraction")
+        col.prop(self, "asset_grid_snap")
+        col.prop(self, "asset_grid_spacing")
         col.prop(self, "asset_conform")
         col.prop(self, "asset_transfer_shading")
         col.prop(self, "non_destructive")

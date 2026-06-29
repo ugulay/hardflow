@@ -27,13 +27,14 @@ class HARDFLOW_OT_offset(Operator):
     def poll(cls, context):
         obj = context.active_object
         return (obj is not None and obj.type == 'MESH'
-                and context.mode == 'OBJECT')
+                and context.mode in {'OBJECT', 'EDIT_MESH'})
 
     def invoke(self, context, event):
         if context.area.type != 'VIEW_3D':
             self.report({'WARNING'}, "Run inside View3D")
             return {'CANCELLED'}
         self.obj = context.active_object
+        self.edit = context.mode == 'EDIT_MESH'   # Edit Mode = inset selected faces
         self.snap = get_prefs(context).snap_enabled
         self.face_index = -1
         self.locked = False
@@ -42,11 +43,38 @@ class HARDFLOW_OT_offset(Operator):
         self.pick0 = None         # world point where the drag started
         self.thickness = 0.0
         self.typed = ""
+        self._base = None         # mesh snapshot for the live preview
+        self._committed = False
+
+        co = (event.mouse_region_x, event.mouse_region_y)
+        if self.edit and not self._lock_edit(context, co):
+            self.report({'WARNING'}, "Select face(s) to offset")
+            return {'CANCELLED'}
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
+
+    def _lock_edit(self, context, co):
+        """Edit Mode lock: build the inset plane from the selected faces' average
+        center/normal and snapshot the edit-mesh for the live preview."""
+        basis = geometry.selected_face_basis(self.obj)
+        if basis is None:
+            return False
+        center, normal = basis
+        mw = self.obj.matrix_world
+        self.plane_co = mw @ center
+        self.plane_no = (mw.to_3x3() @ normal).normalized()
+        region, rv3d = context.region, context.region_data
+        self.pick0 = raycast.ray_to_plane(region, rv3d, co,
+                                          self.plane_co, self.plane_no)
+        self.thickness = 0.0
+        self.typed = ""
+        self.locked = True
+        geometry.flush_edit_mesh(self.obj)   # sync selection before snapshot
+        self._base = geometry.snapshot_mesh(self.obj, "hf_offset_base")
+        return True
 
     def modal(self, context, event):
         context.area.tag_redraw()
@@ -55,6 +83,7 @@ class HARDFLOW_OT_offset(Operator):
         if event.type == 'MOUSEMOVE':
             if self.locked:
                 self._update_thickness(context, co)
+                self._refresh_preview()
             else:
                 self._hover_face(context, co)
 
@@ -73,7 +102,7 @@ class HARDFLOW_OT_offset(Operator):
             self.snap = not self.snap
 
         elif self.locked and event.value == 'PRESS' and self._edit_typed(event):
-            pass
+            self._refresh_preview()
 
         elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
             self._cleanup(context)
@@ -111,6 +140,22 @@ class HARDFLOW_OT_offset(Operator):
         self.thickness = 0.0
         self.typed = ""
         self.locked = True
+        self._base = geometry.snapshot_mesh(self.obj, "hf_offset_base")
+
+    def _refresh_preview(self):
+        """Show the real inset live: restore the snapshot, then re-inset the
+        locked face(s) by the current thickness. Routes through the edit-mesh in
+        Edit Mode, the object mesh otherwise."""
+        if self._base is None:
+            return
+        if self.edit:
+            geometry.restore_edit_mesh(self.obj, self._base)
+            if self.thickness > 1e-6:
+                geometry.edit_inset_faces(self.obj, self.thickness)
+            return
+        geometry.restore_mesh(self.obj, self._base)
+        if self.thickness > 1e-6:
+            geometry.inset_faces(self.obj, [self.face_index], self.thickness)
 
     def _update_thickness(self, context, co):
         region, rv3d = context.region, context.region_data
@@ -147,7 +192,7 @@ class HARDFLOW_OT_offset(Operator):
     # --- visual feedback -------------------------------------------------
 
     def _face_screen_points(self, context):
-        if self.face_index < 0:
+        if self.edit or self.face_index < 0:   # Edit Mode: rely on mesh highlight
             return []
         poly = self.obj.data.polygons[self.face_index]
         mw = self.obj.matrix_world
@@ -187,18 +232,26 @@ class HARDFLOW_OT_offset(Operator):
     # --- apply -----------------------------------------------------------
 
     def _commit(self, context):
-        if self.thickness > 1e-6:
-            try:
-                ok = geometry.inset_faces(self.obj, [self.face_index],
-                                          self.thickness)
-                if not ok:
-                    self.report({'WARNING'}, "Offset failed (no face)")
-            except Exception as ex:
-                self.report({'ERROR'}, f"Hardflow: {ex}")
+        # The live preview already wrote the inset into the mesh; make sure it
+        # reflects the final thickness, then keep it.
+        try:
+            self._refresh_preview()
+        except Exception as ex:
+            self.report({'ERROR'}, f"Hardflow: {ex}")
+        self._committed = True
         self._cleanup(context)
         return {'FINISHED'}
 
     def _cleanup(self, context):
+        # Cancelled mid-preview -> roll the mesh back to the snapshot.
+        if self._base is not None:
+            if not self._committed:
+                if self.edit:
+                    geometry.restore_edit_mesh(self.obj, self._base)
+                else:
+                    geometry.restore_mesh(self.obj, self._base)
+            geometry.free_mesh(self._base)
+            self._base = None
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):

@@ -7,13 +7,14 @@
 # decoration (parented under an oriented Empty), a boolean cutter, conformed to
 # the surface, and/or given the target's shading.
 import math
+import os
 
 import bpy
 from bpy.types import Operator
-from bpy.props import FloatProperty, StringProperty
+from bpy.props import FloatProperty, StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
 
-from ..core import raycast, asset, decal_math
+from ..core import raycast, asset, decal_math, snapping
 from ..preferences import get_prefs
 from ..ui import draw as hud
 
@@ -67,6 +68,7 @@ class HARDFLOW_OT_place_asset(Operator):
         self._screen = None
         self._root = None         # oriented Empty the previewed INSERT hangs under
         self._finalized = False
+        self._auto_scaled = False  # auto-scale fires once, on the first hit
         try:
             self._objects = asset.load_blend_objects(self.filepath, link=False)
         except Exception as ex:   # noqa: BLE001
@@ -88,6 +90,7 @@ class HARDFLOW_OT_place_asset(Operator):
         if event.type == 'MOUSEMOVE':
             self._screen = (event.mouse_region_x, event.mouse_region_y)
             self._hit = raycast.ray_cast_surface(context, region, rv3d, self._screen)
+            self._apply_smart_placement(context)
 
         elif event.type == 'WHEELUPMOUSE' and event.value == 'PRESS':
             if event.ctrl:
@@ -118,6 +121,32 @@ class HARDFLOW_OT_place_asset(Operator):
 
         self._update_preview(context)
         return {'RUNNING_MODAL'}
+
+    def _apply_smart_placement(self, context):
+        """KitOps smart placement (v1.8): snap the hit to an insert grid / anchor,
+        and auto-scale the INSERT to the target's feature size on the first hit."""
+        if self._hit is None:
+            return
+        prefs = get_prefs(context)
+        location, normal, obj = self._hit
+        if prefs.asset_grid_snap:
+            coll = bpy.data.collections.get(asset.ASSET_COLLECTION)
+            # exclude this insert's own live preview root from the anchors
+            skip = {self._root} | set(self._objects)
+            anchors = [o.matrix_world.translation for o in coll.objects
+                       if o not in skip] if coll is not None else []
+            location = snapping.snap_insert_point(
+                location, prefs.asset_grid_spacing, anchors,
+                threshold=prefs.asset_grid_spacing * 0.5)
+            self._hit = (location, normal, obj)
+        if (prefs.asset_auto_scale and not self._auto_scaled
+                and obj is not None and obj.type == 'MESH'):
+            from ..core import transform
+            insert = asset.bound_size(self._objects)
+            feature = asset.surface_feature_size(obj)
+            self.size = transform.fit_scale(insert, feature,
+                                            prefs.asset_fit_fraction, self.size)
+            self._auto_scaled = True
 
     def _tangent(self, normal):
         base = decal_math.base_tangent(tuple(normal))
@@ -257,6 +286,78 @@ class HARDFLOW_OT_asset_library_place(Operator):
         if not self.filepath:
             return {'CANCELLED'}
         return _invoke_place(context, self, filepath=self.filepath)
+
+
+class HARDFLOW_OT_material_insert(Operator, ImportHelper):
+    bl_idname = "object.hardflow_material_insert"
+    bl_label = "Material INSERT"
+    bl_description = ("Append the first material from a .blend and apply it to the "
+                      "selected meshes (KitOps material kpack)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filter_glob: StringProperty(default="*.blend", options={'HIDDEN'})
+
+    def execute(self, context):
+        try:
+            mats = asset.load_blend_materials(self.filepath, link=False)
+        except Exception as ex:   # noqa: BLE001
+            self.report({'ERROR'}, "Could not load materials: %s" % ex)
+            return {'CANCELLED'}
+        if not mats:
+            self.report({'WARNING'}, "No materials in that .blend")
+            return {'CANCELLED'}
+        mat = mats[0]
+        targets = [o for o in context.selected_objects if o.type == 'MESH']
+        if not targets and context.active_object is not None:
+            targets = [context.active_object]
+        n = sum(1 for o in targets if asset.apply_material(o, mat))
+        self.report({'INFO'}, "Applied '%s' to %d mesh(es)" % (mat.name, n))
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_export_asset(Operator):
+    bl_idname = "object.hardflow_export_asset"
+    bl_label = "Export INSERT"
+    bl_description = ("Write the selected objects to a .blend in the asset library "
+                      "and mark them as assets (KPACK-style INSERT export)")
+    bl_options = {'REGISTER'}
+
+    name: StringProperty(name="INSERT Name", default="HF_Insert")
+    mark_asset: BoolProperty(name="Mark as Asset", default=True)
+
+    @classmethod
+    def poll(cls, context):
+        return any(o.type == 'MESH' for o in context.selected_objects)
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        prefs = get_prefs(context)
+        folder = bpy.path.abspath(prefs.asset_library_path) \
+            if prefs.asset_library_path else ""
+        if not folder or not os.path.isdir(folder):
+            self.report({'ERROR'}, "Set a valid Asset Library folder first")
+            return {'CANCELLED'}
+        objects = [o for o in context.selected_objects]
+        if not objects:
+            self.report({'WARNING'}, "Nothing selected")
+            return {'CANCELLED'}
+        if self.mark_asset:
+            for ob in objects:
+                ob.asset_mark()
+                try:
+                    ob.asset_generate_preview()
+                except (AttributeError, RuntimeError):
+                    pass
+        path = os.path.join(folder, "%s.blend" % self.name)
+        try:
+            asset.write_objects_blend(path, objects)
+        except (RuntimeError, OSError) as ex:
+            self.report({'ERROR'}, "Export failed: %s" % ex)
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Exported INSERT to %s" % path)
+        return {'FINISHED'}
 
 
 class HARDFLOW_OT_mark_asset(Operator):

@@ -30,6 +30,12 @@ Setup: add a default cube, stay in Object Mode, keep it selected/active.
 
 - [ ] `Ctrl+Shift+D` → draw a **Box** → the rectangle previews on the grid, the
       HUD shows a live size in metres, and on the second click the cube is **cut**.
+- [ ] **Live cutter cage:** while drawing (after the first click), a **wireframe
+      3D volume** of the cutter is shown through the model (BoxCutter-style depth
+      preview), updating as you move. It disappears on commit/cancel — no
+      leftover `hf_preview` object in the outliner.
+- [ ] **Slice / Make / Face** (`2`/`3`/`4`) also show the live cage; FACE shows
+      the flat face outline.
 - [ ] HUD snap state toggles with `X` (grid) and `V` (vertex/edge).
 - [ ] `< >` cycles the projection plane (VIEW / X / Y / Z); the grid re-orients.
 - [ ] `Esc` / right-click cancels cleanly (no leftover cutter, no console spam).
@@ -63,9 +69,12 @@ mesh).
       toggling `X` turns snap off → free distance.
 - [ ] **Type a number** (top row or numpad), `.` for decimals, `-` to flip
       direction → HUD shows `[typing …]`; `Backspace` edits.
-- [ ] **Click again / `Enter`** → the face extrudes by that amount. Pull (+) and
-      push (−) both work; the side walls are created.
-- [ ] `Esc` before confirming cancels with no geometry change.
+- [ ] **Live preview:** while dragging/typing, the **real mesh extrudes live**
+      (not just an outline) and follows the distance back and forth.
+- [ ] **Click again / `Enter`** → the extrude is kept exactly as previewed. Pull
+      (+) and push (−) both work; the side walls are created.
+- [ ] `Esc` before confirming cancels with **no geometry change** (the live
+      preview is rolled back to the original mesh — verify vert/face counts match).
 - [ ] Result survives **Undo** (`Ctrl+Z`) in one step.
 
 Watch for: wrong extrude direction on a **rotated/scaled** object (the world→local
@@ -80,8 +89,10 @@ Setup: same as Push/Pull.
 
 - [ ] N-panel ▸ Build ▸ **Offset**. Hover highlights a face (green tint).
 - [ ] Click to lock → drag (or type) sets **Thickness**, grid-snapped; `X` toggles snap.
-- [ ] Confirm → an inset ring of faces appears inside the picked face.
-- [ ] `Esc` cancels; `Ctrl+Z` reverts in one step.
+- [ ] **Live preview:** the inset ring appears and resizes live in the real mesh
+      as you drag/type.
+- [ ] Confirm → the inset is kept; `Esc` rolls the mesh back with no change;
+      `Ctrl+Z` reverts in one step.
 
 ---
 
@@ -111,9 +122,97 @@ Setup: same as Push/Pull.
 
 - [ ] Bevel, Mirror, Array, Radial, Symmetrize, Sharpen, Clean each add the
       expected modifier / change.
-- [ ] Pipe and Cable draw along a surface.
 - [ ] Decals: place one on a surface; it sticks (shrinkwrap) and shows its material.
 - [ ] Assets: place an INSERT from a `.blend`; mark an object as an asset.
+
+---
+
+## 8. Pipe & Cable ⭐ (burying fix + drape + live preview)
+
+Setup: a cube in Object Mode. The original bug: the tube sank halfway into the
+surface and straight segments cut through corners (see the v1.2 screenshot).
+
+- [ ] N-panel/menu ▸ Curves ▸ **Pipe**. As you click points along a face, a
+      **real round tube previews live** (not just a 2D line).
+- [ ] **Burying fix:** the tube **rests ON the surface** — its lower edge touches
+      the face, it does not sink in. `Ctrl+Wheel` adds extra clearance; `Wheel`
+      changes radius and the lift tracks it (still never buried).
+- [ ] **Drape (follow):** with **Follow ON** (HUD), draw a pipe from the **top
+      face across the edge onto a side face** → the tube **wraps the corner and
+      hugs the surface** instead of cutting straight through. Press **`F`** to
+      toggle Follow OFF → the same path goes straight again (for comparison).
+- [ ] `Enter` commits the tube exactly as previewed; `Esc` discards it (no
+      leftover `Hardflow_Pipe` object).
+- [ ] **Cable:** Curves ▸ **Cable**. Anchors on a vertical face → the rope
+      **hangs in a sag** clear of the wall (not buried). `Shift+Wheel` changes
+      sag, `Wheel` radius. Live preview + `Enter`/`Esc` behave as above.
+
+---
+
+---
+
+## 9. In-draw operations ⭐ (v1.4 — on the draw modal)
+
+Setup: a cube, Object Mode, `Ctrl+Shift+D`.
+
+- [ ] `5` selects **Knife** mode → drawing a box scores the surface (edges added,
+      no boolean / no volume cage). In Object Mode it knifes the active mesh;
+      select a face first for a contained score.
+- [ ] `-` / `=` change **inset** (the loop shrinks/grows before commit); HUD shows
+      `inset … m`.
+- [ ] `,` / `.` **rotate** the shape in-plane; HUD shows `rot …°`.
+- [ ] `A` cycles **array count** (1→6), `D` cycles the **array axis** (X/Y/Z) →
+      the cage shows N stamped copies; commit bakes them into one cutter.
+- [ ] `M` cycles a live **mirror** across a world axis (off→X→Y→Z).
+- [ ] `B` toggles **bevel-on-cut** → after a CUT the cut edge is chamfered
+      (an `HF_CutBevel` modifier on the target).
+- [ ] `Ctrl+Wheel` changes **grid density** live (the visible grid re-spaces);
+      `PgUp`/`PgDn` set an explicit **cutter depth** (HUD `depth … m`, `grid … m`).
+- [ ] After a commit, `G` **stamps** the previous shape+params again.
+
+---
+
+## 10. Edit Mode (v1.3)
+
+Setup: enter Edit Mode on a cube.
+
+- [ ] **Push/Pull** with face(s) selected → drags the selection along its averaged
+      normal (live extrude in the edit-mesh); `Esc` rolls back.
+- [ ] **Offset** with face(s) selected → insets them live; `Esc` rolls back.
+- [ ] **Draw** (`Ctrl+Shift+D`): MAKE/FACE adds an n-gon into the mesh;
+      CUT/SLICE/KNIFE scores the selected face. Vertex/edge snap tracks the
+      *live* edit-mesh.
+- [ ] **Edge Weight** (`mesh.hardflow_edge_weight`, via menu/F3) sets bevel
+      weight / crease on the selected edges.
+
+---
+
+## 11. Hard Ops parity (v1.5) & Grid Modeler extras (v1.6)
+
+- [ ] N-panel ▸ **Dice** grid-slices the object into panels (redo panel sets X/Y/Z).
+- [ ] **Modifier Stack** sub-panel lists modifiers with show/move/apply/remove.
+- [ ] Greeble row: **Steps / Taper / Knurl** drop a generated object at the cursor.
+- [ ] Display row: **Wire / Sharp / Cutters** toggles; **Random Colors** /
+      **Copy Mat** behave.
+- [ ] Sharpen redo panel offers **WN / SSharp / CSharp** presets.
+- [ ] Pipe: `P` cycles **Round / Square / Rect** cross-section (square/rect build a
+      swept mesh tube).
+- [ ] Build ▸ **Loft**: select two profile objects (e.g. two FACE shapes with the
+      same vertex count) → bridges them into a solid.
+
+---
+
+## 12. DECALmachine (v1.7) & KitOps (v1.8) extras
+
+- [ ] Decal list ▸ per-item **Match** (NODE_MATERIAL icon) tunes the decal to the
+      target's material; **Conform** (shrinkwrap icon) trims faces over gaps.
+- [ ] Decal ▸ **Create from High-poly**: select a high-poly source + an active
+      UV'd plane → bakes a normal map into the library.
+- [ ] Decal Library thumbnails have **rename / delete** buttons that edit the file.
+- [ ] Assets: enable **Auto Scale** + **Insert Grid Snap**, place an INSERT →
+      it fits the target feature size and snaps to the grid / existing anchors.
+- [ ] Assets ▸ **Material INSERT** applies a `.blend`'s material to the selection;
+      **Export INSERT** writes the selection to the asset-library folder.
 
 ---
 

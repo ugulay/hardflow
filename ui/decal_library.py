@@ -65,12 +65,19 @@ class HARDFLOW_PT_decal_library(Panel):
         grid = layout.grid_flow(row_major=True, columns=3, even_columns=True,
                                 even_rows=True, align=True)
         for name, path in items:
+            cell = grid.column(align=True)
             icon = _icon_id(path)
-            op = grid.operator("object.hardflow_library_place", text=name,
+            op = cell.operator("object.hardflow_library_place", text=name,
                                icon_value=icon) if icon else \
-                grid.operator("object.hardflow_library_place", text=name,
+                cell.operator("object.hardflow_library_place", text=name,
                               icon='IMAGE_DATA')
             op.filepath = path
+            # Editable library: rename / delete the file on disk (v1.7).
+            edit = cell.row(align=True)
+            edit.operator("object.hardflow_library_rename", text="",
+                          icon='GREASEPENCIL').filepath = path
+            edit.operator("object.hardflow_library_delete", text="",
+                          icon='TRASH').filepath = path
 
 
 def register():

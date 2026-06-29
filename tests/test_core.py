@@ -100,6 +100,45 @@ def test_centered_grid_segments():
     assert grid.centered_grid_segments(100.0, 0.001) == []  # too dense
 
 
+# --- grid: in-plane rotation handle (v1.4) -----------------------------------
+
+def test_centroid():
+    assert grid.centroid([(0, 0), (2, 0), (2, 2), (0, 2)]) == (1.0, 1.0)
+    assert grid.centroid([]) == (0.0, 0.0)
+
+
+def test_rotate_2d_quarter_turn_about_centroid():
+    sq = [(0, 0), (2, 0), (2, 2), (0, 2)]
+    out = grid.rotate_2d(sq, math.pi / 2)        # 90 deg about (1, 1)
+    # a 90 deg rotation of a centred square maps it back onto itself (as a set)
+    got = set((round(x, 6), round(y, 6)) for x, y in out)
+    assert got == set((round(x, 6), round(y, 6)) for x, y in sq)
+    # explicit center: rotating (1,0) by 180 about origin -> (-1, 0)
+    r = grid.rotate_2d([(1, 0)], math.pi, center=(0, 0))[0]
+    assert math.isclose(r[0], -1.0, abs_tol=1e-9)
+    assert math.isclose(r[1], 0.0, abs_tol=1e-9)
+
+
+# --- transform: dice planes + fit scale (v1.5 / v1.8) ------------------------
+
+def test_dice_coordinates():
+    # 3 pieces over [0, 9] -> interior cuts at 3 and 6
+    assert transform.dice_coordinates(0.0, 9.0, 3) == [3.0, 6.0]
+    assert transform.dice_coordinates(0.0, 1.0, 1) == []     # one piece, no cut
+    assert transform.dice_coordinates(0.0, 1.0, 0) == []     # clamps to 1
+    assert transform.dice_coordinates(5.0, 5.0, 4) == []     # zero span
+
+
+def test_fit_scale():
+    # insert size 2, target feature 4, fraction 0.5 -> scale 1.0
+    assert transform.fit_scale(2.0, 4.0, 0.5) == 1.0
+    # default 0.25 fraction: 1m insert into a 4m feature -> 1.0
+    assert transform.fit_scale(1.0, 4.0) == 1.0
+    # degenerate inputs fall back to the default
+    assert transform.fit_scale(0.0, 4.0) == 1.0
+    assert transform.fit_scale(2.0, 0.0, default=3.0) == 3.0
+
+
 # --- offset: 2D polygon inset (SketchUp Offset) ------------------------------
 
 def test_signed_area_winding():

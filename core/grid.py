@@ -151,6 +151,33 @@ def ngon_points(center, edge, sides, rotation=0.0):
     return pts
 
 
+def centroid(points):
+    """Average of a list of 2D points (the shape's in-plane center). Returns
+    (0, 0) for an empty list. Pure 2D."""
+    n = len(points)
+    if n == 0:
+        return (0.0, 0.0)
+    sx = sum(p[0] for p in points)
+    sy = sum(p[1] for p in points)
+    return (sx / n, sy / n)
+
+
+def rotate_2d(points, angle, center=None):
+    """Rotate 2D `points` by `angle` radians about `center` (defaults to their
+    centroid) -- the in-draw in-plane shape rotation handle (v1.4). Pure 2D, so
+    it is unit-tested without Blender; the operator rotates the shape's plane
+    (u, v) coordinates with this and lifts them back to world."""
+    if center is None:
+        center = centroid(points)
+    cx, cy = center
+    ca, sa = math.cos(angle), math.sin(angle)
+    out = []
+    for x, y in points:
+        dx, dy = x - cx, y - cy
+        out.append((cx + dx * ca - dy * sa, cy + dx * sa + dy * ca))
+    return out
+
+
 def _orient(a, b, c):
     """Sign of the a->b->c turn (>0 CCW, <0 CW, 0 collinear)."""
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])

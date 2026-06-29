@@ -42,10 +42,35 @@ class HARDFLOW_PT_tools(Panel):
         row.operator("object.hardflow_symmetrize", text="Symmetrize",
                      icon='MOD_MIRROR')
         row.operator("object.hardflow_sharpen", text="Sharpen", icon='MOD_BEVEL')
-        col.operator("object.hardflow_clean", text="Clean", icon='BRUSH_DATA')
+        row = col.row(align=True)
+        row.operator("object.hardflow_clean", text="Clean", icon='BRUSH_DATA')
+        row.operator("object.hardflow_dice", text="Dice", icon='MOD_LATTICE')
         row = col.row(align=True)
         row.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
         row.operator("mesh.hardflow_cable", text="Cable", icon='FORCE_CURVE')
+
+        col = layout.column(align=True)
+        col.label(text="Greeble", icon='MESH_ICOSPHERE')
+        row = col.row(align=True)
+        row.operator("object.hardflow_add_step", text="Steps", icon='MOD_ARRAY')
+        row.operator("object.hardflow_add_taper", text="Taper", icon='CONE')
+        row.operator("object.hardflow_add_knurl", text="Knurl",
+                     icon='MESH_CYLINDER')
+
+        col = layout.column(align=True)
+        col.label(text="Display", icon='OVERLAY')
+        row = col.row(align=True)
+        row.operator("object.hardflow_display_toggle", text="Wire",
+                     icon='SHADING_WIRE').mode = 'WIRE'
+        row.operator("object.hardflow_display_toggle", text="Sharp",
+                     icon='SNAP_EDGE').mode = 'SHARP'
+        row.operator("object.hardflow_display_toggle", text="Cutters",
+                     icon='MOD_BOOLEAN').mode = 'CUTTERS'
+        row = col.row(align=True)
+        row.operator("object.hardflow_random_color", text="Random Colors",
+                     icon='COLOR')
+        row.operator("object.hardflow_copy_material", text="Copy Mat",
+                     icon='MATERIAL')
 
         col = layout.column(align=True)
         col.label(text="Build (SketchUp)", icon='MESH_GRID')
@@ -63,8 +88,9 @@ class HARDFLOW_PT_tools(Panel):
         row.operator("mesh.hardflow_push_pull", text="Push/Pull",
                      icon='EMPTY_SINGLE_ARROW')
         row.operator("mesh.hardflow_offset", text="Offset", icon='MOD_SOLIDIFY')
-        col.operator("object.hardflow_add_grid", text="Construction Grid",
-                     icon='MESH_GRID')
+        row = col.row(align=True)
+        row.operator("object.hardflow_add_grid", text="Grid", icon='MESH_GRID')
+        row.operator("object.hardflow_loft", text="Loft", icon='MOD_SIMPLEDEFORM')
 
 
 class HARDFLOW_PT_snap(Panel):
@@ -98,6 +124,9 @@ class HARDFLOW_PT_snap(Panel):
         col.separator()
         col.prop(prefs, "pipe_radius")
         col.prop(prefs, "pipe_offset")
+        col.prop(prefs, "pipe_profile")
+        col.prop(prefs, "pipe_follow_surface")
+        col.prop(prefs, "pipe_follow_segments")
         col.prop(prefs, "cable_radius")
         col.prop(prefs, "cable_sag")
         col.prop(prefs, "cable_segments")
@@ -106,6 +135,40 @@ class HARDFLOW_PT_snap(Panel):
         row = col.row(align=True)
         row.prop(prefs, "line_color", text="")
         row.prop(prefs, "grid_color", text="")
+
+
+class HARDFLOW_PT_modifiers(Panel):
+    bl_label = "Modifier Stack"
+    bl_idname = "HARDFLOW_PT_modifiers"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        obj = context.active_object
+        if obj is None or not obj.modifiers:
+            layout.label(text="No modifiers on the active object", icon='INFO')
+            return
+        # Compact mod-list: name + show/hide + move + apply + remove. Drives
+        # Blender's own modifier operators (the Hard Ops "Q" mod-list equivalent).
+        box = layout.box().column(align=True)
+        for mod in obj.modifiers:
+            row = box.row(align=True)
+            row.label(text=mod.name, icon='MODIFIER')
+            row.prop(mod, "show_viewport", text="", emboss=False,
+                     icon='RESTRICT_VIEW_OFF' if mod.show_viewport
+                     else 'RESTRICT_VIEW_ON')
+            row.operator("object.modifier_move_up", text="",
+                         icon='TRIA_UP').modifier = mod.name
+            row.operator("object.modifier_move_down", text="",
+                         icon='TRIA_DOWN').modifier = mod.name
+            row.operator("object.modifier_apply", text="",
+                         icon='CHECKMARK').modifier = mod.name
+            row.operator("object.modifier_remove", text="",
+                         icon='X').modifier = mod.name
 
 
 class HARDFLOW_PT_cutters(Panel):

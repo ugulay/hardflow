@@ -25,6 +25,28 @@ def add_boolean(target, cutter, operation='DIFFERENCE', solver='EXACT'):
     return _new_bool(target, cutter, operation, solver)
 
 
+def _remove_bool_mods(target):
+    for m in [m for m in target.modifiers if m.name.startswith("HF_Bool")]:
+        target.modifiers.remove(m)
+
+
+def apply_boolean_fallback(context, target, cutter, operation='DIFFERENCE',
+                           solver='EXACT'):
+    """Destructive apply that retries with the FAST solver when the preferred one
+    raises -- boolean INSERTs / cutters on messy targets (KitOps robustness). Any
+    half-added modifier is cleaned up between attempts. Returns the solver string
+    that succeeded, or None when both fail."""
+    for attempt in (solver, 'FAST'):
+        try:
+            apply_boolean(context, target, cutter, operation, attempt)
+            return attempt
+        except RuntimeError:
+            _remove_bool_mods(target)
+        if attempt == 'FAST':
+            break
+    return None
+
+
 def duplicate_object(context, obj, name_suffix="_slice"):
     """Create an independent clone of an object, copying the mesh data too."""
     new = obj.copy()

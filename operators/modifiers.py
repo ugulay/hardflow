@@ -217,6 +217,17 @@ class HARDFLOW_OT_sharpen(Operator):
                       "(Hard Ops SSharp)")
     bl_options = {'REGISTER', 'UNDO'}
 
+    preset: EnumProperty(
+        name="Preset",
+        description="Hard Ops sharpen tier: how the sharp edges are weighted",
+        items=[
+            ('WN', "Weighted Normal", "Sharp + weighted normal only"),
+            ('SSHARP', "SSharp", "Sharp + bevel weight + angle-limited bevel"),
+            ('CSHARP', "CSharp", "Sharp + crease (for Subdivision)"),
+            ('CUSTOM', "Custom", "Use the fields below directly"),
+        ],
+        default='WN',
+    )
     angle_deg: FloatProperty(name="Sharp Angle", default=30.0, min=0.0, max=180.0)
     add_bevel: BoolProperty(
         name="Add Bevel", default=False,
@@ -224,6 +235,8 @@ class HARDFLOW_OT_sharpen(Operator):
     bevel_width: FloatProperty(name="Bevel Width", default=0.01,
                                min=0.0, soft_max=0.2)
     weighted_normal: BoolProperty(name="Weighted Normal", default=True)
+    bevel_weight: FloatProperty(name="Bevel Weight", default=0.0, min=0.0, max=1.0)
+    crease: FloatProperty(name="Crease", default=0.0, min=0.0, max=1.0)
 
     @classmethod
     def poll(cls, context):
@@ -233,19 +246,33 @@ class HARDFLOW_OT_sharpen(Operator):
 
     def execute(self, context):
         obj = context.active_object
+        # A named preset overrides the individual fields (CUSTOM keeps them).
+        p = geometry.SHARPEN_PRESETS.get(self.preset)
+        if p is not None:
+            self.bevel_weight = p['bevel_weight']
+            self.crease = p['crease']
+            self.add_bevel = p['add_bevel']
+            self.weighted_normal = p['weighted_normal']
+
         n = geometry.mark_sharp_by_angle(obj, radians(self.angle_deg))
+        if self.bevel_weight != 0.0 or self.crease != 0.0:
+            geometry.set_sharp_edge_weights(obj, self.bevel_weight, self.crease)
 
         if self.add_bevel and "HF_SharpenBevel" not in obj.modifiers:
             bev = obj.modifiers.new("HF_SharpenBevel", 'BEVEL')
             bev.width = self.bevel_width
             bev.segments = 2
-            bev.limit_method = 'ANGLE'
-            bev.angle_limit = radians(self.angle_deg)
+            # A bevel weight tier limits the bevel to the weighted edges.
+            if self.bevel_weight > 0.0:
+                bev.limit_method = 'WEIGHT'
+            else:
+                bev.limit_method = 'ANGLE'
+                bev.angle_limit = radians(self.angle_deg)
             bev.harden_normals = True
             bev.use_clamp_overlap = True
         if self.weighted_normal and "HF_WeightedNormal" not in obj.modifiers:
             wn = obj.modifiers.new("HF_WeightedNormal", 'WEIGHTED_NORMAL')
             wn.keep_sharp = True
 
-        self.report({'INFO'}, "Sharpen: %d sharp edge(s)" % n)
+        self.report({'INFO'}, "Sharpen (%s): %d sharp edge(s)" % (self.preset, n))
         return {'FINISHED'}

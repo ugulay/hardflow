@@ -6,6 +6,7 @@
 # click places it. The placed decal adheres via a SHRINKWRAP (PROJECT) modifier
 # and is parented to the hit object (see core/decal.py).
 import math
+import os
 
 import bpy
 from bpy.types import Operator
@@ -456,6 +457,208 @@ class HARDFLOW_OT_load_trim_sheet(Operator, ImportHelper):
         return _invoke_place(context, self, image_name=img.name,
                              trim_cols=self.cols, trim_rows=self.rows,
                              trim_index=0)
+
+
+def _get_decal(context, name):
+    """Resolve a decal by name (or fall back to the active object) and verify it
+    is a Hardflow decal. Returns the object or None."""
+    deco = bpy.data.objects.get(name) if name else context.active_object
+    if deco is None or deco.get("hf_decal_type") is None:
+        return None
+    return deco
+
+
+class HARDFLOW_OT_match_decal(Operator):
+    bl_idname = "object.hardflow_match_decal"
+    bl_label = "Match Decal to Surface"
+    bl_description = ("Match the decal's blend (metallic / roughness / tint) to "
+                      "its target's active material so it reads as the same "
+                      "surface (DECALmachine material match)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    name: StringProperty()
+
+    def execute(self, context):
+        deco = _get_decal(context, self.name)
+        if deco is None:
+            self.report({'WARNING'}, "Select a Hardflow decal")
+            return {'CANCELLED'}
+        target = deco.parent
+        if target is None:
+            self.report({'WARNING'}, "Decal has no target to match")
+            return {'CANCELLED'}
+        sample = decal.sample_material(target)
+        if not decal.match_decal_to_material(deco, sample):
+            self.report({'WARNING'}, "Nothing to match (no material on target)")
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Matched '%s' to %s" % (deco.name, target.name))
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_retrim_decal(Operator):
+    bl_idname = "object.hardflow_retrim_decal"
+    bl_label = "Re-trim Decal"
+    bl_description = ("Change which trim-sheet cell a placed decal uses by "
+                      "rewriting its UVs (interactive trim-UV editor)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    name: StringProperty()
+    cols: IntProperty(name="Columns", default=4, min=1, max=64)
+    rows: IntProperty(name="Rows", default=4, min=1, max=64)
+    index: IntProperty(name="Cell", default=0)
+
+    def execute(self, context):
+        deco = _get_decal(context, self.name)
+        if deco is None:
+            self.report({'WARNING'}, "Select a Hardflow decal")
+            return {'CANCELLED'}
+        rect = atlas.cell_rect(self.cols, self.rows, self.index)
+        if not decal.set_decal_uv_rect(deco, rect):
+            self.report({'WARNING'}, "Decal has no UV map")
+            return {'CANCELLED'}
+        cells = self.cols * self.rows
+        self.report({'INFO'}, "Trim cell %d/%d" % (self.index % cells + 1, cells))
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_conform_decal(Operator):
+    bl_idname = "object.hardflow_conform_decal"
+    bl_label = "Auto-cut Decal to Surface"
+    bl_description = ("Subdivide the decal and trim faces that float over a "
+                      "boolean cut / edge so it follows the surface boundary")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    name: StringProperty()
+    subdivisions: IntProperty(name="Subdivisions", default=8, min=0, max=64)
+    max_gap: FloatProperty(name="Max Gap (m)", default=0.05, min=0.0001,
+                           soft_max=1.0)
+
+    def execute(self, context):
+        deco = _get_decal(context, self.name)
+        if deco is None:
+            self.report({'WARNING'}, "Select a Hardflow decal")
+            return {'CANCELLED'}
+        target = deco.parent
+        if target is None or target.type != 'MESH':
+            self.report({'WARNING'}, "Decal has no mesh target")
+            return {'CANCELLED'}
+        removed = decal.conform_trim_decal(context, deco, target,
+                                           self.subdivisions, self.max_gap)
+        self.report({'INFO'}, "Trimmed %d face(s) off the surface" % removed)
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_create_decal(Operator):
+    bl_idname = "object.hardflow_create_decal"
+    bl_label = "Create Decal (Bake)"
+    bl_description = ("Bake the selected high-poly source's normal onto the active "
+                      "plane and save it into the decal library (DECALmachine "
+                      "create-decal). Active plane needs a UV map")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    decal_name: StringProperty(name="Decal Name", default="HF_NewDecal")
+    size: IntProperty(name="Resolution", default=1024, min=64, max=8192)
+
+    def execute(self, context):
+        dest = context.active_object
+        sources = [o for o in context.selected_objects
+                   if o.type == 'MESH' and o is not dest]
+        if dest is None or dest.type != 'MESH' or not sources:
+            self.report({'WARNING'},
+                        "Select high-poly source(s) + an active plane")
+            return {'CANCELLED'}
+        if not dest.data.uv_layers:
+            self.report({'ERROR'}, "Active plane has no UV map -- unwrap it first")
+            return {'CANCELLED'}
+
+        scene, view_layer = context.scene, context.view_layer
+        img = decal.bake_image("HF_DecalSrc_%s" % self.decal_name, self.size,
+                               is_data=True)
+        mat = decal.ensure_material(dest)
+        decal.bake_image_node(mat, img)
+
+        prev_engine = scene.render.engine
+        prev_active = view_layer.objects.active
+        prev_s2a = scene.render.bake.use_selected_to_active
+        try:
+            scene.render.engine = 'CYCLES'
+            scene.render.bake.use_selected_to_active = True
+            scene.render.bake.cage_extrusion = max(0.1, max(dest.dimensions) * 0.5)
+            bpy.ops.object.bake(type='NORMAL')
+        except RuntimeError as ex:
+            self.report({'ERROR'}, "Bake failed: %s" % ex)
+            return {'CANCELLED'}
+        finally:
+            scene.render.engine = prev_engine
+            scene.render.bake.use_selected_to_active = prev_s2a
+            view_layer.objects.active = prev_active
+
+        # Save into the library folder when one is set, else just pack it.
+        folder = get_prefs(context).decal_library_path
+        if folder:
+            folder = bpy.path.abspath(folder)
+            try:
+                decal.save_image(img, os.path.join(folder,
+                                                   "%s.png" % self.decal_name))
+            except (RuntimeError, OSError) as ex:
+                self.report({'WARNING'}, "Baked but could not save: %s" % ex)
+        img.pack()
+        self.report({'INFO'}, "Created decal '%s'" % self.decal_name)
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_library_rename(Operator):
+    bl_idname = "object.hardflow_library_rename"
+    bl_label = "Rename Library Decal"
+    bl_description = "Rename a decal image file in the library folder"
+    bl_options = {'REGISTER'}
+
+    filepath: StringProperty(subtype='FILE_PATH')
+    new_name: StringProperty(name="New Name")
+
+    def invoke(self, context, event):
+        if self.filepath and not self.new_name:
+            self.new_name = os.path.splitext(os.path.basename(self.filepath))[0]
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        if not self.filepath or not os.path.isfile(self.filepath):
+            self.report({'WARNING'}, "File not found")
+            return {'CANCELLED'}
+        ext = os.path.splitext(self.filepath)[1]
+        dest = os.path.join(os.path.dirname(self.filepath),
+                            self.new_name + ext)
+        try:
+            os.rename(self.filepath, dest)
+        except OSError as ex:
+            self.report({'ERROR'}, "Rename failed: %s" % ex)
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Renamed to %s%s" % (self.new_name, ext))
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_library_delete(Operator):
+    bl_idname = "object.hardflow_library_delete"
+    bl_label = "Delete Library Decal"
+    bl_description = "Delete a decal image file from the library folder"
+    bl_options = {'REGISTER'}
+
+    filepath: StringProperty(subtype='FILE_PATH')
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        if not self.filepath or not os.path.isfile(self.filepath):
+            self.report({'WARNING'}, "File not found")
+            return {'CANCELLED'}
+        try:
+            os.remove(self.filepath)
+        except OSError as ex:
+            self.report({'ERROR'}, "Delete failed: %s" % ex)
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Deleted %s" % os.path.basename(self.filepath))
+        return {'FINISHED'}
 
 
 def _image_decals(context):

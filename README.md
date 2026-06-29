@@ -13,17 +13,21 @@ SketchUp-style direct modeling — all without a price tag.
 [![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-EA7600?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Extension](https://img.shields.io/badge/Blender-Extension-orange?logo=blender&logoColor=white)](https://extensions.blender.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.0-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.8.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 </div>
 
-> **Status — under active development.** The boolean cut loop, world-scale +
-> vertex/edge snapping, the non-destructive flow, the decal subsystem, the
-> asset/kitbash system, the Hard Ops modeling tools, and the SketchUp-style
-> direct-modeling tools are all implemented. The pure-logic core is unit-tested
-> (`44/44` passing, no Blender required); live in-Blender verification is
-> ongoing. See [ROADMAP.md](ROADMAP.md) for the full roadmap.
+> **Status — under active development.** **Every roadmap feature through v1.8 is
+> implemented** — the boolean cut loop, world-scale + vertex/edge snapping, the
+> non-destructive flow, the full decal subsystem, the asset/kitbash system, the
+> Hard Ops modeling tools, the SketchUp-style direct-modeling tools, **Edit Mode**
+> for draw/Push-Pull/Offset/snap (v1.3), the Boxcutter-style **in-draw operations**
+> (knife, inset, array, mirror, bevel-on-cut, in-plane rotation, stamp, live grid
+> + depth — v1.4/v1.6), and square/rect pipe profiles + loft (v1.6). The pure-logic
+> core is unit-tested (`48/48` passing, no Blender required); live in-Blender
+> verification of the modal tools is ongoing. See [ROADMAP.md](ROADMAP.md) for the
+> full roadmap and [CHANGELOG.md](CHANGELOG.md) for the per-version history.
 
 ## Features
 
@@ -82,6 +86,125 @@ SketchUp-style direct modeling — all without a price tag.
   collapse them onto one shared material (fewer materials / draw calls).
 - **Pie menu**, preferences panel, customizable snap settings.
 
+## Feature matrix
+
+Every roadmap feature through **v1.8**, grouped by the paid tool whose workflow it
+brings to Blender for free. The right column points at the implementing module.
+
+### Boolean & drawing (Grid Modeler · Boxcutter)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Modal draw-to-cut | Box / Circle / Polygon / N-gon shapes, drawn directly in the viewport | `operators/draw_cut.py` |
+| Cut / Slice / Make / Face | DIFFERENCE · split-in-two · UNION · create an n-gon surface | `operators/draw_cut.py` |
+| Knife / zero-depth cut (v1.4) | Score the surface without extruding — project + split edges only | `core/geometry.py knife_polygon` |
+| World-scale grid snap | Camera-independent grid in meters; plane cycles VIEW / X / Y / Z | `core/grid.py`, `core/raycast.py` |
+| Live grid density (v1.6) | Adjust grid spacing mid-draw with Ctrl+Wheel + on-screen grid widget | `operators/draw_cut.py`, `ui/draw.py` |
+| Live thickness / depth (v1.6) | Drag cutter/extrude depth during the draw with a readout (PgUp/Dn) | `operators/draw_cut.py` |
+| Vertex / edge snap | Lock to corner / edge / midpoint of existing geometry; colored cursor | `core/snap.py`, `core/snapping.py` |
+| Angle lock | Hold Shift to lock the draw direction to angle steps | `core/grid.py snap_angle` |
+| Self-intersection guard | A broken polygon is rejected before the cut | `core/grid.py is_self_intersecting` |
+| Multi-object cut | Apply CUT/MAKE to all selected meshes with one cutter | `operators/draw_cut.py` |
+
+### In-draw operations (Boxcutter — v1.4)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Inset / extract cut | Offset the drawn loop inward/outward before commit (`-`/`=`) | `core/offset.py offset_polygon` |
+| Array during draw | Stamp the in-progress cutter N times along an axis (`A` / `D`) | `core/transform.py array_offset_vector` |
+| Mirror during draw | Live mirror of the cutter across a world axis (`M`) | `core/transform.py mirror_axis_flags` |
+| Bevel-on-cut | Add an angle-limited bevel to the cut edge at commit (`B`) | `operators/draw_cut.py` |
+| In-plane rotation | Rotate the drawn shape within its plane, live angle in HUD (`,` / `.`) | `core/grid.py rotate_2d` |
+| Stamp / repeat | Re-place the previous shape + size with one key (`G`) | `operators/draw_cut.py` |
+
+### Non-destructive workflow (Boxcutter)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Live modifier cut | Leave a boolean modifier instead of applying (`N`) | `core/boolean.py` |
+| Cutter collection | Cutters kept in "Hardflow Cutters" (wire, parented, render off) | `core/boolean.py stash_cutter` |
+| Cutter manager | Select / show-hide / remove cutters; "Apply Cutters (Bake)" | `operators/cutters.py`, `ui/panel.py` |
+| Solver fallbacks (v1.8) | Retry EXACT → FAST when a boolean fails on messy geometry | `core/boolean.py apply_boolean_fallback` |
+
+### Hard Ops tools (Hard Ops — v1.0 / v1.5)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Advanced bevel | Interactive (drag = width, wheel = segments) + Weighted Normal | `operators/modifiers.py` |
+| Mirror | Bisect + clip across an axis | `operators/modifiers.py` |
+| Array / Radial array | Linear array on an axis; N copies around the 3D cursor | `operators/array.py`, `core/transform.py` |
+| Symmetrize | Mirror one half of the mesh onto the other | `core/geometry.py symmetrize_mesh` |
+| Sharpen + presets | Mark sharp by angle + WN; SSharp / CSharp preset tiers | `core/geometry.py SHARPEN_PRESETS` |
+| Boolean from selection | Boolean selected meshes with the active object as cutter | `operators/boolean_ops.py` |
+| Dice / panel | Grid-slice an object into N pieces along axes | `core/geometry.py dice_mesh` |
+| Edge weights / crease | Set/clear bevel-weight + crease on selected edges (Edit Mode) | `operators/hardops.py` |
+| Display toggles | Wireframe / sharp-edge / cutter-visibility viewport toggles | `operators/hardops.py` |
+| Material helpers | Random viewport colors, copy active material to selection | `operators/hardops.py` |
+| Step / taper / knurl | Parametric greeble generators | `core/geometry.py build_steps/build_taper/build_knurl` |
+| Modifier-stack manager | N-panel list with move / toggle / apply / remove | `ui/panel.py` |
+| Clean | Remove doubles + limited dissolve + delete loose | `core/geometry.py cleanup_mesh` |
+
+### Decals (DECALmachine — v0.7–v0.9 / v1.7)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Place on surface | Shrinkwrap-adhered decal aligned to the hit normal; wheel/roll/click | `operators/decals.py`, `core/decal.py` |
+| Decal types | Info / Panel / Subset, each driving a shared PBR shader | `core/decal.py DECAL_TYPES` |
+| PBR shader | Base / metallic / roughness / AO / normal / height+depth / emission / alpha | `core/decal.py HF_DecalShader` |
+| Bake into mesh | Bake Normal / Combined detail into the target's texture | `core/decal.py bake_image` |
+| Image library | Folder of PNG/JPG/TGA placed from an icon grid | `core/decal_image.py`, `ui/decal_library.py` |
+| Trim sheets | Slice a sheet into a grid; place / cycle individual cells | `core/atlas.py slice_grid` |
+| Atlasing | Pack every image decal into one atlas + one shared material | `core/atlas.py pack_shelves` |
+| Create decal (v1.7) | Bake normal/height/alpha out of high-poly source into the library | `operators/decals.py`, `core/decal.py` |
+| Material match (v1.7) | Match a decal's blend to the target's active material | `core/decal.py match_decal_to_material` |
+| Retrim / conform (v1.7) | Re-drive the trim cell after placement; trim across cuts/edges | `core/decal.py conform_trim_decal` |
+| Editable library (v1.7) | Rename / delete / re-export library entries from the N-panel | `operators/decals.py` |
+
+### Assets / kitbash (KitOps — v1.0 / v1.8)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| INSERT placement | Append a `.blend` part, orient to the surface; wheel/roll/click | `operators/assets.py`, `core/asset.py` |
+| Boolean INSERTs | Each mesh becomes a non-destructive CUT/MAKE cutter | `core/asset.py make_asset_cutter` |
+| Asset library | `.blend` kit folder shown as an N-panel grid | `core/asset_lib.py`, `ui/asset_panel.py` |
+| Conform / shading | Shrinkwrap onto the surface; transfer material + smooth state | `core/asset.py conform_asset/transfer_shading` |
+| Asset Browser mark | Mark selection as Blender assets with a preview | `operators/assets.py` |
+| Auto / smart scale (v1.8) | Fit the INSERT to the target's local feature size on placement | `core/asset.py`, `core/transform.py fit_scale` |
+| Insert-grid snap (v1.8) | Snap repeated INSERTs to a regular grid / existing anchors | `core/snapping.py snap_insert_point` |
+| Material INSERTs (v1.8) | Apply a material-only INSERT from a `.blend` | `core/asset.py load_blend_materials` |
+| KPACK export (v1.8) | Write a selection to a `.blend` in the library with a preview | `operators/assets.py`, `core/asset.py write_objects_blend` |
+
+### SketchUp-style direct modeling (v1.2 / v1.3 / v1.6)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Push/Pull | Raycast a face, drag along its normal to extrude; grid-snap + numeric | `operators/push_pull.py` |
+| Offset | Raycast a face, drag to inset its border by a measured distance | `operators/offset.py`, `core/offset.py` |
+| Construction grid | Drop a wire reference grid at the 3D cursor on XY / XZ / YZ | `operators/construction.py` |
+| Loft / bridge (v1.6) | Bridge two drawn profiles into a solid | `core/geometry.py build_loft` |
+| Pipe + profiles (v1.6) | Surface-draping pipe; round / square / rect cross-section (`P`) | `operators/pipe.py`, `core/geometry.py build_pipe` |
+| Sagging cable / rope | A cable that drapes between its points (catenary sag) | `core/transform.py cable_points` |
+
+### Edit Mode (v1.3)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| bmesh edit bridge | Read/write the live edit-mesh via `from_edit_mesh`/`update_edit_mesh` | `core/geometry.py` (`edit_*` helpers) |
+| Draw cut into edit mesh | The drawn shape is knifed/inset into the active mesh, no cutter object | `operators/draw_cut.py` |
+| Push/Pull & Offset in Edit | Operate on the selected face(s) of the edit-mesh directly | `operators/push_pull.py`, `operators/offset.py` |
+| Edit-aware snapping | Vertex/edge snap reads the live, unapplied edit-mesh | `core/snapping.py collect_geo` |
+
+### UX & shared
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Live placement preview | Decal/asset tools show the real object under the cursor pre-click | `operators/decals.py`, `operators/assets.py` |
+| Pie menu | Categorized main pie + Build/Boolean/Modify/Curves sub-pies (Alt+Q) | `ui/pie.py` |
+| Header dropdown | 3D-View header menu covering every tool incl. Decals/Assets | `ui/menu.py` |
+| N-panel | Tools, snap settings, modifier stack, cutter list, greeble/display rows | `ui/panel.py` |
+| HUD measurement | Drawn shape size in meters (Box W×H, Circle r/d, Poly segments) | `ui/draw.py` |
+| Customizable keymap | Rebind shortcuts from the standard Blender keymap editor | `keymaps.py` |
+
 ## Installation
 
 Blender 4.2+: **Edit > Preferences > Get Extensions > (top-right ⌄) > Install
@@ -103,22 +226,33 @@ In drawing mode:
 | Backspace | Delete the last POLY point |
 | Q / W / E / R | Shape: Box / Circle / Polygon / N-gon |
 | [ / ] | Decrease / increase N-gon side count |
-| 1 / 2 / 3 / 4 | Mode: Cut / Slice / Make / Face |
+| 1 / 2 / 3 / 4 / 5 | Mode: Cut / Slice / Make / Face / Knife |
 | ← / → | Drawing plane: VIEW / X / Y / Z |
 | X | Toggle world-scale grid snap |
 | V | Toggle vertex/edge snap |
 | Shift (held) | Lock drawing direction to angle steps |
 | N | Toggle non-destructive (live modifier) |
+| **- / =** | In-draw inset / extract (offset the loop) |
+| **, / .** | In-draw in-plane rotation |
+| **A / D** | In-draw array count / array axis |
+| **M** | In-draw mirror across a world axis |
+| **B** | Toggle bevel-on-cut |
+| **G** | Stamp / repeat the previous shape |
+| **Ctrl+Wheel** | Live grid density |
+| **PgUp / PgDn** | Live cutter / extrude depth |
 | Right click / Esc | Cancel |
 
 **Modes:** Cut = boolean DIFFERENCE · Slice = split the object in two · Make =
 add geometry (UNION) · Face = create a surface from the drawn shape (not a
-boolean).
+boolean) · Knife = score the surface without extruding (zero-depth cut).
 
 **Other tools:** Bevel · Mirror · **Array** · **Radial** · **Symmetrize** ·
-**Sharpen** · **Boolean (Selected)** · **Push/Pull** · **Offset** ·
-**Construction Grid** · **Clean** (mesh cleanup) · **Pipe** / **Cable** (from a
-line) · **Apply Cutters** — all in the N-panel.
+**Sharpen** (+ SSharp/CSharp presets) · **Boolean (Selected)** · **Dice/Panel** ·
+**Edge Weights** · **Display Toggles** · **Step/Taper/Knurl** greeble ·
+**Push/Pull** · **Offset** · **Construction Grid** · **Loft** · **Clean** (mesh
+cleanup) · **Pipe** (round/square/rect) / **Cable** (from a line) · **Apply
+Cutters** · a **modifier-stack manager** — all in the N-panel. Push/Pull, Offset,
+the draw tool, and snapping also work in **Edit Mode** (v1.3).
 
 **Assets:** N-panel "Assets" → "Asset from .blend" (or the "Asset Library" grid)
 starts the placement tool: wheel = scale, `[ ]` = roll, left click = place, Esc =
@@ -137,37 +271,41 @@ hardflow/
 ├── __init__.py             # registration orchestration + keymap
 ├── preferences.py          # settings + get_prefs() accessor
 ├── core/                   # pure logic (UI-independent, testable)
-│   ├── raycast.py          # screen <-> 3D projection, plane (u,v)
-│   ├── grid.py             # world-scale + angle snap, shape + grid points
+│   ├── raycast.py          # screen <-> 3D projection, plane (u,v), surface ray
+│   ├── grid.py             # world-scale + angle snap, shape + grid pts, rotate_2d
 │   ├── snap.py             # vertex/edge geometry snap (pure 2D)
+│   ├── snapping.py         # unified 3D snapping for every draw tool (bpy-data)
 │   ├── offset.py           # polygon inset/offset math, SketchUp Offset (pure 2D)
-│   ├── geometry.py         # cutter volume, symmetrize, sharpen, cleanup (bmesh)
-│   ├── boolean.py          # destructive + non-destructive boolean
-│   ├── transform.py        # array / radial-array + cable-sag math (pure)
+│   ├── geometry.py         # bmesh build/dice/greeble/loft + Edit-Mode bridge
+│   ├── boolean.py          # destructive + non-destructive boolean + fallbacks
+│   ├── transform.py        # array / radial / cable-sag / dice / fit math (pure)
 │   ├── decal*.py / atlas.py# decal orientation, image library, trim/atlas math
 │   ├── asset_lib.py        # .blend kit-library scan (pure)
-│   └── asset.py            # append / orient / bind INSERTs (bpy-data only)
+│   └── asset.py            # append / orient / bind INSERTs + KitOps extras
 ├── operators/              # user actions
-│   ├── draw_cut.py         # main modal drawing operator (cut/slice/make/face)
+│   ├── draw_cut.py         # main modal draw (cut/slice/make/face/knife + in-draw)
 │   ├── modifiers.py        # bevel + mirror + clean + symmetrize + sharpen
+│   ├── hardops.py          # dice / edge-weight / display / greeble (Hard Ops v1.5)
 │   ├── boolean_ops.py      # boolean from selected objects
 │   ├── array.py            # linear + radial array
 │   ├── cutters.py          # non-destructive cutter management (apply/select/remove)
-│   ├── pipe.py             # pipe + sagging cable/rope from a line
-│   ├── push_pull.py        # SketchUp Push/Pull (drag a face along its normal)
-│   ├── offset.py           # SketchUp Offset (inset a face's border)
-│   ├── construction.py     # wire construction grid at the 3D cursor
-│   ├── decals.py           # decal placement + library + trim + atlas + bake
-│   └── assets.py           # INSERT placement + library + mark-as-asset
+│   ├── pipe.py             # pipe (round/square/rect) + sagging cable/rope
+│   ├── push_pull.py        # SketchUp Push/Pull (Object + Edit Mode)
+│   ├── offset.py           # SketchUp Offset (Object + Edit Mode)
+│   ├── construction.py     # wire construction grid + loft/bridge
+│   ├── decals.py           # decal placement + library + trim + atlas + bake + v1.7
+│   └── assets.py           # INSERT placement + library + mark + material + export
 ├── ui/                     # GPU drawing, HUD, menus
 │   ├── draw.py             # gpu + blf helpers
-│   ├── pie.py              # Hard Ops style pie menu
-│   ├── panel.py            # N-panel: tools, settings, cutter list
+│   ├── pie.py              # categorized pie (main + Build/Boolean/Modify/Curves)
+│   ├── menu.py             # 3D-View header dropdown covering every tool
+│   ├── panel.py            # N-panel: tools, settings, modifier stack, cutters
 │   ├── decal_panel.py / decal_library.py   # decal sections
 │   └── asset_panel.py      # asset + asset-library sections
 └── tests/                  # tests
     ├── test_core.py        # pure core, without Blender (python tests/test_core.py)
-    └── test_blender.py     # headless (blender --background --python ...)
+    ├── test_blender.py     # headless (blender --background --python ...)
+    └── manual_checklist.md # click-through checklist for the modal tools
 ```
 
 `core/grid.py` and `core/snap.py` are deliberately kept free of `bpy`, so the

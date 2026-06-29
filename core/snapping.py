@@ -44,23 +44,45 @@ def _mesh_objects(context, target):
     return [obj] if obj is not None and obj.type == 'MESH' else []
 
 
+def _obj_world_geo(obj):
+    """(world verts, world edge index pairs) for one object. When the object is
+    in Edit Mode its LIVE edit-mesh (bmesh.from_edit_mesh, unapplied) is read so
+    vertex/edge snap tracks geometry mid-edit; otherwise the object data is used."""
+    mw = obj.matrix_world
+    if obj.mode == 'EDIT':
+        import bmesh
+        bm = bmesh.from_edit_mesh(obj.data)
+        wverts = [mw @ v.co for v in bm.verts]
+        edges = [(e.verts[0].index, e.verts[1].index) for e in bm.edges]
+        return wverts, edges
+    me = obj.data
+    wverts = [mw @ v.co for v in me.vertices]
+    edges = [tuple(e.vertices) for e in me.edges]
+    return wverts, edges
+
+
 def collect_geo(context, target='ACTIVE', max_verts=GEO_MAX_VERTS):
     """Gather world-space vertices, edge midpoints and edge segments from the
     candidate objects. Returns a Geo; geo.enabled is False (and the lists empty)
-    when the total vertex count exceeds max_verts."""
+    when the total vertex count exceeds max_verts. Edit-Mode objects expose their
+    live (unapplied) edit-mesh so snap works mid-edit (v1.3)."""
     geo = Geo()
     objects = _mesh_objects(context, target)
-    total = sum(len(o.data.vertices) for o in objects)
+
+    def _count(o):
+        if o.mode == 'EDIT':
+            import bmesh
+            return len(bmesh.from_edit_mesh(o.data).verts)
+        return len(o.data.vertices)
+
+    total = sum(_count(o) for o in objects)
     if total == 0 or total > max_verts:
         return geo
     geo.enabled = True
     for obj in objects:
-        me = obj.data
-        mw = obj.matrix_world
-        wverts = [mw @ v.co for v in me.vertices]
+        wverts, edges = _obj_world_geo(obj)
         geo.verts.extend(wverts)
-        for e in me.edges:
-            i, j = e.vertices
+        for i, j in edges:
             a, b = wverts[i], wverts[j]
             geo.edges.append((a, b))
             geo.mids.append((a + b) * 0.5)
@@ -121,8 +143,81 @@ def geo_snap_3d(region, rv3d, coord, geo, threshold_px):
     return None
 
 
+def snap_insert_point(point, spacing, anchors=(), threshold=0.0):
+    """Snap an INSERT placement point to existing insert anchors or a regular
+    world grid (KitOps insert grid / factory snapping, v1.8). Priority: the
+    nearest anchor within `threshold`, else the world grid of `spacing`, else the
+    raw point. `anchors` are world Vectors. Returns a Vector."""
+    p = Vector(point)
+    best = None
+    for a in anchors:
+        d = (Vector(a) - p).length
+        if d <= threshold and (best is None or d < best[0]):
+            best = (d, Vector(a))
+    if best is not None:
+        return best[1]
+    if spacing > 0.0:
+        return grid_snap_3d(p, spacing, True)
+    return p
+
+
 def grid_snap_3d(point, size, enabled):
     """Round a free 3D world point onto the world grid. Thin Vector wrapper over
     the pure grid.snap_world_3d so the rounding stays unit-tested."""
     x, y, z = grid.snap_world_3d(point[0], point[1], point[2], size, enabled)
     return Vector((x, y, z))
+
+
+# --- surface drape (pipe routing) ---------------------------------------
+
+def nearest_surface_point(context, world_co, target='VISIBLE'):
+    """Closest point on the candidate meshes to `world_co`, as (location,
+    normal) in world space (the surface evaluated with modifiers), or None when
+    there is no mesh. Uses Object.closest_point_on_mesh, so -- unlike a raycast
+    -- it needs no ray direction and always finds the nearest surface, which is
+    what lets a draped pipe wrap around an edge it crosses in mid-air."""
+    depsgraph = context.evaluated_depsgraph_get()
+    best = None
+    for obj in _mesh_objects(context, target):
+        eval_obj = obj.evaluated_get(depsgraph)
+        mw = eval_obj.matrix_world
+        local = mw.inverted() @ Vector(world_co)
+        ok, loc, nrm, _idx = eval_obj.closest_point_on_mesh(local)
+        if not ok:
+            continue
+        wloc = mw @ loc
+        d = (wloc - Vector(world_co)).length_squared
+        if best is None or d < best[0]:
+            wnrm = (mw.to_3x3() @ nrm).normalized()
+            best = (d, wloc, wnrm)
+    if best is None:
+        return None
+    return best[1], best[2]
+
+
+def drape_path(context, points, segments=8, lift=0.0, target='VISIBLE'):
+    """Drape a poly-line over the model surface: every span between consecutive
+    `points` is sub-divided into `segments` steps and each sample (anchors
+    included) is snapped onto the nearest surface, then lifted `lift` metres
+    along that surface's normal so the tube rests on top instead of sinking in.
+    Samples that find no surface keep their straight-line position (lifted along
+    world +Z as a harmless fallback). Returns a list of Vectors >= len(points).
+    bpy data + mathutils only -- no bpy.ops -- so it sits in the logic layer."""
+    pts = [Vector(p) for p in points]
+    if len(pts) < 2:
+        return pts
+    segments = max(1, int(segments))
+
+    def place(world_co):
+        near = nearest_surface_point(context, world_co, target)
+        if near is None:
+            return Vector(world_co) + Vector((0.0, 0.0, lift))
+        loc, nrm = near
+        return loc + nrm * lift
+
+    out = [place(pts[0])]
+    for a, b in zip(pts[:-1], pts[1:]):
+        for i in range(1, segments + 1):
+            t = i / segments
+            out.append(place(a.lerp(b, t)))
+    return out

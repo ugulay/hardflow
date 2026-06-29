@@ -24,12 +24,14 @@ _BUILD_ITEMS = (
     ("mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY', {}),
     None,
     ("object.hardflow_add_grid", "Construction Grid", 'MESH_GRID', {}),
+    ("object.hardflow_loft", "Loft / Bridge", 'MOD_SIMPLEDEFORM', {}),
 )
 
 _BOOLEAN_ITEMS = (
     ("mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', {'mode': 'CUT'}),
     ("mesh.hardflow_draw", "Slice", 'MOD_EDGESPLIT', {'mode': 'SLICE'}),
     ("mesh.hardflow_draw", "Make", 'MESH_PLANE', {'mode': 'MAKE'}),
+    ("mesh.hardflow_draw", "Knife (Score)", 'MOD_LINEART', {'mode': 'KNIFE'}),
     ("mesh.hardflow_draw", "Circle Cut", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'CUT'}),
     ("mesh.hardflow_draw", "N-gon Cut", 'MESH_CYLINDER', {'shape': 'NGON', 'mode': 'CUT'}),
     None,
@@ -45,6 +47,17 @@ _MODIFY_ITEMS = (
     ("object.hardflow_symmetrize", "Symmetrize", 'MOD_MIRROR', {}),
     ("object.hardflow_sharpen", "Sharpen", 'MOD_BEVEL', {}),
     ("object.hardflow_clean", "Clean", 'BRUSH_DATA', {}),
+    ("object.hardflow_dice", "Dice / Panel", 'MOD_LATTICE', {}),
+    ("mesh.hardflow_edge_weight", "Edge Weight (Edit)", 'MOD_BEVEL', {}),
+    None,
+    ("object.hardflow_random_color", "Random Colors", 'COLOR', {}),
+    ("object.hardflow_copy_material", "Copy Material", 'MATERIAL', {}),
+)
+
+_GREEBLE_ITEMS = (
+    ("object.hardflow_add_step", "Steps", 'MOD_ARRAY', {}),
+    ("object.hardflow_add_taper", "Taper", 'CONE', {}),
+    ("object.hardflow_add_knurl", "Knurl", 'MESH_CYLINDER', {}),
 )
 
 _CURVE_ITEMS = (
@@ -54,7 +67,10 @@ _CURVE_ITEMS = (
 
 _ASSET_ITEMS = (
     ("object.hardflow_load_asset", "Place INSERT...", 'IMPORT', {}),
+    ("object.hardflow_material_insert", "Material INSERT...", 'MATERIAL', {}),
+    None,
     ("object.hardflow_mark_asset", "Mark as Asset", 'OBJECT_DATA', {}),
+    ("object.hardflow_export_asset", "Export INSERT...", 'EXPORT', {}),
 )
 
 
@@ -98,6 +114,13 @@ class HARDFLOW_MT_menu_curves(Menu):
         _render(self.layout, _CURVE_ITEMS)
 
 
+class HARDFLOW_MT_menu_greeble(Menu):
+    bl_label = "Greeble"
+
+    def draw(self, context):
+        _render(self.layout, _GREEBLE_ITEMS)
+
+
 class HARDFLOW_MT_menu_decals(Menu):
     bl_label = "Decals"
 
@@ -111,6 +134,13 @@ class HARDFLOW_MT_menu_decals(Menu):
                         text="Place Image...", icon='IMAGE_DATA')
         layout.operator("object.hardflow_load_trim_sheet",
                         text="Load Trim Sheet...", icon='UV_DATA')
+        layout.separator()
+        layout.operator("object.hardflow_create_decal",
+                        text="Create from High-poly", icon='RENDER_STILL')
+        layout.operator("object.hardflow_match_decal",
+                        text="Match to Surface", icon='NODE_MATERIAL')
+        layout.operator("object.hardflow_conform_decal",
+                        text="Auto-cut to Surface", icon='MOD_SHRINKWRAP')
         layout.operator("object.hardflow_atlas_decals",
                         text="Atlas Decals", icon='IMGDISPLAY')
 
@@ -131,6 +161,7 @@ class HARDFLOW_MT_menu(Menu):
         layout.menu("HARDFLOW_MT_menu_boolean", icon='MOD_BOOLEAN')
         layout.menu("HARDFLOW_MT_menu_modify", icon='MODIFIER')
         layout.menu("HARDFLOW_MT_menu_curves", icon='MOD_SCREW')
+        layout.menu("HARDFLOW_MT_menu_greeble", icon='MESH_ICOSPHERE')
         layout.separator()
         layout.menu("HARDFLOW_MT_menu_decals", icon='TEXTURE')
         layout.menu("HARDFLOW_MT_menu_assets", icon='FILE_BLEND')

@@ -29,25 +29,51 @@ class HARDFLOW_OT_push_pull(Operator):
     def poll(cls, context):
         obj = context.active_object
         return (obj is not None and obj.type == 'MESH'
-                and context.mode == 'OBJECT')
+                and context.mode in {'OBJECT', 'EDIT_MESH'})
 
     def invoke(self, context, event):
         if context.area.type != 'VIEW_3D':
             self.report({'WARNING'}, "Run inside View3D")
             return {'CANCELLED'}
         self.obj = context.active_object
+        self.edit = context.mode == 'EDIT_MESH'   # Edit Mode = drag selected faces
         self.snap = get_prefs(context).snap_enabled
-        self.face_index = -1      # face under the cursor (or locked face)
+        self.face_index = -1      # face under the cursor (Object Mode pick)
         self.locked = False       # has a face been picked?
         self.axis_co = None       # world-space face center (drag axis origin)
         self.axis_dir = None      # world-space face normal (drag axis)
         self.distance = 0.0       # signed extrude amount, meters
         self.typed = ""           # numeric entry buffer
+        self._base = None         # mesh snapshot for the live preview
+        self._committed = False
+
+        # Edit Mode: there is no hover-pick -- lock straight onto the selected
+        # faces and drag along their averaged normal.
+        if self.edit and not self._lock_edit(context):
+            self.report({'WARNING'}, "Select face(s) to push/pull")
+            return {'CANCELLED'}
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
+
+    def _lock_edit(self, context):
+        """Edit Mode lock: build the drag axis from the average center/normal of
+        the selected faces and snapshot the edit-mesh for the live preview."""
+        basis = geometry.selected_face_basis(self.obj)
+        if basis is None:
+            return False
+        center, normal = basis
+        mw = self.obj.matrix_world
+        self.axis_co = mw @ center
+        self.axis_dir = (mw.to_3x3() @ normal).normalized()
+        self.distance = 0.0
+        self.typed = ""
+        self.locked = True
+        geometry.flush_edit_mesh(self.obj)   # sync selection before snapshot
+        self._base = geometry.snapshot_mesh(self.obj, "hf_pushpull_base")
+        return True
 
     # --- event loop ------------------------------------------------------
 
@@ -58,6 +84,7 @@ class HARDFLOW_OT_push_pull(Operator):
         if event.type == 'MOUSEMOVE':
             if self.locked:
                 self._update_distance(context, co)
+                self._refresh_preview()
             else:
                 self._hover_face(context, co)
 
@@ -76,7 +103,7 @@ class HARDFLOW_OT_push_pull(Operator):
             self.snap = not self.snap
 
         elif self.locked and event.value == 'PRESS' and self._edit_typed(event):
-            pass  # numeric entry handled
+            self._refresh_preview()  # numeric entry handled
 
         elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
             self._cleanup(context)
@@ -109,7 +136,8 @@ class HARDFLOW_OT_push_pull(Operator):
             else -1
 
     def _lock_face(self):
-        """Freeze the picked face and build the drag axis from it."""
+        """Freeze the picked face and build the drag axis from it. Snapshot the
+        mesh so the live preview can reset before each re-extrude."""
         poly = self.obj.data.polygons[self.face_index]
         mw = self.obj.matrix_world
         self.axis_co = mw @ poly.center
@@ -117,6 +145,27 @@ class HARDFLOW_OT_push_pull(Operator):
         self.distance = 0.0
         self.typed = ""
         self.locked = True
+        self._base = geometry.snapshot_mesh(self.obj, "hf_pushpull_base")
+
+    def _refresh_preview(self):
+        """Show the real extrude live: restore the snapshot, then re-extrude the
+        locked face(s) by the current distance straight into the mesh. Routes
+        through the edit-mesh in Edit Mode, the object mesh otherwise."""
+        if self._base is None:
+            return
+        if self.edit:
+            geometry.restore_edit_mesh(self.obj, self._base)
+            if abs(self.distance) > 1e-6:
+                local_vec = self._local_disp()
+                geometry.edit_extrude_faces(self.obj, local_vec)
+            return
+        geometry.restore_mesh(self.obj, self._base)
+        if abs(self.distance) > 1e-6:
+            geometry.extrude_faces(self.obj, [self.face_index], self._local_disp())
+
+    def _local_disp(self):
+        world_disp = self.axis_dir * self.distance
+        return self.obj.matrix_world.inverted().to_3x3() @ world_disp
 
     def _update_distance(self, context, co):
         region, rv3d = context.region, context.region_data
@@ -155,7 +204,7 @@ class HARDFLOW_OT_push_pull(Operator):
     # --- visual feedback -------------------------------------------------
 
     def _face_screen_points(self, context):
-        if self.face_index < 0:
+        if self.edit or self.face_index < 0:   # Edit Mode: rely on mesh highlight
             return []
         poly = self.obj.data.polygons[self.face_index]
         mw = self.obj.matrix_world
@@ -195,19 +244,26 @@ class HARDFLOW_OT_push_pull(Operator):
     # --- apply -----------------------------------------------------------
 
     def _commit(self, context):
-        if abs(self.distance) > 1e-6:
-            try:
-                world_disp = self.axis_dir * self.distance
-                local_vec = self.obj.matrix_world.inverted().to_3x3() @ world_disp
-                ok = geometry.extrude_faces(self.obj, [self.face_index], local_vec)
-                if not ok:
-                    self.report({'WARNING'}, "Push/Pull failed (no face)")
-            except Exception as ex:
-                self.report({'ERROR'}, f"Hardflow: {ex}")
+        # The live preview already wrote the extrude into the mesh; just make
+        # sure it reflects the final distance, then keep it.
+        try:
+            self._refresh_preview()
+        except Exception as ex:
+            self.report({'ERROR'}, f"Hardflow: {ex}")
+        self._committed = True
         self._cleanup(context)
         return {'FINISHED'}
 
     def _cleanup(self, context):
+        # Cancelled mid-preview -> roll the mesh back to the snapshot.
+        if self._base is not None:
+            if not self._committed:
+                if self.edit:
+                    geometry.restore_edit_mesh(self.obj, self._base)
+                else:
+                    geometry.restore_mesh(self.obj, self._base)
+            geometry.free_mesh(self._base)
+            self._base = None
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):

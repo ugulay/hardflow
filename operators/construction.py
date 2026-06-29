@@ -7,7 +7,7 @@
 # a reference. Spacing follows the same grid size as the draw/snap tools.
 import bpy
 from bpy.types import Operator
-from bpy.props import EnumProperty, FloatProperty
+from bpy.props import EnumProperty, FloatProperty, BoolProperty
 from mathutils import Matrix
 
 from ..core import grid, geometry
@@ -26,6 +26,53 @@ _PLANE_ROT = {
     'XZ': Matrix.Rotation(1.5707963267948966, 4, 'X'),
     'YZ': Matrix.Rotation(1.5707963267948966, 4, 'Y'),
 }
+
+
+def _object_loop(obj):
+    """World-space vertex loop of a profile object: the first polygon's loop if
+    it has faces, otherwise all vertices in order."""
+    me = obj.data
+    mw = obj.matrix_world
+    if me.polygons:
+        return [mw @ me.vertices[i].co for i in me.polygons[0].vertices]
+    return [mw @ v.co for v in me.vertices]
+
+
+class HARDFLOW_OT_loft(Operator):
+    bl_idname = "object.hardflow_loft"
+    bl_label = "Hardflow Loft"
+    bl_description = ("Bridge two selected profile objects into a solid "
+                      "(Grid Modeler loft / bridge); the two loops need an equal "
+                      "vertex count")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    caps: BoolProperty(name="Cap Ends", default=True)
+
+    @classmethod
+    def poll(cls, context):
+        sel = [o for o in context.selected_objects if o.type == 'MESH']
+        return context.mode == 'OBJECT' and len(sel) == 2
+
+    def execute(self, context):
+        sel = [o for o in context.selected_objects if o.type == 'MESH']
+        loop_a = _object_loop(sel[0])
+        loop_b = _object_loop(sel[1])
+        if len(loop_a) != len(loop_b):
+            self.report({'WARNING'},
+                        "Loft needs equal vertex counts (%d vs %d)"
+                        % (len(loop_a), len(loop_b)))
+            return {'CANCELLED'}
+        mesh = geometry.build_loft(loop_a, loop_b, caps=self.caps)
+        if mesh is None:
+            self.report({'WARNING'}, "Could not loft these profiles")
+            return {'CANCELLED'}
+        obj = bpy.data.objects.new("Hardflow_Loft", mesh)
+        context.collection.objects.link(obj)
+        for o in list(context.selected_objects):
+            o.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        return {'FINISHED'}
 
 
 class HARDFLOW_OT_add_grid(Operator):

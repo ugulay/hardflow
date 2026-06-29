@@ -7,6 +7,122 @@ logic; since the project is pre-1.0, minor versions add features.
 
 _Nothing yet._
 
+## [1.8.0] — 2026-06-29
+
+KitOps parity for the asset/kitbash system: smart placement and author-side
+packaging. Pure logic is unit-tested without Blender (`48/48` passing); the
+bpy-dependent paths have headless coverage and still await a live-Blender smoke
+test.
+
+### Added
+- **Auto / smart scale** — scale an INSERT to the target's local feature size on
+  placement (raycast footprint → fit) instead of only manual wheel scale;
+  `core/asset.py bound_size`/`surface_feature_size`, `core/transform.fit_scale`.
+- **Material INSERTs** — apply a material-only INSERT from a `.blend` to the
+  target (`HARDFLOW_OT_material_insert`, `core/asset.load_blend_materials`/
+  `apply_material`).
+- **KPACK-style export** — mark a selection as an INSERT and write it to a
+  `.blend` in the asset library with a generated preview
+  (`HARDFLOW_OT_export_asset`, `core/asset.write_objects_blend`).
+- **Insert-grid / factory snapping** — snap repeated INSERTs to a regular grid or
+  to existing insert anchors (`core/snapping.snap_insert_point`).
+- **Boolean-solver fallbacks** — when an insert cutter fails the EXACT solver,
+  retry FAST (`core/boolean.apply_boolean_fallback`).
+
+## [1.7.0] — 2026-06-29
+
+DECALmachine parity: decal authoring and management beyond placement.
+
+### Added
+- **Decal creation pipeline** — bake a decal (normal/height/alpha) out of
+  high-poly source geometry into the library (`HARDFLOW_OT_create_decal`).
+- **Material matching** — match a placed decal's blend to the target's active
+  material (`HARDFLOW_OT_match_decal`, `core/decal.sample_material`/
+  `match_decal_to_material`).
+- **Interactive trim-UV editor** — adjust which trim cell a placed decal uses
+  after placement (`HARDFLOW_OT_retrim_decal`, `core/decal.set_decal_uv_rect`).
+- **Auto-cut decal to surface** — project + trim a decal that crosses a cut/edge
+  so it doesn't float over gaps (`HARDFLOW_OT_conform_decal`,
+  `core/decal.conform_trim_decal`).
+- **Editable decal library** — rename / delete / re-export library entries from
+  the N-panel (`HARDFLOW_OT_library_rename`/`library_delete`, `core/decal.save_image`).
+
+## [1.6.0] — 2026-06-29
+
+Grid Modeler precision extras and pipe profiles.
+
+### Added
+- **Live grid density in-modal** — adjust grid spacing during the draw with
+  Ctrl+Wheel, with an on-screen grid widget (`operators/draw_cut.py`, `ui/draw.py`).
+- **Live thickness / depth drag** — drag the cutter/extrude depth during the draw
+  with a measurement readout (PgUp/PgDn).
+- **Loft / bridge between two profiles** — bridge two drawn shapes into a solid
+  (`HARDFLOW_OT_loft`, `core/geometry.build_loft`).
+- **Square / rectangular pipe cross-section** — `core/geometry.build_pipe` gained
+  a profile arg (round / square / rect), cycled with `P` while drawing.
+
+## [1.5.0] — 2026-06-29
+
+Hard Ops parity: modifier-stack management, dice/greeble, and mesh helpers, in a
+new `operators/hardops.py`.
+
+### Added
+- **Modifier-stack manager** — an N-panel section listing the active object's
+  modifiers with move / toggle / apply / remove (`ui/panel.py`).
+- **Boolean dice / panel** — grid-slice an object into N pieces along axes
+  (`HARDFLOW_OT_dice`, `core/geometry.dice_mesh`, `core/transform.dice_coordinates`).
+- **Sharpen presets (SSharp / CSharp)** — preset tiers of bevel-weight + crease +
+  WN (`core/geometry.SHARPEN_PRESETS`).
+- **Edge bevel-weight / crease** — set/clear weight + crease on selected edges in
+  Edit Mode (`HARDFLOW_OT_edge_weight`).
+- **Mesh display toggles** — wireframe / sharp-edge / cutter-visibility viewport
+  toggles (`HARDFLOW_OT_display_toggle`).
+- **Material / viewport helpers** — random viewport colors, copy the active
+  material to selection (`HARDFLOW_OT_random_color`/`copy_material`).
+- **Step / taper / knurl greeble** — parametric detail generators
+  (`HARDFLOW_OT_add_step`/`add_taper`/`add_knurl`, `core/geometry.build_steps`/
+  `build_taper`/`build_knurl`).
+
+## [1.4.0] — 2026-06-29
+
+In-draw operations (the Boxcutter spirit): modify the cut *while drawing*. All
+hang off the `operators/draw_cut.py` modal via `_processed_corner_sets`.
+
+### Added
+- **Knife / zero-depth cut** — a mode (key `5`) that scores the surface without
+  extruding (`core/geometry.knife_polygon`).
+- **Inset / extract cut** — offset the drawn loop inward/outward before commit
+  (`-` / `=`, reuses `core/offset.offset_polygon`).
+- **Array during draw** — stamp the in-progress cutter N times along an axis
+  (`A` count / `D` axis, `core/transform.array_offset_vector`).
+- **Mirror during draw** — live mirror of the cutter across a world axis (`M`,
+  `core/transform.mirror_axis_flags`).
+- **Bevel-on-cut** — optionally add an angle-limited bevel to the cut edge at
+  commit (`B`).
+- **In-plane shape rotation** — rotate the drawn shape within its plane (`,` /
+  `.`, `core/grid.rotate_2d`), live angle in the HUD.
+- **Repeat / stamp last shape** — re-place the previous shape + size with one key
+  (`G`).
+
+## [1.3.0] — 2026-06-29
+
+Edit Mode foundation — the biggest single lever, unlocking edit-draw and precise
+loops. A `core/geometry.py` bmesh edit-mesh bridge keeps `core` free of `bpy.ops`
+while the operator owns the mode.
+
+### Added
+- **bmesh edit-mesh bridge** — read/write the active edit-mesh via
+  `bmesh.from_edit_mesh` / `update_edit_mesh` (`core/geometry.py` `flush_edit_mesh`,
+  `restore_edit_mesh`, `edit_extrude_faces`, `edit_inset_faces`, `edit_add_face`,
+  `edit_knife_polygon`, `edit_set_edge_weights`, `selected_face_basis`).
+- **Draw cut into edit mesh** — `operators/draw_cut.py` gains an Edit Mode path:
+  the drawn shape becomes geometry knifed/inset into the active mesh, no separate
+  cutter object.
+- **Push/Pull & Offset in Edit Mode** — `operators/push_pull.py` /
+  `operators/offset.py` operate on the selected face(s) of the edit-mesh directly.
+- **Edit-mode aware snapping** — `core/snapping.collect_geo` reads the live,
+  unapplied edit-mesh so vertex/edge snap works mid-edit.
+
 ## [1.2.0] — 2026-06-29
 
 The SketchUp-style direct-modeling milestone: drag faces in/out (Push/Pull),

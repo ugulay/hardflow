@@ -7,16 +7,21 @@ context in every session.
 
 Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
 Blender 4.2+. The goal: deliver the core workflows of Grid Modeler, Boxcutter,
-Hard Ops, DECALmachine, and KitOps for free. Currently at **v1.2** — the core
-boolean/snap/cutter workflows, the full decal subsystem (placement, PBR material,
-bake, image library, trim sheets, atlasing), the asset/kitbash system (INSERT
-placement, boolean INSERTs, .blend library, conform, asset-browser mark), the
-Hard Ops modeling tools (boolean-from-selection, array, radial array, symmetrize,
-sharpen), a live placement preview for decals + assets (the real object follows
-the cursor before commit), and the SketchUp-style direct-modeling tools
-(Push/Pull, Offset, a construction-grid reference object, plus a sagging
-cable/rope) are all implemented; live Blender verification is still ongoing. The
-full roadmap is in `ROADMAP.md`.
+Hard Ops, DECALmachine, and KitOps for free. **All roadmap features through v1.8
+are implemented** — the core boolean/snap/cutter workflows; the full decal
+subsystem (placement, PBR material, bake, image library, trim sheets, atlasing,
+plus v1.7 create/match/retrim/conform + editable library); the asset/kitbash
+system (INSERT placement, boolean INSERTs, .blend library, conform, asset-browser
+mark, plus v1.8 auto-scale, insert-grid snap, material INSERTs, KPACK export,
+solver fallbacks); the Hard Ops tools (boolean-from-selection, array, radial,
+symmetrize, sharpen + presets, dice/panel, edge weights, display toggles,
+material helpers, step/taper/knurl greeble); live placement preview; the
+SketchUp direct-modeling tools (Push/Pull, Offset, construction grid, cable);
+**Edit Mode** for draw/Push-Pull/Offset/snap (v1.3); the Boxcutter-style
+**in-draw operations** (knife, inset, array, mirror, bevel-on-cut, in-plane
+rotation, stamp/repeat, live grid + depth — v1.4/v1.6); and square/rect pipe
+profiles + loft (v1.6). Code is syntax-verified with pure + headless tests; live
+Blender verification of the modal tools is still ongoing. Roadmap: `ROADMAP.md`.
 
 ## FIRST TASK: smoke test inside Blender
 
@@ -57,34 +62,35 @@ ops ─┘
 | `keymaps.py` | Shortcut registration + preferences rebind UI (`register_keymaps`, `draw_keymap_prefs`); defaults Alt+Q / Ctrl+Shift+D |
 | `preferences.py` | Settings + the `get_prefs(context)` accessor |
 | `core/raycast.py` | Screen↔3D projection + plane (u,v) + surface ray (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`, `ray_cast_surface`, `basis_from_normal`, `closest_axis_distance`) |
-| `core/grid.py` | World-scale + angle + scalar snap, shape points, construction grid (`snap_world`, `snap_scalar`, `world_grid_segments`, `centered_grid_segments`, `snap_angle`, `box_points`, `circle_points`, `ngon_points`) |
+| `core/grid.py` | World-scale + angle + scalar snap, shape points, construction grid, 2D rotation (`snap_world`, `snap_scalar`, `world_grid_segments`, `centered_grid_segments`, `snap_angle`, `box_points`, `circle_points`, `ngon_points`, `centroid`, `rotate_2d`, `is_self_intersecting`) |
 | `core/snap.py` | Vertex/edge geometry snap, pure 2D (`nearest_point`, `closest_point_on_segment`, `nearest_on_segments`) |
-| `core/snapping.py` | Unified 3D snapping shared by every draw tool (vertex/edge → surface → grid → free); bpy-data + mathutils, no `bpy.ops`/`gpu`/`blf`; delegates picking to `core/snap.py` (`Geo`, `collect_geo`, `geo_snap_3d`, `grid_snap_3d`) |
+| `core/snapping.py` | Unified 3D snapping shared by every draw tool (vertex/edge → surface → grid → free) + pipe surface-drape; bpy-data + mathutils, no `bpy.ops`/`gpu`/`blf`; reads the live edit-mesh in Edit Mode (v1.3); delegates picking to `core/snap.py` (`Geo`, `collect_geo`, `geo_snap_3d`, `grid_snap_3d`, `snap_insert_point`, `nearest_surface_point`, `drape_path`) |
 | `core/offset.py` | Pure 2D polygon inset/offset math, stdlib only — SketchUp Offset (`signed_area`, `offset_polygon`) |
-| `core/geometry.py` | bmesh generation (`build_prism`, `build_face`, `build_pipe`, `build_grid_mesh`, `extrude_faces`, `inset_faces`, `estimate_thickness`, `symmetrize_mesh`, `mark_sharp_by_angle`, `cleanup_mesh`) |
-| `core/boolean.py` | boolean + cutter management (`apply_boolean`, `add_boolean`, `duplicate_object`, `stash_cutter`, `cutter_collection`) |
-| `core/transform.py` | Pure array/radial + cable-sag math, stdlib only (`radial_step_radians`, `radial_angles_deg`, `array_offset_vector`, `mirror_axis_flags`, `cable_points`, `cable_chain`) |
+| `core/geometry.py` | bmesh generation (`build_prism`/`build_prisms`, `build_face`/`build_faces`, `build_pipe`/`build_pipe_mesh`/`profile_points`, `build_loft`, `build_grid_mesh`, `extrude_faces`, `inset_faces`, `knife_polygon`, `estimate_thickness`, `symmetrize_mesh`, `mark_sharp_by_angle`, `dice_mesh`, `set_sharp_edge_weights`, `SHARPEN_PRESETS`, greeble `build_steps`/`build_taper`/`build_knurl`, `cleanup_mesh`) + live-preview snapshot (`snapshot_mesh`, `restore_mesh`, `free_mesh`) + Edit-Mode bridge (v1.3: `flush_edit_mesh`, `restore_edit_mesh`, `edit_extrude_faces`, `edit_inset_faces`, `edit_add_face`, `edit_knife_polygon`, `edit_set_edge_weights`, `selected_face_basis`) |
+| `core/boolean.py` | boolean + cutter management (`apply_boolean`, `apply_boolean_fallback` (EXACT→FAST), `add_boolean`, `duplicate_object`, `stash_cutter`, `cutter_collection`) |
+| `core/transform.py` | Pure array/radial + cable-sag + dice + fit math, stdlib only (`radial_step_radians`, `radial_angles_deg`, `array_offset_vector`, `mirror_axis_flags`, `cable_points`, `cable_chain`, `dice_coordinates`, `fit_scale`) |
 | `core/decal_math.py` | Pure decal orientation math, no bpy/mathutils (`orientation_basis`, `base_tangent`, `rotate_about_axis`) |
 | `core/decal_image.py` | Pure decal-library helpers, stdlib only (`scan_library`, `is_image_file`, `aspect_size`) |
 | `core/atlas.py` | Pure UV-rect + pixel math for trim sheets + atlasing (`slice_grid`, `cell_rect`, `rect_pixels`, `pack_shelves`, `remap_uv`, `blit_pixels`, `rect_to_uv`, `next_pow2`) |
-| `core/decal.py` | Decal build/stick/material (`make_decal`, `make_image_decal`, `build_decal_mesh`, `decal_matrix`, `add_shrinkwrap`, `decal_material`/`image_decal_material` + shared PBR node group `_decal_node_group`/`HF_DecalShader` with base/metallic/roughness/AO/normal/height+depth/emission/alpha, bake helpers `bake_image`/`ensure_material`/`bake_image_node`, atlas image `atlas_image`, `decal_collection`, `DECAL_TYPES`) |
+| `core/decal.py` | Decal build/stick/material (`make_decal`, `make_image_decal`, `build_decal_mesh`, `decal_matrix`, `add_shrinkwrap`, `decal_material`/`image_decal_material` + shared PBR node group `_decal_node_group`/`HF_DecalShader` with base/metallic/roughness/AO/normal/height+depth/emission/alpha, bake helpers `bake_image`/`ensure_material`/`bake_image_node`, atlas image `atlas_image`, `decal_collection`, `DECAL_TYPES`; v1.7 extras `sample_material`/`match_decal_to_material`/`set_decal_uv_rect`/`conform_trim_decal`/`save_image`) |
 | `core/asset_lib.py` | Pure `.blend` kit-library scan, stdlib only (`scan_assets`, `is_asset_file`) |
-| `core/asset.py` | INSERT append/orient/bind, bpy-data only (`load_blend_objects`, `asset_matrix`, `place_asset`, `make_asset_cutter`, `bind_cutters`, `flatten_objects`, `conform_asset`, `transfer_shading`, `asset_collection`) |
-| `operators/draw_cut.py` | Main modal drawing operator (`HARDFLOW_OT_draw`): cut/slice/make/face, plane rotation, measurement HUD |
-| `operators/modifiers.py` | Bevel + mirror + clean + symmetrize + sharpen (`HARDFLOW_OT_bevel/mirror/clean/symmetrize/sharpen`) |
+| `core/asset.py` | INSERT append/orient/bind, bpy-data only (`load_blend_objects`, `asset_matrix`, `place_asset`, `make_asset_cutter`, `bind_cutters`, `flatten_objects`, `conform_asset`, `transfer_shading`, `asset_collection`) + v1.8 KitOps extras (`bound_size`, `surface_feature_size`, `load_blend_materials`, `apply_material`, `write_objects_blend`) |
+| `operators/draw_cut.py` | Main modal drawing operator (`HARDFLOW_OT_draw`): cut/slice/make/face/**knife**, plane rotation, measurement HUD, live 3D cutter cage, Edit-Mode path (v1.3), and **in-draw ops** (v1.4/v1.6: inset `-/=`, rotate `,/.`, array `A`/axis `D`, mirror `M`, bevel-on-cut `B`, stamp `G`, live grid Ctrl+Wheel, live depth PgUp/Dn) via `_processed_corner_sets` |
+| `operators/modifiers.py` | Bevel + mirror + clean + symmetrize + sharpen (w/ SSharp/CSharp presets) (`HARDFLOW_OT_bevel/mirror/clean/symmetrize/sharpen`) |
+| `operators/hardops.py` | v1.5 Hard Ops parity: dice/panel, edge bevel-weight/crease (Edit), display toggles, random colors, copy material, step/taper/knurl greeble (`HARDFLOW_OT_dice/edge_weight/display_toggle/random_color/copy_material/add_step/add_taper/add_knurl`) |
 | `operators/boolean_ops.py` | Boolean from selected objects, active = cutter (`HARDFLOW_OT_boolean`) |
 | `operators/array.py` | Linear + radial array (`HARDFLOW_OT_array/radial_array`) |
 | `operators/cutters.py` | Non-destructive cutter management (`HARDFLOW_OT_apply_cutters/select_cutter/remove_cutter`) |
-| `operators/pipe.py` | Surface-snapping curve draw: pipe + sagging cable/rope, shared `_CurveDraw` modal (`HARDFLOW_OT_pipe/cable`) |
-| `operators/push_pull.py` | SketchUp Push/Pull: raycast a face, drag along its normal (grid snap + numeric entry), bmesh extrude (`HARDFLOW_OT_push_pull`) |
-| `operators/offset.py` | SketchUp Offset: raycast a face, drag to inset its border, bmesh inset (`HARDFLOW_OT_offset`) |
-| `operators/construction.py` | Add a wire construction-grid reference object at the 3D cursor (`HARDFLOW_OT_add_grid`) |
-| `operators/decals.py` | Decal placement + management + bake + image library + trim sheets + atlasing (`HARDFLOW_OT_place_decal/select_decal/remove_decal/bake_decal/load_decal_image/library_place/load_trim_sheet/atlas_decals`) |
-| `operators/assets.py` | INSERT placement + library + mark-as-asset (`HARDFLOW_OT_place_asset/load_asset/asset_library_place/mark_asset`) |
+| `operators/pipe.py` | Surface-snapping curve draw: pipe (drapes, F toggles; round/square/rect profile, P cycles — v1.6) + free-hanging sagging cable/rope; live preview (curve or swept mesh); shared `_CurveDraw` modal (`HARDFLOW_OT_pipe/cable`) |
+| `operators/push_pull.py` | SketchUp Push/Pull: raycast a face (Object) or selected faces (Edit, v1.3), drag along normal (grid snap + numeric), bmesh extrude w/ live snapshot/restore (`HARDFLOW_OT_push_pull`) |
+| `operators/offset.py` | SketchUp Offset: raycast a face (Object) or selected faces (Edit, v1.3), drag to inset, bmesh inset w/ live snapshot/restore (`HARDFLOW_OT_offset`) |
+| `operators/construction.py` | Construction-grid object at the 3D cursor + loft/bridge between two profiles (`HARDFLOW_OT_add_grid/loft`) |
+| `operators/decals.py` | Decal placement/management/bake/library/trim/atlas + v1.7 create/match/retrim/conform + editable library (`HARDFLOW_OT_place_decal/select_decal/remove_decal/bake_decal/load_decal_image/library_place/load_trim_sheet/atlas_decals/match_decal/retrim_decal/conform_decal/create_decal/library_rename/library_delete`) |
+| `operators/assets.py` | INSERT placement (auto-scale + insert-grid snap, v1.8) + library + mark + material INSERT + KPACK export (`HARDFLOW_OT_place_asset/load_asset/asset_library_place/mark_asset/material_insert/export_asset`) |
 | `ui/draw.py` | GPU + blf helpers |
 | `ui/pie.py` | Categorized pie system: main pie + Build/Boolean/Modify/Curves sub-pies (`HARDFLOW_MT_pie`, `HARDFLOW_MT_pie_build/boolean/modify/curves`); `_draw`/`_open` helpers |
 | `ui/menu.py` | 3D-View header dropdown covering every tool incl. Decals/Assets; data-driven `*_ITEMS` tables + submenus (`HARDFLOW_MT_menu`, `HARDFLOW_MT_menu_*`); `register`/`unregister` add the header hook |
-| `ui/panel.py` | N-panel: tools, snap settings, cutter list (`HARDFLOW_PT_*`) |
+| `ui/panel.py` | N-panel: tools, snap settings, **modifier-stack manager** (v1.5), cutter list, greeble + display + material rows (`HARDFLOW_PT_tools/snap/modifiers/cutters`) |
 | `ui/decal_panel.py` | N-panel "Decals" section: place by type + decal list (`HARDFLOW_PT_decals`) |
 | `ui/decal_library.py` | N-panel "Decal Library" section: image icon grid (`HARDFLOW_PT_decal_library`, `bpy.utils.previews`) |
 | `ui/asset_panel.py` | N-panel "Assets" + "Asset Library" sections (`HARDFLOW_PT_assets/asset_library`) |

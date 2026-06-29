@@ -23,7 +23,7 @@ if _PARENT not in sys.path:
 _PKG = os.path.basename(_REPO)            # usually "hardflow"
 hardflow = __import__(_PKG)
 from hardflow.core import (geometry, boolean, decal, decal_image, atlas,  # noqa: E402
-                           asset, grid, raycast)
+                           asset, grid, raycast, snapping)
 
 
 def _reset():
@@ -594,6 +594,50 @@ def test_inset_faces_offset():
     assert geometry.inset_faces(cube, [9999], 0.3) is False   # bad index
 
 
+def test_snapshot_restore_mesh():
+    # the live-preview backbone for Push/Pull + Offset: snapshot a mesh, mutate
+    # it, then restore it back to the captured state.
+    _reset()
+    cube = _add_cube("SNAP", size=2.0)
+    base = geometry.snapshot_mesh(cube, "snap_base")
+    before = len(cube.data.polygons)
+    geometry.extrude_faces(cube, [0], Vector((0, 0, 1.0)))
+    assert len(cube.data.polygons) != before, "edit did not change the mesh"
+    geometry.restore_mesh(cube, base)
+    assert len(cube.data.polygons) == before, "restore did not roll the mesh back"
+    geometry.free_mesh(base)
+    assert "snap_base" not in bpy.data.meshes, "snapshot datablock leaked"
+
+
+def test_nearest_surface_point_lifts_along_normal():
+    # closest_point_on_mesh backbone of the pipe drape: a point above the +Z face
+    # of a 2m cube snaps back to z=1 with an upward normal.
+    _reset()
+    _activate(_add_cube("SURF", size=2.0))
+    near = snapping.nearest_surface_point(bpy.context, Vector((0, 0, 5.0)),
+                                          target='ACTIVE')
+    assert near is not None, "no surface found"
+    loc, nrm = near
+    assert abs(loc.z - 1.0) < 1e-4, "nearest point not on the top face: %r" % loc
+    assert nrm.z > 0.9, "normal not pointing up: %r" % nrm
+
+
+def test_drape_path_rests_on_surface():
+    # draping a straight span across the top of a 2m cube must keep every sample
+    # lifted to (face + lift) along the surface normal, never sunk into the cube.
+    _reset()
+    _activate(_add_cube("DRAPE", size=2.0))
+    lift = 0.1
+    pts = snapping.drape_path(bpy.context,
+                              [Vector((-0.5, 0, 1.0)), Vector((0.5, 0, 1.0))],
+                              segments=4, lift=lift, target='ACTIVE')
+    assert len(pts) >= 5, "drape did not sub-divide the span"
+    for p in pts:
+        assert abs(p.z - (1.0 + lift)) < 1e-4, "draped point off the surface: %r" % p
+    # fewer than two points is returned unchanged
+    assert len(snapping.drape_path(bpy.context, [Vector((0, 0, 0))])) == 1
+
+
 def test_build_grid_mesh_is_wire():
     _reset()
     segs = grid.centered_grid_segments(1.0, 0.5)
@@ -658,6 +702,269 @@ def test_menu_classes_registered():
         # tear the classes back down -- no leak after disable/re-enable.
         assert not hasattr(bpy.types, "HARDFLOW_MT_menu"), \
             "menu class leaked after unregister"
+
+
+# --- v1.3 Edit Mode bridge ---------------------------------------------------
+
+def _edit_select_faces(ob, indices):
+    """Enter Edit Mode on ob with exactly the given face indices selected."""
+    import bmesh
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bm = bmesh.from_edit_mesh(ob.data)
+    bm.faces.ensure_lookup_table()
+    for f in bm.faces:
+        f.select_set(False)
+    for i in indices:
+        bm.faces[i].select_set(True)
+    bmesh.update_edit_mesh(ob.data)
+
+
+def test_edit_extrude_and_basis():
+    _reset()
+    cube = _add_cube("EditPP", size=2.0)
+    _edit_select_faces(cube, [0])
+    basis = geometry.selected_face_basis(cube)
+    assert basis is not None
+    _center, normal = basis
+    assert abs(normal.length - 1.0) < 1e-5
+    ok = geometry.edit_extrude_faces(cube, normal * 1.0)
+    assert ok
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert len(cube.data.polygons) >= 6      # extrude added side walls
+
+
+def test_edit_inset_and_add_face_and_knife():
+    _reset()
+    cube = _add_cube("EditOff", size=2.0)
+    _edit_select_faces(cube, [0])
+    before = len(cube.data.polygons)
+    assert geometry.edit_inset_faces(cube, 0.3) is True
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert len(cube.data.polygons) > before
+
+    # add a face into the edit-mesh
+    _edit_select_faces(cube, [0])
+    pf = len(cube.data.polygons)
+    from mathutils import Vector
+    ok = geometry.edit_add_face(cube, [Vector((0, 0, 3)), Vector((1, 0, 3)),
+                                       Vector((1, 1, 3))])
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert ok and len(cube.data.polygons) == pf + 1
+
+    # knife score the selected face
+    _edit_select_faces(cube, [0])
+    ef = len(cube.data.edges)
+    n = geometry.edit_knife_polygon(
+        cube, [Vector((-0.5, -0.5, 1)), Vector((0.5, -0.5, 1)),
+               Vector((0.5, 0.5, 1)), Vector((-0.5, 0.5, 1))],
+        Vector((0, 0, 1)))
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert n >= 1 and len(cube.data.edges) >= ef
+
+
+def test_restore_edit_mesh():
+    _reset()
+    cube = _add_cube("EditSnap", size=2.0)
+    _edit_select_faces(cube, [0])
+    base = geometry.snapshot_mesh(cube, "edit_base")
+    before = len(cube.data.polygons)
+    geometry.edit_extrude_faces(cube, Vector((0, 0, 1.0)))
+    geometry.restore_edit_mesh(cube, base)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert len(cube.data.polygons) == before, "edit restore did not roll back"
+    geometry.free_mesh(base)
+
+
+def test_object_knife_polygon():
+    _reset()
+    cube = _add_cube("Knife", size=2.0)
+    ef = len(cube.data.edges)
+    n = geometry.knife_polygon(
+        cube, [Vector((-0.5, -0.5, 1)), Vector((0.5, -0.5, 1)),
+               Vector((0.5, 0.5, 1)), Vector((-0.5, 0.5, 1))],
+        Vector((0, 0, 1)))
+    assert n == 4 and len(cube.data.edges) > ef
+
+
+# --- v1.4 multi-copy cutter builders -----------------------------------------
+
+def test_build_prisms_and_faces():
+    corners = [Vector((-1, -1, 0)), Vector((1, -1, 0)),
+               Vector((1, 1, 0)), Vector((-1, 1, 0))]
+    sets = [(corners, Vector((0, 0, -1))),
+            ([c + Vector((4, 0, 0)) for c in corners], Vector((0, 0, -1)))]
+    me = geometry.build_prisms(sets, thickness=4.0)
+    assert me is not None and len(me.vertices) == 16   # two 8-vert prisms
+    fme = geometry.build_faces(sets)
+    assert fme is not None and len(fme.polygons) == 2
+    assert geometry.build_prisms([], 1.0) is None
+
+
+# --- v1.5 Hard Ops parity ----------------------------------------------------
+
+def test_dice_mesh():
+    _reset()
+    cube = _add_cube("Dice", size=2.0)
+    before = len(cube.data.polygons)
+    passes = geometry.dice_mesh(cube, (2, 2, 1), mark_sharp=True)
+    assert passes == 2                       # one cut per axis with count 2
+    assert len(cube.data.polygons) > before
+
+
+def test_edge_weights():
+    _reset()
+    import math
+    cube = _add_cube("Weights", size=2.0)
+    geometry.mark_sharp_by_angle(cube, math.radians(30))   # all 12 edges sharp
+    n = geometry.set_sharp_edge_weights(cube, bevel_weight=1.0, crease=0.5)
+    assert n == 12
+
+    _edit_select_faces(cube, [0])
+    m = geometry.edit_set_edge_weights(cube, bevel_weight=1.0, only_selected=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert m == 4                            # one quad face = 4 edges
+
+
+def test_greeble_builders():
+    _reset()
+    steps = geometry.build_steps(count=4, rise=0.1, run=0.1, width=1.0)
+    assert steps is not None and len(steps.polygons) > 0
+    taper = geometry.build_taper(1.0, 0.5, 1.0)
+    assert taper is not None and len(taper.vertices) == 8
+    pyr = geometry.build_taper(1.0, 0.0, 1.0)         # top=0 -> pyramid (5 verts)
+    assert len(pyr.vertices) == 5
+    knurl = geometry.build_knurl(0.5, 1.0, teeth=8)
+    assert knurl is not None and len(knurl.vertices) == 8 * 2 * 2
+
+
+# --- v1.6 Grid Modeler extras ------------------------------------------------
+
+def test_pipe_mesh_and_profile():
+    assert geometry.profile_points('ROUND', 0.1) is None
+    sq = geometry.profile_points('SQUARE', 0.1)
+    assert len(sq) == 4
+    pts = [Vector((0, 0, 0)), Vector((0, 0, 1)), Vector((0, 0, 2))]
+    me = geometry.build_pipe_mesh(pts, sq)
+    assert me is not None and len(me.polygons) > 0
+    assert geometry.build_pipe_mesh([Vector((0, 0, 0))], sq) is None
+
+
+def test_build_loft():
+    a = [Vector((0, 0, 0)), Vector((1, 0, 0)), Vector((1, 1, 0)), Vector((0, 1, 0))]
+    b = [p + Vector((0, 0, 2)) for p in a]
+    me = geometry.build_loft(a, b)
+    assert me is not None
+    assert len(me.vertices) == 8 and len(me.polygons) == 6     # closed box
+    assert geometry.build_loft(a, b[:3]) is None               # mismatched loops
+
+
+# --- v1.7 DECALmachine extras ------------------------------------------------
+
+def test_decal_uv_rect_and_match():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    mat = bpy.data.materials.new("Surf")
+    mat.use_nodes = True
+    bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
+    bsdf.inputs['Metallic'].default_value = 0.7
+    bsdf.inputs['Roughness'].default_value = 0.2
+    target.data.materials.append(mat)
+
+    d = decal.make_decal(bpy.context, target, Vector((0, 0, 1)),
+                         Vector((0, 0, 1)), Vector((1, 0, 0)), decal_type='INFO')
+    # re-trim: rewrite UVs to the top-left quarter cell
+    cell = atlas.cell_rect(2, 2, 0)
+    assert decal.set_decal_uv_rect(d, cell)
+    us = [round(u.uv[0], 4) for u in d.data.uv_layers.active.data]
+    assert min(us) == 0.0 and max(us) == 0.5
+
+    # material match: copy the decal material, set metallic/roughness from target
+    sample = decal.sample_material(target)
+    assert sample is not None and abs(sample['metallic'] - 0.7) < 1e-6
+    assert decal.match_decal_to_material(d, sample)
+    grp = decal._decal_group_node(d)
+    assert abs(grp.inputs['Metallic'].default_value - 0.7) < 1e-6
+    assert abs(grp.inputs['Roughness'].default_value - 0.2) < 1e-6
+
+
+def test_conform_trim_decal():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    d = decal.make_decal(bpy.context, target, Vector((0, 0, 1)),
+                         Vector((0, 0, 1)), Vector((1, 0, 0)),
+                         width=0.5, height=0.5)
+    # a decal hugging the surface keeps all its faces
+    removed = decal.conform_trim_decal(bpy.context, d, target, subdivisions=2,
+                                       max_gap=0.2)
+    assert removed == 0
+    # lift it far off the surface -> every face is now over a gap and trimmed
+    from mathutils import Matrix
+    d.matrix_world = Matrix.Translation((0, 0, 50)) @ d.matrix_world
+    removed2 = decal.conform_trim_decal(bpy.context, d, target, subdivisions=2,
+                                        max_gap=0.2)
+    assert removed2 > 0
+
+
+# --- v1.8 KitOps extras ------------------------------------------------------
+
+def test_asset_fit_and_material_and_export():
+    _reset()
+    cube = _add_cube("Kit", size=2.0)
+    assert abs(asset.bound_size([cube]) - 2.0) < 1e-6
+    assert abs(asset.surface_feature_size(cube) - 2.0) < 1e-6
+
+    mat = bpy.data.materials.new("KitMat")
+    assert asset.apply_material(cube, mat)
+    assert cube.data.materials[0] is mat
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "kit.blend")
+        out = asset.write_objects_blend(path, [cube])
+        assert out == path and os.path.isfile(path)
+
+
+def test_boolean_fallback():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    cutter = _add_cube("Cutter", size=1.0, location=(1, 0, 0))
+    _activate(target)
+    before = len(target.data.polygons)
+    used = boolean.apply_boolean_fallback(bpy.context, target, cutter,
+                                          'DIFFERENCE', 'EXACT')
+    assert used in {'EXACT', 'FAST'}
+    assert len(target.data.polygons) != before
+
+
+def test_snap_insert_point():
+    p = snapping.snap_insert_point((0.12, 0.0, 0.0), 0.1)
+    assert abs(p.x - 0.1) < 1e-9
+    # an anchor within threshold wins over the grid
+    p2 = snapping.snap_insert_point((0.12, 0.0, 0.0), 0.1,
+                                    anchors=[Vector((0.13, 0.0, 0.0))],
+                                    threshold=0.05)
+    assert abs(p2.x - 0.13) < 1e-9
+
+
+def test_new_operators_registered():
+    _reset()
+    hardflow.register()
+    try:
+        for name in ("hardflow_dice",
+                     "hardflow_display_toggle", "hardflow_random_color",
+                     "hardflow_copy_material", "hardflow_add_step",
+                     "hardflow_add_taper", "hardflow_add_knurl",
+                     "hardflow_loft", "hardflow_match_decal",
+                     "hardflow_retrim_decal", "hardflow_conform_decal",
+                     "hardflow_create_decal", "hardflow_library_rename",
+                     "hardflow_library_delete", "hardflow_material_insert",
+                     "hardflow_export_asset"):
+            assert hasattr(bpy.ops.object, name), "missing operator: %s" % name
+        assert hasattr(bpy.ops.mesh, "hardflow_edge_weight")
+    finally:
+        hardflow.unregister()
 
 
 def _run():

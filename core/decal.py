@@ -355,3 +355,124 @@ def make_image_decal(context, target, location, normal, tangent, image,
                             image_decal_material(image), offset, 'IMAGE')
     decal["hf_decal_image"] = image.name
     return decal
+
+
+# --- DECALmachine extras (v1.7) -----------------------------------------
+
+
+def _decal_group_node(decal_obj):
+    """The HF_DecalShader group node of a decal's active material, or None."""
+    mat = decal_obj.active_material
+    if mat is None or not mat.use_nodes:
+        return None
+    return next((n for n in mat.node_tree.nodes
+                 if n.type == 'GROUP' and n.node_tree
+                 and n.node_tree.name == DECAL_NODE_GROUP), None)
+
+
+def sample_material(obj):
+    """Sample base color / metallic / roughness from obj's active material so a
+    placed decal can be matched to the surface it sits on (v1.7 material match).
+    Reads a Principled BSDF, falling back to an HF_DecalShader group. Returns a
+    dict or None when there is nothing to sample."""
+    mat = obj.active_material if obj is not None else None
+    if mat is None or not mat.use_nodes:
+        return None
+    nodes = mat.node_tree.nodes
+    bsdf = next((n for n in nodes if n.type == 'BSDF_PRINCIPLED'), None)
+    src = bsdf
+    if src is None:
+        src = next((n for n in nodes if n.type == 'GROUP' and n.node_tree
+                    and n.node_tree.name == DECAL_NODE_GROUP), None)
+    if src is None:
+        return None
+    return {
+        'base_color': tuple(src.inputs['Base Color'].default_value),
+        'metallic': src.inputs['Metallic'].default_value,
+        'roughness': src.inputs['Roughness'].default_value,
+    }
+
+
+def match_decal_to_material(decal_obj, sample):
+    """Tune a decal's HF_DecalShader inputs to a sampled material (from
+    sample_material) so it reads as the same surface. The decal's material is made
+    single-user first so shared templates are never clobbered. Base Color is only
+    set when it is not texture-driven (an image decal keeps its texture). Returns
+    True on success."""
+    if sample is None:
+        return False
+    grp = _decal_group_node(decal_obj)
+    if grp is None:
+        return False
+    # Copy the material so tuning one decal does not affect every sibling.
+    mat = decal_obj.active_material
+    mat = mat.copy()
+    decal_obj.data.materials[0] = mat
+    grp = _decal_group_node(decal_obj)
+    if not grp.inputs['Base Color'].is_linked:
+        grp.inputs['Base Color'].default_value = sample['base_color']
+    grp.inputs['Metallic'].default_value = sample['metallic']
+    grp.inputs['Roughness'].default_value = sample['roughness']
+    return True
+
+
+def set_decal_uv_rect(decal_obj, uv_rect):
+    """Rewrite a decal quad's UVs to a new sub-rect (a different trim cell) after
+    placement -- the interactive trim-UV editor (v1.7). Maps each loop to a corner
+    by its vertex's local position sign (the build_decal_mesh layout). Returns
+    True on success."""
+    me = decal_obj.data
+    uvl = me.uv_layers.active
+    if uvl is None:
+        return False
+    u0, v0, u1, v1 = uv_rect
+    for poly in me.polygons:
+        for li in poly.loop_indices:
+            co = me.vertices[me.loops[li].vertex_index].co
+            uvl.data[li].uv = (u1 if co.x > 0 else u0, v1 if co.y > 0 else v0)
+    me.update()
+    return True
+
+
+def conform_trim_decal(context, decal_obj, target, subdivisions=8, max_gap=0.05):
+    """Auto-cut a decal to the surface (v1.7): subdivide its quad, then delete any
+    face whose center projects farther than `max_gap` from `target`'s nearest
+    surface -- i.e. faces floating over a boolean cut or off an edge. The decal's
+    shrinkwrap keeps wrapping the rest. Returns the face count removed."""
+    subdivisions = max(0, int(subdivisions))
+    me = decal_obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    if subdivisions > 0:
+        bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=subdivisions,
+                                  use_grid_fill=True)
+    mw = decal_obj.matrix_world
+    depsgraph = context.evaluated_depsgraph_get()
+    eval_t = target.evaluated_get(depsgraph)
+    t_inv = eval_t.matrix_world.inverted()
+    t_mw = eval_t.matrix_world
+    doomed = []
+    for f in bm.faces:
+        world_c = mw @ f.calc_center_median()
+        ok, loc, _n, _i = eval_t.closest_point_on_mesh(t_inv @ world_c)
+        if not ok:
+            doomed.append(f)
+            continue
+        if (t_mw @ loc - world_c).length > max_gap:
+            doomed.append(f)
+    removed = len(doomed)
+    if doomed:
+        bmesh.ops.delete(bm, geom=doomed, context='FACES')
+    bm.to_mesh(me)
+    me.update()
+    bm.free()
+    return removed
+
+
+def save_image(image, filepath, file_format='PNG'):
+    """Write an image datablock to disk (used by the decal-creation pipeline to
+    drop a baked decal into the library folder). Returns the saved filepath."""
+    image.filepath_raw = filepath
+    image.file_format = file_format
+    image.save()
+    return filepath

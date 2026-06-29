@@ -39,6 +39,28 @@ def mirror_axis_flags(axis):
     return (axis == 'X', axis == 'Y', axis == 'Z')
 
 
+def fit_scale(insert_size, target_feature, fraction=0.25, default=1.0):
+    """Uniform scale that fits an INSERT of size `insert_size` to `fraction` of a
+    target's local feature size -- KitOps auto/smart scale on placement. Returns
+    `default` when either size is non-positive. Pure arithmetic, unit-tested; the
+    bbox measurement lives in core/asset.py."""
+    if insert_size <= 0.0 or target_feature <= 0.0:
+        return default
+    return (target_feature * fraction) / insert_size
+
+
+def dice_coordinates(lo, hi, count):
+    """Interior cut positions that slice the span [lo, hi] into `count` equal
+    pieces -- the Hard Ops dice/panel cut planes along one axis. Returns the
+    `count - 1` evenly spaced interior coordinates (empty for count <= 1). Pure
+    arithmetic, unit-tested; the bmesh bisect lives in core/geometry.dice_mesh."""
+    count = max(1, int(count))
+    if count == 1 or hi <= lo:
+        return []
+    step = (hi - lo) / count
+    return [lo + step * i for i in range(1, count)]
+
+
 def cable_points(p0, p1, segments=12, sag=0.0, axis=2):
     """Points along one hanging-cable span from p0 to p1 (both endpoints
     included). The span is linearly interpolated, then drooped with a parabolic

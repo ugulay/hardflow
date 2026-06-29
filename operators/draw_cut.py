@@ -31,6 +31,7 @@ _MODES = [
     ('SLICE', "Slice", "Slice the object in two"),
     ('MAKE', "Make", "Add geometry (UNION)"),
     ('FACE', "Face", "Create a new face (create face, not boolean)"),
+    ('KNIFE', "Knife", "Score the surface only (zero-depth cut, no boolean)"),
 ]
 
 # Vertex/edge snap cursor colors live in ui.draw so every tool shares them.
@@ -49,7 +50,7 @@ class HARDFLOW_OT_draw(Operator):
     def poll(cls, context):
         obj = context.active_object
         return (obj is not None and obj.type == 'MESH'
-                and context.mode == 'OBJECT')
+                and context.mode in {'OBJECT', 'EDIT_MESH'})
 
     def invoke(self, context, event):
         if context.area.type != 'VIEW_3D':
@@ -57,17 +58,28 @@ class HARDFLOW_OT_draw(Operator):
             return {'CANCELLED'}
 
         prefs = get_prefs(context)
+        self.edit = context.mode == 'EDIT_MESH'  # draw into the active edit-mesh
         self.snap = prefs.snap_enabled
         self.geo = prefs.geo_snap        # vertex/edge snap (overrides grid)
         self.nd = prefs.non_destructive  # non-destructive: leave a live modifier
         self.plane = 'VIEW'              # projection plane: VIEW / X / Y / Z
         self.sides = prefs.ngon_sides    # N-gon side count (adjust live with [ ])
+        # In-draw operations (v1.4): all baked into one cutter at commit.
+        self.inset = 0.0          # offset the drawn loop in/out (m); -/= adjust
+        self.rotation = 0.0       # in-plane shape rotation (rad); , / . adjust
+        self.array_count = 1      # stamp N copies along an axis; A adjusts
+        self.array_axis = 'X'     # array world axis; D cycles
+        self.mirror_axis = ''     # live mirror across a world axis; M cycles
+        self.bevel_cut = False    # add an angle-limited bevel to the cut; B toggles
+        self.grid_size = prefs.grid_world  # live grid spacing (Ctrl+Wheel adjusts)
+        self.depth = 0.0          # explicit cutter depth (0 = auto pierce); PgUp/Dn
         self.points = []          # confirmed screen points
         self.cursor = (0, 0)      # current (snapped) mouse point
         self._snap_hit = None     # (screen_point, kind) -- for visual marker
         self._surface_basis = None  # locked (origin,right,up,normal) in SURFACE
         self._surface_miss = False  # SURFACE ray missed -> fell back to VIEW
         self.committing = False
+        self._preview = None        # live 3D cutter/face volume object
         self._collect_snap_geometry(context)
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
@@ -125,9 +137,35 @@ class HARDFLOW_OT_draw(Operator):
             step = 1 if event.type == 'RIGHT_BRACKET' else -1
             self.sides = max(3, min(64, self.sides + step))
 
-        elif event.type in {'ONE', 'TWO', 'THREE', 'FOUR'} and event.value == 'PRESS':
+        elif (event.type in {'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'}
+              and event.value == 'PRESS'):
             self.mode = {'ONE': 'CUT', 'TWO': 'SLICE', 'THREE': 'MAKE',
-                         'FOUR': 'FACE'}[event.type]
+                         'FOUR': 'FACE', 'FIVE': 'KNIFE'}[event.type]
+
+        # --- in-draw operations (v1.4) -----------------------------------
+        elif event.type in {'MINUS', 'EQUAL'} and event.value == 'PRESS':
+            step = self.grid_size
+            self.inset += step if event.type == 'EQUAL' else -step
+
+        elif event.type in {'COMMA', 'PERIOD'} and event.value == 'PRESS':
+            import math
+            step = math.radians(get_prefs(context).angle_step)
+            self.rotation += step if event.type == 'PERIOD' else -step
+
+        elif event.type == 'A' and event.value == 'PRESS':
+            self.array_count = self.array_count % 6 + 1  # cycle 1..6
+
+        elif event.type == 'D' and event.value == 'PRESS':
+            self.array_axis = {'X': 'Y', 'Y': 'Z', 'Z': 'X'}[self.array_axis]
+
+        elif event.type == 'M' and event.value == 'PRESS':
+            self.mirror_axis = {'': 'X', 'X': 'Y', 'Y': 'Z', 'Z': ''}[self.mirror_axis]
+
+        elif event.type == 'B' and event.value == 'PRESS':
+            self.bevel_cut = not self.bevel_cut
+
+        elif event.type == 'G' and event.value == 'PRESS':
+            return self._stamp_last(context)   # repeat the previous shape
 
         elif event.type == 'X' and event.value == 'PRESS':
             self.snap = not self.snap
@@ -149,11 +187,23 @@ class HARDFLOW_OT_draw(Operator):
             self._cleanup(context)
             return {'CANCELLED'}
 
+        # Ctrl+Wheel: live grid density (otherwise the wheel navigates the view).
+        elif (event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} and event.ctrl
+              and event.value == 'PRESS'):
+            factor = 2.0 if event.type == 'WHEELUPMOUSE' else 0.5
+            self.grid_size = max(0.001, min(100.0, self.grid_size * factor))
+
+        elif event.type in {'PAGE_UP', 'PAGE_DOWN'} and event.value == 'PRESS':
+            step = self.grid_size
+            self.depth = max(0.0, self.depth
+                             + (step if event.type == 'PAGE_UP' else -step))
+
         # Allow viewport navigation while drawing (orbit/zoom/pan).
         elif event.type in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE',
                             'TRACKPADPAN', 'TRACKPADZOOM'}:
             return {'PASS_THROUGH'}
 
+        self._update_preview(context)
         return {'RUNNING_MODAL'}
 
     # --- world-scale snap (v0.2) ----------------------------------------
@@ -229,7 +279,7 @@ class HARDFLOW_OT_draw(Operator):
             p3d = raycast.ray_to_plane(region, rv3d, screen_co, origin, normal)
             if p3d is not None:
                 u, v = raycast.world_to_plane_uv(p3d, origin, right, up)
-                u, v = grid.snap_world(u, v, prefs.grid_world, True)
+                u, v = grid.snap_world(u, v, self.grid_size, True)
                 world = raycast.plane_uv_to_world(u, v, origin, right, up)
                 screen = raycast.world_to_screen(region, rv3d, world)
                 if screen is not None:
@@ -249,8 +299,18 @@ class HARDFLOW_OT_draw(Operator):
         once (the object does not move during the modal). _geo_enabled only
         means 'is the mesh light enough for snap'; toggling is via self.geo."""
         obj = context.active_object
-        me = obj.data
-        self._geo_enabled = len(me.vertices) <= self._GEO_MAX_VERTS
+        mw = obj.matrix_world
+        # Read the live edit-mesh in Edit Mode (unapplied), object data otherwise.
+        if self.edit:
+            import bmesh
+            bm = bmesh.from_edit_mesh(obj.data)
+            verts = [mw @ v.co for v in bm.verts]
+            edges = [(e.verts[0].index, e.verts[1].index) for e in bm.edges]
+        else:
+            me = obj.data
+            verts = [mw @ v.co for v in me.vertices]
+            edges = [tuple(e.vertices) for e in me.edges]
+        self._geo_enabled = len(verts) <= self._GEO_MAX_VERTS
         self._geo_verts = []
         self._geo_mids = []
         self._geo_edges = []
@@ -258,10 +318,8 @@ class HARDFLOW_OT_draw(Operator):
             if self.geo:
                 self.report({'INFO'}, "Vertex snap: mesh too dense, disabled")
             return
-        mw = obj.matrix_world
-        self._geo_verts = [mw @ v.co for v in me.vertices]
-        for e in me.edges:
-            i, j = e.vertices
+        self._geo_verts = verts
+        for i, j in edges:
             self._geo_edges.append((i, j))
             self._geo_mids.append((self._geo_verts[i] + self._geo_verts[j]) * 0.5)
 
@@ -296,7 +354,6 @@ class HARDFLOW_OT_draw(Operator):
 
     def _grid_screen_verts(self, context):
         """Convert the visible world grid into a screen-space LINES vertex list."""
-        prefs = get_prefs(context)
         region, rv3d = context.region, context.region_data
         origin, right, up, normal = self._plane_basis(context)
         us, vs = [], []
@@ -308,7 +365,7 @@ class HARDFLOW_OT_draw(Operator):
             u, v = raycast.world_to_plane_uv(p, origin, right, up)
             us.append(u); vs.append(v)
         segs = grid.world_grid_segments(min(us), max(us), min(vs), max(vs),
-                                        prefs.grid_world)
+                                        self.grid_size)
         verts = []
         for (u1, v1), (u2, v2) in segs:
             a = raycast.world_to_screen(
@@ -370,14 +427,34 @@ class HARDFLOW_OT_draw(Operator):
             f"    Geo {'ON' if self.geo else 'OFF'}"
             f"    ND {'ON' if self.nd else 'OFF'}"
         )
-        # Hints split into two short lines -> roomier than one long line.
+        # Hints split into short lines -> roomier than one long line.
         lines = [
             status,
-            ("Q/W/E/R shape    [ ] sides    1-4 mode    < > plane    Shift angle-lock",
+            ("Q/W/E/R shape    [ ] sides    1-5 mode    < > plane    Shift angle-lock",
              dim),
-            ("X grid    V vertex    N non-destructive    Enter apply    Esc cancel",
-             dim),
+            ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
+             "B bevel    G stamp", dim),
+            ("Ctrl+Wheel grid    PgUp/Dn depth    X grid    V vertex    "
+             "N non-destructive    Enter apply    Esc cancel", dim),
         ]
+        # Surface the in-draw operation state only when something is active.
+        import math
+        bits = []
+        if abs(self.inset) > 1e-9:
+            bits.append("inset %.3f m" % self.inset)
+        if abs(self.rotation) > 1e-9:
+            bits.append("rot %.0f°" % math.degrees(self.rotation))
+        if self.array_count > 1:
+            bits.append("array x%d %s" % (self.array_count, self.array_axis))
+        if self.mirror_axis:
+            bits.append("mirror %s" % self.mirror_axis)
+        if self.bevel_cut:
+            bits.append("bevel-on-cut")
+        if self.depth > 1e-6:
+            bits.append("depth %.3f m" % self.depth)
+        bits.append("grid %.3f m" % self.grid_size)
+        if bits:
+            lines.insert(1, ("   ".join(bits), accent))
         measure = self._measure(context)
         if measure:
             lines.insert(0, (measure, accent))  # measurement line accented, on top
@@ -417,9 +494,137 @@ class HARDFLOW_OT_draw(Operator):
                 ((cur[0] - last[0]) ** 2 + (cur[1] - last[1]) ** 2) ** 0.5)
         return "Point: %d%s" % (len(self.points), seg)
 
+    # --- live 3D preview -------------------------------------------------
+
+    def _preview_screen_points(self):
+        """Screen points defining the in-progress shape, including the hovering
+        cursor (so the volume previews the segment being drawn)."""
+        if self.shape == 'POLY':
+            pts = list(self.points)
+            if self.points:
+                pts = pts + [self.cursor]
+            return pts
+        return self._shape_screen_points()
+
+    _AXIS_VEC = {
+        'X': Vector((1.0, 0.0, 0.0)),
+        'Y': Vector((0.0, 1.0, 0.0)),
+        'Z': Vector((0.0, 0.0, 1.0)),
+    }
+
+    def _processed_corner_sets(self, context, screen_pts):
+        """World corner sets for the drawn shape after the in-draw operations
+        (v1.4): in-plane rotation + inset, then replicated for Array and Mirror.
+        Returns (sets, normal) where sets is a list of (corners, view_dir); or
+        ([], None) when the shape can't be projected onto the plane."""
+        from ..core import offset as offset_mod
+        region, rv3d = context.region, context.region_data
+        origin, right, up, normal = self._plane_basis(context)
+        world = [raycast.ray_to_plane(region, rv3d, p, origin, normal)
+                 for p in screen_pts]
+        if any(c is None for c in world):
+            return [], None
+
+        # Rotation + inset happen in the plane's (u, v) meter space.
+        uv = [raycast.world_to_plane_uv(c, origin, right, up) for c in world]
+        if abs(self.rotation) > 1e-9:
+            uv = grid.rotate_2d(uv, self.rotation)
+        if abs(self.inset) > 1e-9:
+            off = offset_mod.offset_polygon(uv, self.inset)
+            if off is not None:
+                uv = off
+        base = [raycast.plane_uv_to_world(u, v, origin, right, up) for u, v in uv]
+
+        # Array: stamp N copies edge-to-edge along a world axis.
+        sets = [(base, normal)]
+        if self.array_count > 1:
+            axis = self._AXIS_VEC[self.array_axis]
+            idx = {'X': 0, 'Y': 1, 'Z': 2}[self.array_axis]
+            coords = [c[idx] for c in base]
+            step = max(coords) - min(coords)
+            if step < 1e-6:
+                step = self.grid_size
+            sets = [([c + axis * (step * i) for c in base], normal)
+                    for i in range(self.array_count)]
+
+        # Mirror: reflect every set across the plane through the object origin.
+        if self.mirror_axis:
+            o = context.active_object.matrix_world.translation
+            nrm = self._AXIS_VEC[self.mirror_axis]
+
+            def reflect(p):
+                return p - nrm * (2.0 * (p - o).dot(nrm))
+
+            mirrored = [([reflect(c) for c in corners],
+                         (vd - nrm * (2.0 * vd.dot(nrm))).normalized())
+                        for corners, vd in sets]
+            sets = sets + mirrored
+        return sets, normal
+
+    def _build_preview_mesh(self, context):
+        """Build the real 3D cutter volume (or FACE mesh) for the shape currently
+        on screen, in world space. Returns mesh data or None when the shape is not
+        yet valid (too few points, edge-on plane, self-intersecting, ...)."""
+        screen_pts = self._preview_screen_points()
+        if len(screen_pts) < 3:
+            return None
+        if self.shape == 'POLY' and grid.is_self_intersecting(screen_pts):
+            return None
+        if self.mode == 'KNIFE':
+            return None  # scoring only -> the 2D outline is the whole preview
+        sets, _normal = self._processed_corner_sets(context, screen_pts)
+        if not sets:
+            return None
+        if self.mode == 'FACE':
+            return geometry.build_faces(sets, name="hf_preview")
+        return geometry.build_prisms(sets, self._thickness(context),
+                                     name="hf_preview")
+
+    def _thickness(self, context):
+        """Cutter depth: the explicit live thickness (PgUp/PgDn) when set, else a
+        depth large enough to pierce all targets."""
+        if self.depth > 1e-6:
+            return self.depth
+        return max(geometry.estimate_thickness(t)
+                   for t in self._targets(context))
+
+    def _update_preview(self, context):
+        """Refresh the live preview object. Shown as a wireframe drawn in front,
+        non-selectable, so it reads as a cutter cage over the model and never
+        interferes with picking."""
+        if self.edit:
+            return  # Edit Mode: the 2D shape outline is the preview (no cage)
+        try:
+            mesh = self._build_preview_mesh(context)
+        except Exception:  # noqa: BLE001 -- preview must never break the modal
+            mesh = None
+        if mesh is None:
+            self._clear_preview()
+            return
+        if self._preview is None:
+            self._preview = bpy.data.objects.new("hf_preview", mesh)
+            context.collection.objects.link(self._preview)
+            self._preview.display_type = 'WIRE'
+            self._preview.show_in_front = True
+            self._preview.hide_select = True
+        else:
+            old = self._preview.data
+            self._preview.data = mesh
+            if old is not None and old.users == 0:
+                bpy.data.meshes.remove(old)
+
+    def _clear_preview(self):
+        if self._preview is not None and self._preview.name in bpy.data.objects:
+            data = self._preview.data
+            bpy.data.objects.remove(self._preview, do_unlink=True)
+            if data is not None and data.users == 0:
+                bpy.data.meshes.remove(data)
+        self._preview = None
+
     # --- geometry application -------------------------------------------
 
     def _commit(self, context):
+        self._clear_preview()  # drop the visual cage before building the real one
         try:
             self._build_and_apply(context)
         except Exception as ex:  # close the draw mode cleanly
@@ -428,9 +633,6 @@ class HARDFLOW_OT_draw(Operator):
         return {'FINISHED'}
 
     def _build_and_apply(self, context):
-        region = context.region
-        rv3d = context.region_data
-        target = context.active_object
         prefs = get_prefs(context)
 
         # POLY: on commit only the clicked points; do not include the hovering
@@ -448,24 +650,32 @@ class HARDFLOW_OT_draw(Operator):
                         "Polygon self-intersects; cut cancelled")
             return
 
-        origin, right, up, normal = self._plane_basis(context)
-        corners = [raycast.ray_to_plane(region, rv3d, p, origin, normal)
-                   for p in screen_pts]
-        if any(c is None for c in corners):
+        sets, normal = self._processed_corner_sets(context, screen_pts)
+        if not sets:
             self.report({'WARNING'}, "Plane edge-on; shape could not be projected")
             return
+        self._remember()             # for the G stamp/repeat key
 
-        # FACE: not boolean; create a single face object from the drawn shape.
+        # Edit Mode: write the shape straight into the active edit-mesh -- faces
+        # for MAKE/FACE, knife scores for CUT/SLICE/KNIFE -- no cutter object.
+        if self.edit:
+            self._build_and_apply_edit(context, sets)
+            return
+
+        # FACE: not boolean; create a face object from the drawn shape(s).
         if self.mode == 'FACE':
-            self._build_face(context, corners)
+            self._build_face(context, sets)
+            return
+
+        # KNIFE: zero-depth score on the active mesh, no boolean.
+        if self.mode == 'KNIFE':
+            self._knife_object(context, sets)
             return
 
         targets = self._targets(context)
-        # The cutter must pierce all targets -> size it to the thickest target.
-        thickness = max(geometry.estimate_thickness(t) for t in targets)
-
-        # The cutter is extruded along the plane normal (view direction in VIEW).
-        cutter_mesh = geometry.build_prism(corners, normal, thickness)
+        # Array/Mirror copies are baked into one cutter mesh; depth = live
+        # thickness when set, else big enough to pierce all targets.
+        cutter_mesh = geometry.build_prisms(sets, self._thickness(context))
         if cutter_mesh is None:
             self.report({'WARNING'}, "Invalid shape")
             return
@@ -477,6 +687,40 @@ class HARDFLOW_OT_draw(Operator):
             self._apply_nondestructive(context, targets, cutter, solver)
         else:
             self._apply_destructive(context, targets, cutter, solver)
+        if self.bevel_cut:
+            self._bevel_on_cut(targets)
+
+    # --- stamp / repeat last shape (v1.4, Boxcutter "lazorcut") ----------
+
+    _LAST = None  # class-level: the last committed shape, replayed with G
+
+    _STAMP_KEYS = ('shape', 'mode', 'sides', 'plane', 'inset', 'rotation',
+                   'array_count', 'array_axis', 'mirror_axis', 'bevel_cut')
+
+    def _remember(self):
+        """Snapshot the just-committed shape (clicked points + all parameters) so
+        the next draw session can replay it with G."""
+        data = {'points': list(self.points)}
+        for key in self._STAMP_KEYS:
+            data[key] = getattr(self, key)
+        HARDFLOW_OT_draw._LAST = data
+
+    def _stamp_last(self, context):
+        """Replay the previous shape+size+params at the same screen location."""
+        last = HARDFLOW_OT_draw._LAST
+        if last is None or len(last['points']) < 2:
+            self.report({'INFO'}, "No previous shape to stamp")
+            return {'RUNNING_MODAL'}
+        for key in self._STAMP_KEYS:
+            setattr(self, key, last[key])
+        self.points = list(last['points'])
+        self._clear_preview()
+        try:
+            self._build_and_apply(context)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, f"Hardflow: {ex}")
+        self._cleanup(context)
+        return {'FINISHED'}
 
     def _targets(self, context):
         """If multi-object mode is on, all selected meshes (CUT/MAKE); otherwise
@@ -487,9 +731,10 @@ class HARDFLOW_OT_draw(Operator):
             return sel if sel else [active]
         return [active]
 
-    def _build_face(self, context, corners):
-        """Create a new single-face object from the drawn shape (create face)."""
-        mesh = geometry.build_face(corners)
+    def _build_face(self, context, sets):
+        """Create a new face object from the drawn shape(s) -- one n-gon per
+        Array/Mirror copy, all in one mesh (create face)."""
+        mesh = geometry.build_faces(sets)
         if mesh is None:
             self.report({'WARNING'}, "Invalid face")
             return
@@ -499,6 +744,57 @@ class HARDFLOW_OT_draw(Operator):
             o.select_set(False)
         obj.select_set(True)
         context.view_layer.objects.active = obj
+
+    def _knife_object(self, context, sets):
+        """KNIFE in Object Mode: score every drawn loop onto the active mesh
+        (zero-depth, no boolean) via the object-data knife."""
+        obj = context.active_object
+        mw_inv = obj.matrix_world.inverted()
+        rot = mw_inv.to_3x3()
+        scored = 0
+        for corners, vd in sets:
+            local = [mw_inv @ c for c in corners]
+            scored += geometry.knife_polygon(obj, local, (rot @ vd).normalized())
+        if scored == 0:
+            self.report({'WARNING'}, "Knife cut scored nothing")
+
+    def _bevel_on_cut(self, targets):
+        """Add a small angle-limited bevel to each cut target so the cut edge
+        reads as chamfered without a second operator (v1.4 bevel-on-cut)."""
+        from math import radians
+        for t in targets:
+            if "HF_CutBevel" in t.modifiers:
+                continue
+            bev = t.modifiers.new("HF_CutBevel", 'BEVEL')
+            bev.width = 0.01
+            bev.segments = 2
+            bev.limit_method = 'ANGLE'
+            bev.angle_limit = radians(30.0)
+            bev.harden_normals = True
+            bev.use_clamp_overlap = True
+
+    def _build_and_apply_edit(self, context, sets):
+        """Edit Mode commit: project the drawn shape(s) into the active mesh.
+        MAKE/FACE add n-gon faces; CUT/SLICE/KNIFE score the loops onto the
+        surface. Honours the same snap/grid/plane + in-draw pipeline."""
+        obj = context.active_object
+        mw_inv = obj.matrix_world.inverted()
+        rot = mw_inv.to_3x3()
+        if self.mode in {'MAKE', 'FACE'}:
+            ok = False
+            for corners, _vd in sets:
+                ok |= geometry.edit_add_face(obj, [mw_inv @ c for c in corners])
+            if not ok:
+                self.report({'WARNING'}, "Invalid face")
+            return
+        # CUT / SLICE / KNIFE -> knife score along each loop's edge planes.
+        scored = 0
+        for corners, vd in sets:
+            local = [mw_inv @ c for c in corners]
+            scored += geometry.edit_knife_polygon(obj, local,
+                                                  (rot @ vd).normalized())
+        if scored == 0:
+            self.report({'WARNING'}, "Knife cut scored nothing")
 
     def _apply_destructive(self, context, targets, cutter, solver):
         """Add+apply modifier, delete the cutter. Clean up via finally even on
@@ -537,6 +833,7 @@ class HARDFLOW_OT_draw(Operator):
         boolean.stash_cutter(context, cutter, targets[0])
 
     def _cleanup(self, context):
+        self._clear_preview()  # discards the cage on cancel; no-op after commit
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
