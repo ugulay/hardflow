@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+*.zip
+.DS_Store
+*.blend1
+.vscode/
+.idea/

@@ -1,0 +1,15 @@
+schema_version = "1.0.0"
+
+id = "hardflow"
+version = "0.1.0"
+name = "Hardflow"
+tagline = "Open source hard surface boolean modeling toolkit"
+maintainer = "Ugur Gulay <you@example.com>"
+type = "add-on"
+
+website = "https://github.com/USERNAME/hardflow"
+
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+
+tags = ["Modeling", "Mesh", "Geometry"]

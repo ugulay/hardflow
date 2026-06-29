@@ -1,0 +1,1 @@
+# operators: kullanici eylemleri.
