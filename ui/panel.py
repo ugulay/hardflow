@@ -26,12 +26,22 @@ class HARDFLOW_PT_tools(Panel):
                               icon='MESH_CIRCLE')
         circle.shape = 'CIRCLE'
         circle.mode = 'CUT'
+        col.operator("object.hardflow_boolean", text="Boolean (Selected)",
+                     icon='MOD_BOOLEAN')
 
         col = layout.column(align=True)
         col.label(text="Modifier", icon='MODIFIER')
         row = col.row(align=True)
         row.operator("object.hardflow_bevel", text="Bevel", icon='MOD_BEVEL')
         row.operator("object.hardflow_mirror", text="Mirror", icon='MOD_MIRROR')
+        row = col.row(align=True)
+        row.operator("object.hardflow_array", text="Array", icon='MOD_ARRAY')
+        row.operator("object.hardflow_radial_array", text="Radial",
+                     icon='MOD_ARRAY')
+        row = col.row(align=True)
+        row.operator("object.hardflow_symmetrize", text="Symmetrize",
+                     icon='MOD_MIRROR')
+        row.operator("object.hardflow_sharpen", text="Sharpen", icon='MOD_BEVEL')
         col.operator("object.hardflow_clean", text="Clean", icon='BRUSH_DATA')
         col.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
 

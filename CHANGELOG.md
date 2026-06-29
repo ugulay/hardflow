@@ -3,6 +3,62 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic; since the project is pre-1.0, minor versions add features.
 
+## [1.0.0] — 2026-06-29
+
+The v1.0 milestone: the KitOps-style asset/kitbash system lands and the Hard Ops
+modeling toolset is rounded out (boolean-from-selection, array, radial array,
+symmetrize, sharpen). Pure logic is unit-tested without Blender; the
+bpy-dependent paths have headless coverage and still await a live-Blender smoke
+test.
+
+### Added
+- **Asset / kitbash system (v1.0, KitOps spirit)** — a new subsystem for placing
+  ready-made parts ("INSERTs") onto surfaces. Architecture mirrors the decal
+  subsystem: pure logic in `core/asset_lib.py` (library scan, tested) +
+  `core/asset.py` (append/orient/bind, bpy-data only), action in
+  `operators/assets.py`, interface in `ui/asset_panel.py`.
+  - **INSERT placement** (`HARDFLOW_OT_place_asset`, modal): appends the objects
+    of a `.blend`, previews the footprint aligned to the surface normal under the
+    cursor; wheel scales, `[` / `]` roll, left click places. Parts are parented
+    under an oriented Empty (`asset.place_asset`), reusing the shared
+    `core/decal_math.orientation_basis`.
+  - **Boolean INSERTs** — with "Asset as Cutter" on, each mesh of the part becomes
+    a CUT/MAKE boolean cutter on the surface object, bound non-destructively via
+    `core/boolean.py` + `stash_cutter` (`asset.make_asset_cutter`).
+  - **Asset library** — `.blend` parts in the `asset_library_path` folder shown as
+    an N-panel "Asset Library" grid; clicking places one
+    (`HARDFLOW_OT_asset_library_place`). Pure folder scan in
+    `core/asset_lib.py scan_assets` (tested).
+  - **Wrap / Conform** — `asset.conform_asset` shrinkwraps the part onto a curved
+    surface (preference `asset_conform`); **shading transfer** —
+    `asset.transfer_shading` applies the surface's material + smooth state
+    (preference `asset_transfer_shading`).
+  - **Asset Browser integration** — `HARDFLOW_OT_mark_asset` marks selected
+    objects as Blender assets (`asset_mark` + `asset_generate_preview`).
+  - Preferences: `asset_library_path`, `asset_as_cutter`, `asset_boolean`,
+    `asset_conform`, `asset_transfer_shading`.
+- **Boolean from selection (Hard Ops)** — `HARDFLOW_OT_boolean`: boolean the
+  selected meshes using the active object as the cutter (Difference / Union /
+  Intersect / Slice), honouring the non-destructive preference. Reuses
+  `core/boolean.py`; no drawing required.
+- **Array (Hard Ops)** — `HARDFLOW_OT_array`: a linear Array modifier along a
+  world axis, relative or constant offset (`core/transform.py
+  array_offset_vector`, tested).
+- **Radial array (Hard Ops)** — `HARDFLOW_OT_radial_array`: an Array modifier
+  driven by a rotated offset Empty parented at the 3D cursor; `count` copies
+  evenly around an axis. Pure angle math in `core/transform.py
+  radial_step_radians` / `radial_angles_deg` (tested).
+- **Symmetrize (Hard Ops)** — `HARDFLOW_OT_symmetrize` /
+  `core/geometry.symmetrize_mesh`: mirror one half of the mesh onto the other
+  across an object-local axis (bmesh `symmetrize`, no `bpy.ops`).
+- **Sharpen / SSharp (Hard Ops)** — `HARDFLOW_OT_sharpen` /
+  `core/geometry.mark_sharp_by_angle`: mark edges sharp by angle, smooth the
+  faces, add a Weighted Normal modifier for clean shading, and optionally an
+  angle-limited bevel.
+- **Tests** — `tests/test_core.py` (+6: `transform`, `asset_lib`), and
+  `tests/test_blender.py` (+10: symmetrize/sharpen, boolean-from-selection,
+  array/radial, asset matrix/placement/cutter/conform/shading, registration).
+
 ## [0.9.0] — 2026-06-29
 
 The decal subsystem (v0.7 placement → v0.8 PBR material/bake → v0.9 image

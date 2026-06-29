@@ -29,6 +29,8 @@ snap = _load("snap")
 decal_math = _load("decal_math")
 decal_image = _load("decal_image")
 atlas = _load("atlas")
+transform = _load("transform")
+asset_lib = _load("asset_lib")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -317,6 +319,58 @@ def test_blit_pixels_clips_out_of_bounds():
     atlas.blit_pixels(dst, 2, 2, src, 2, 2, -1, -1)
     assert _rgba(dst, 2, 0, 0) == [1.0, 1.0, 1.0, 1.0]   # the one in-bounds pixel
     assert _rgba(dst, 2, 1, 1) == [0.0, 0.0, 0.0, 0.0]   # the rest clipped away
+
+
+# --- transform: array / radial-array math (v1.0) ----------------------------
+
+def test_radial_step_radians():
+    assert math.isclose(transform.radial_step_radians(4), math.pi / 2, abs_tol=1e-9)
+    assert math.isclose(transform.radial_step_radians(6, 180.0),
+                        math.radians(30), abs_tol=1e-9)
+    # count clamps to at least 1 (a single copy = no rotation)
+    assert math.isclose(transform.radial_step_radians(0), math.radians(360),
+                        abs_tol=1e-9)
+
+
+def test_radial_angles_deg():
+    assert transform.radial_angles_deg(4) == [0.0, 90.0, 180.0, 270.0]
+    assert transform.radial_angles_deg(3, 180.0) == [0.0, 60.0, 120.0]
+    assert transform.radial_angles_deg(0) == [0.0]   # clamped to one copy
+
+
+def test_array_offset_vector():
+    assert transform.array_offset_vector('X', 2.0) == (2.0, 0.0, 0.0)
+    assert transform.array_offset_vector('Y', 1.5) == (0.0, 1.5, 0.0)
+    assert transform.array_offset_vector('Z', 0.5, 0.5) == (0.0, 0.0, 1.0)
+
+
+def test_mirror_axis_flags():
+    assert transform.mirror_axis_flags('X') == (True, False, False)
+    assert transform.mirror_axis_flags('Y') == (False, True, False)
+    assert transform.mirror_axis_flags('Z') == (False, False, True)
+
+
+# --- asset_lib: kit (.blend) library scan (v1.0) -----------------------------
+
+def test_is_asset_file():
+    assert asset_lib.is_asset_file("part.blend")
+    assert asset_lib.is_asset_file("/a/b/KIT.BLEND")        # case-insensitive
+    assert not asset_lib.is_asset_file("texture.png")
+    assert not asset_lib.is_asset_file("noext")
+
+
+def test_scan_assets():
+    assert asset_lib.scan_assets("") == []
+    assert asset_lib.scan_assets("/no/such/folder/here") == []
+    with tempfile.TemporaryDirectory() as d:
+        for fn in ("b.blend", "a.blend", "notes.txt", "tex.png"):
+            with open(os.path.join(d, fn), "w") as f:
+                f.write("x")
+        os.mkdir(os.path.join(d, "sub.blend"))   # a dir named like a blend: skip
+        items = asset_lib.scan_assets(d)
+        names = [n for n, _p in items]
+        assert names == ["a", "b"]               # sorted, stems, non-blend excluded
+        assert all(os.path.isfile(p) for _n, p in items)
 
 
 def _run_all():

@@ -88,6 +88,37 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "atlas texture; the atlas height grows to fit",
         default=2048, min=64, max=8192,
     )
+    asset_library_path: StringProperty(
+        name="Asset Library",
+        description="Folder scanned for .blend kit parts (INSERTs); shown as a "
+                    "grid in the N-panel 'Asset Library' section",
+        subtype='DIR_PATH', default="",
+    )
+    asset_as_cutter: BoolProperty(
+        name="Asset as Cutter",
+        description="Placed kit parts become boolean cutters on the surface "
+                    "object instead of plain decorations (KitOps cutter INSERTs)",
+        default=False,
+    )
+    asset_boolean: EnumProperty(
+        name="Asset Boolean",
+        description="Boolean used when an asset is placed as a cutter",
+        items=[('CUT', "Cut", "DIFFERENCE -- carve the part out of the surface"),
+               ('MAKE', "Make", "UNION -- merge the part into the surface")],
+        default='CUT',
+    )
+    asset_conform: BoolProperty(
+        name="Conform Asset",
+        description="Wrap placed parts onto the surface with a shrinkwrap "
+                    "(KitOps wrap/conform)",
+        default=False,
+    )
+    asset_transfer_shading: BoolProperty(
+        name="Transfer Shading",
+        description="Give placed parts the surface object's active material and "
+                    "smooth-shading state",
+        default=False,
+    )
     non_destructive: BoolProperty(
         name="Non-Destructive",
         description="Leave a live modifier instead of applying the boolean; stash "
@@ -142,6 +173,11 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "bake_size")
         col.prop(self, "decal_library_path")
         col.prop(self, "atlas_max_width")
+        col.prop(self, "asset_library_path")
+        col.prop(self, "asset_as_cutter")
+        col.prop(self, "asset_boolean")
+        col.prop(self, "asset_conform")
+        col.prop(self, "asset_transfer_shading")
         col.prop(self, "non_destructive")
         col.prop(self, "multi_object")
         col.prop(self, "cleanup_after_cut")

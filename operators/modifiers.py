@@ -177,3 +177,75 @@ class HARDFLOW_OT_clean(Operator):
         after = len(context.active_object.data.vertices)
         self.report({'INFO'}, "Clean: %d -> %d vertex" % (before, after))
         return {'FINISHED'}
+
+
+class HARDFLOW_OT_symmetrize(Operator):
+    bl_idname = "object.hardflow_symmetrize"
+    bl_label = "Hardflow Symmetrize"
+    bl_description = ("Symmetrize the mesh: keep one side and mirror it onto the "
+                      "other across the object-local axis (Hard Ops symmetrize)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    direction: EnumProperty(
+        name="Direction",
+        items=[('+X', "+X to -X", ""), ('-X', "-X to +X", ""),
+               ('+Y', "+Y to -Y", ""), ('-Y', "-Y to +Y", ""),
+               ('+Z', "+Z to -Z", ""), ('-Z', "-Z to +Z", "")],
+        default='+X',
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (obj is not None and obj.type == 'MESH'
+                and context.mode == 'OBJECT')
+
+    def execute(self, context):
+        try:
+            geometry.symmetrize_mesh(context.active_object, self.direction)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, "Symmetrize failed: %s" % ex)
+            return {'CANCELLED'}
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_sharpen(Operator):
+    bl_idname = "object.hardflow_sharpen"
+    bl_label = "Hardflow Sharpen"
+    bl_description = ("Mark sharp edges by angle and clean up shading with a "
+                      "Weighted Normal modifier; optional angle-limited bevel "
+                      "(Hard Ops SSharp)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    angle_deg: FloatProperty(name="Sharp Angle", default=30.0, min=0.0, max=180.0)
+    add_bevel: BoolProperty(
+        name="Add Bevel", default=False,
+        description="Also add a small angle-limited bevel on the sharp edges")
+    bevel_width: FloatProperty(name="Bevel Width", default=0.01,
+                               min=0.0, soft_max=0.2)
+    weighted_normal: BoolProperty(name="Weighted Normal", default=True)
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (obj is not None and obj.type == 'MESH'
+                and context.mode == 'OBJECT')
+
+    def execute(self, context):
+        obj = context.active_object
+        n = geometry.mark_sharp_by_angle(obj, radians(self.angle_deg))
+
+        if self.add_bevel and "HF_SharpenBevel" not in obj.modifiers:
+            bev = obj.modifiers.new("HF_SharpenBevel", 'BEVEL')
+            bev.width = self.bevel_width
+            bev.segments = 2
+            bev.limit_method = 'ANGLE'
+            bev.angle_limit = radians(self.angle_deg)
+            bev.harden_normals = True
+            bev.use_clamp_overlap = True
+        if self.weighted_normal and "HF_WeightedNormal" not in obj.modifiers:
+            wn = obj.modifiers.new("HF_WeightedNormal", 'WEIGHTED_NORMAL')
+            wn.keep_sharp = True
+
+        self.report({'INFO'}, "Sharpen: %d sharp edge(s)" % n)
+        return {'FINISHED'}

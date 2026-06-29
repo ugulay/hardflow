@@ -143,24 +143,48 @@ existing cut core.
       (`tests/test_blender.py test_atlas_decals`); the blit/UV y-flip composition
       is checked end-to-end. Preference `atlas_max_width`.
 
-## v1.0+ — Asset/kitbash system (the KitOps spirit)
-After DECALmachine. Non-destructive kitbashing from a ready-part (INSERT)
-library: stick hard-surface details onto the surface with boolean/snap. A
-separate `assets/` package; it reuses the existing boolean + snap +
-cutter-collection core (independent of the decal subsystem).
-- [ ] **INSERT placement** — call a part from the library at the cursor/surface
-      normal; rotate/scale with the mouse (similar to the Boxcutter placement
-      flow).
-- [ ] **Boolean INSERTs** — a part automatically becomes a cutter (CUT/MAKE),
-      bound non-destructively via `core/boolean.py` + `stash_cutter`.
-- [ ] **Asset library** — `.blend`/collection-based INSERTs; an icon grid in the
-      N-panel + a user library folder (preference).
-- [ ] **Wrap/Conform INSERT** — parts wrapped onto a curved surface via
-      shrinkwrap.
-- [ ] **Blender Asset Browser integration** — mark INSERTs as assets,
-      drag-and-drop; mark-as-asset + catalog.
-- [ ] **Material/auto-smooth transfer** — apply the target's shading settings to
-      the placed part.
+## v1.0 — Asset/kitbash system (the KitOps spirit) + modeling tools
+Non-destructive kitbashing from a ready-part (INSERT) library: stick hard-surface
+details onto the surface with boolean/snap. Pure logic in `core/asset*.py`,
+actions in `operators/assets.py`, interface in `ui/asset_panel.py`; it reuses the
+existing boolean + cutter-collection + orientation core (independent of the decal
+subsystem).
+- [x] **INSERT placement** — `HARDFLOW_OT_place_asset` (modal): raycasts the
+      surface under the cursor, previews the part footprint aligned to the hit
+      normal; wheel scales, `[`/`]` roll, click places. The part is appended from
+      a `.blend` (`core/asset.py load_blend_objects`) and parented under an
+      oriented Empty (`place_asset`), reusing the shared `decal_math` basis.
+- [x] **Boolean INSERTs** — when "Asset as Cutter" is on, each mesh of the part
+      becomes a CUT/MAKE cutter on the surface object, bound non-destructively via
+      `core/boolean.py` + `stash_cutter` (`asset.make_asset_cutter`).
+- [x] **Asset library** — `.blend` INSERTs in the `asset_library_path` folder
+      (`core/asset_lib.py scan_assets`, pure + tested); an N-panel "Asset Library"
+      grid (`ui/asset_panel.py`) places one with `HARDFLOW_OT_asset_library_place`.
+- [x] **Wrap/Conform INSERT** — `asset.conform_asset` adds a SHRINKWRAP
+      (NEAREST_SURFACEPOINT) toward the surface; preference `asset_conform`.
+- [x] **Blender Asset Browser integration** — `HARDFLOW_OT_mark_asset` marks the
+      selected objects as assets (`asset_mark` + `asset_generate_preview`) for
+      drag-and-drop from the Asset Browser.
+- [x] **Material/auto-smooth transfer** — `asset.transfer_shading` gives the
+      placed part the surface object's active material + smooth-shading state;
+      preference `asset_transfer_shading`.
+
+## v1.0 — Hard Ops modeling tools
+Round out the Hard Ops feature parity beyond bevel/mirror/clean.
+- [x] **Boolean from selection** — `HARDFLOW_OT_boolean`: boolean the selected
+      meshes using the active object as the cutter (Difference / Union /
+      Intersect / Slice), honouring the non-destructive preference. No drawing
+      needed; reuses `core/boolean.py`.
+- [x] **Array** — `HARDFLOW_OT_array`: a linear Array modifier along a world axis
+      (relative or constant offset). `core/transform.py array_offset_vector`.
+- [x] **Radial array** — `HARDFLOW_OT_radial_array`: an Array modifier driven by a
+      rotated offset Empty at the 3D cursor (count copies around an axis).
+      `core/transform.py radial_step_radians` (pure, tested).
+- [x] **Symmetrize** — `HARDFLOW_OT_symmetrize` / `geometry.symmetrize_mesh`:
+      mirror one half of the mesh onto the other across an object-local axis.
+- [x] **Sharpen (SSharp)** — `HARDFLOW_OT_sharpen` / `geometry.mark_sharp_by_angle`:
+      mark edges sharp by angle and clean shading with a Weighted Normal modifier
+      (+ optional angle-limited bevel).
 
 ## Known limitations
 - The grid plane is perpendicular to the view direction (passing through the

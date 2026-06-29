@@ -1,12 +1,13 @@
 # Hardflow
 
 An open-source hard-surface boolean modeling toolkit — aiming to deliver the
-core workflows of Grid Modeler, Boxcutter, and Hard Ops for free under GPLv3.
-Compatible with the Blender 4.2+ extension system.
+core workflows of Grid Modeler, Boxcutter, Hard Ops, DECALmachine, and KitOps for
+free under GPLv3. Compatible with the Blender 4.2+ extension system.
 
-> Under active development. The core cut loop, world-scale + vertex/edge
-> snapping, and the non-destructive flow are all working. See ROADMAP.md for the
-> full roadmap (including decals).
+> Under active development. The boolean cut loop, world-scale + vertex/edge
+> snapping, the non-destructive flow, the decal subsystem, and the asset/kitbash
+> system are all implemented; live-Blender verification is ongoing. See
+> ROADMAP.md for the full roadmap.
 
 ## Features
 
@@ -27,6 +28,18 @@ Compatible with the Blender 4.2+ extension system.
 - **Advanced bevel** — interactive (drag = width, wheel = segments), with profile
   + angle limit + width-type + **Weighted Normal** (clean shading); mirror
   (bisect + clip). The Hard Ops spirit.
+- **Boolean from selection** — boolean the selected meshes using the active
+  object as the cutter (Difference / Union / Intersect / Slice), no drawing
+  needed; respects the non-destructive flow.
+- **Array & Radial array** — a linear Array along a world axis, or a radial array
+  of N copies around the 3D cursor (a rotated offset empty drives the modifier).
+- **Symmetrize & Sharpen** — mirror one half of the mesh onto the other, and
+  mark sharp edges by angle + Weighted Normal (Hard Ops SSharp).
+- **Assets / kitbash (KitOps spirit)** — place ready-made parts ("INSERTs") from
+  a `.blend` library onto a surface: wheel scales, `[ ]` roll, click places. A
+  part can be a plain decoration, a boolean cutter, conformed to the surface
+  (shrinkwrap), and/or given the surface's material/shading. Browse a kit folder
+  as a grid, and mark objects as Blender assets for the Asset Browser.
 - **Decals** — stick Info / Panel / Subset decals onto any surface; they adhere
   via shrinkwrap and follow the target (the DECALmachine spirit). Wheel scales,
   `[ ]` roll, click places; managed from the N-panel "Decals" section. Each type
@@ -73,8 +86,13 @@ In drawing mode:
 add geometry (UNION) · Face = create a surface from the drawn shape (not a
 boolean).
 
-**Other tools:** Bevel · Mirror · **Clean** (mesh cleanup) · **Pipe** (pipe from
-a line) · **Apply Cutters** — all in the N-panel and the pie menu.
+**Other tools:** Bevel · Mirror · **Array** · **Radial** · **Symmetrize** ·
+**Sharpen** · **Boolean (Selected)** · **Clean** (mesh cleanup) · **Pipe** (pipe
+from a line) · **Apply Cutters** — all in the N-panel.
+
+**Assets:** N-panel "Assets" → "Asset from .blend" (or the "Asset Library" grid)
+starts the placement tool: wheel = scale, `[ ]` = roll, left click = place, Esc =
+cancel. Toggle "Asset as Cutter", "Conform", and "Transfer Shading" there.
 
 **Decals:** N-panel "Decals" → Info / Panel / Subset. In the placement tool:
 wheel = scale, `[ ]` = roll, left click = place, Esc = cancel.
@@ -92,17 +110,27 @@ hardflow/
 │   ├── raycast.py          # screen <-> 3D projection, plane (u,v)
 │   ├── grid.py             # world-scale + angle snap, shape points
 │   ├── snap.py             # vertex/edge geometry snap (pure 2D)
-│   ├── geometry.py         # cutter volume generation via bmesh
-│   └── boolean.py          # destructive + non-destructive boolean
+│   ├── geometry.py         # cutter volume, symmetrize, sharpen, cleanup (bmesh)
+│   ├── boolean.py          # destructive + non-destructive boolean
+│   ├── transform.py        # array / radial-array math (pure)
+│   ├── decal*.py / atlas.py# decal orientation, image library, trim/atlas math
+│   ├── asset_lib.py        # .blend kit-library scan (pure)
+│   └── asset.py            # append / orient / bind INSERTs (bpy-data only)
 ├── operators/              # user actions
 │   ├── draw_cut.py         # main modal drawing operator (cut/slice/make/face)
-│   ├── modifiers.py        # smart bevel + mirror + clean
+│   ├── modifiers.py        # bevel + mirror + clean + symmetrize + sharpen
+│   ├── boolean_ops.py      # boolean from selected objects
+│   ├── array.py            # linear + radial array
 │   ├── cutters.py          # non-destructive cutter management (apply/select/remove)
-│   └── pipe.py             # pipe generation from a line
+│   ├── pipe.py             # pipe generation from a line
+│   ├── decals.py           # decal placement + library + trim + atlas + bake
+│   └── assets.py           # INSERT placement + library + mark-as-asset
 ├── ui/                     # GPU drawing, HUD, menus
 │   ├── draw.py             # gpu + blf helpers
 │   ├── pie.py              # Hard Ops style pie menu
-│   └── panel.py            # N-panel: tools, settings, cutter list
+│   ├── panel.py            # N-panel: tools, settings, cutter list
+│   ├── decal_panel.py / decal_library.py   # decal sections
+│   └── asset_panel.py      # asset + asset-library sections
 └── tests/                  # tests
     ├── test_core.py        # pure core, without Blender (python tests/test_core.py)
     └── test_blender.py     # headless (blender --background --python ...)

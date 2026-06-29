@@ -81,6 +81,43 @@ def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
     return curve
 
 
+def symmetrize_mesh(obj, direction='+X'):
+    """Symmetrize the mesh in place: keep one side and mirror it onto the other
+    across the object-local axis plane (Hard Ops symmetrize). `direction` is a
+    bmesh axis-and-side string ('-X','+X','-Y','+Y','-Z','+Z'); '+X' keeps the
+    +X half and mirrors it to -X. Object Mode, no bpy.ops."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.symmetrize(bm, input=bm.verts[:] + bm.edges[:] + bm.faces[:],
+                         direction=direction)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+
+
+def mark_sharp_by_angle(obj, angle):
+    """Mark edges sharp where the angle between their two faces exceeds `angle`
+    (radians) and smooth the rest -- the basis of the Hard Ops "sharpen" flow.
+    All faces are set to smooth shading so the sharp edges read as hard creases.
+    Boundary / non-manifold edges are left smooth. Returns the sharp-edge count."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    for face in bm.faces:
+        face.smooth = True
+    sharp = 0
+    for edge in bm.edges:
+        if len(edge.link_faces) == 2:
+            if edge.calc_face_angle() > angle:
+                edge.smooth = False
+                sharp += 1
+            else:
+                edge.smooth = True
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return sharp
+
+
 def cleanup_mesh(obj, merge_dist=1e-4, dissolve_angle=0.0873, remove_loose=True):
     """Mesh cleanup after boolean/bevel: merge (remove doubles) + limited
     dissolve (merge coplanar faces) + delete loose geometry. Object Mode.

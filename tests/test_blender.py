@@ -21,7 +21,8 @@ if _PARENT not in sys.path:
 
 _PKG = os.path.basename(_REPO)            # usually "hardflow"
 hardflow = __import__(_PKG)
-from hardflow.core import geometry, boolean, decal, decal_image, atlas  # noqa: E402
+from hardflow.core import (geometry, boolean, decal, decal_image, atlas,  # noqa: E402
+                           asset)
 
 
 def _reset():
@@ -372,6 +373,165 @@ def test_bake_decal_guards():
         res = bpy.ops.object.hardflow_bake_decal(name=d.name)
         assert res == {'CANCELLED'}, res
         assert bpy.context.scene.render.engine != 'CYCLES'  # early-out, no switch
+    finally:
+        hardflow.unregister()
+
+
+def test_symmetrize_mesh():
+    _reset()
+    # a centered cube symmetrized over +X stays a closed 8-vertex cube
+    cube = _add_cube("Sym", size=2.0)
+    geometry.symmetrize_mesh(cube, '+X')
+    assert len(cube.data.vertices) == 8, len(cube.data.vertices)
+    assert len(cube.data.polygons) == 6
+
+
+def test_mark_sharp_by_angle():
+    _reset()
+    import math
+    cube = _add_cube("Sharp", size=2.0)
+    # every cube edge is a 90 degree crease -> all 12 are sharp at a 30 deg limit
+    n = geometry.mark_sharp_by_angle(cube, math.radians(30))
+    assert n == 12, n
+    assert all(p.use_smooth for p in cube.data.polygons)
+    assert any(not e.use_edge_sharp for e in cube.data.edges) is False  # all sharp
+    # a very high limit marks nothing sharp
+    n2 = geometry.mark_sharp_by_angle(cube, math.radians(170))
+    assert n2 == 0
+
+
+def test_symmetrize_and_sharpen_operators():
+    _reset()
+    hardflow.register()
+    try:
+        ob = _add_cube("Obj", size=2.0)
+        _activate(ob)
+        res = bpy.ops.object.hardflow_symmetrize(direction='+X')
+        assert res == {'FINISHED'}, res
+        res = bpy.ops.object.hardflow_sharpen(angle_deg=30.0, add_bevel=True)
+        assert res == {'FINISHED'}, res
+        assert any(m.type == 'BEVEL' for m in ob.modifiers)
+        assert any(m.type == 'WEIGHTED_NORMAL' for m in ob.modifiers)
+    finally:
+        hardflow.unregister()
+
+
+def test_boolean_from_selection():
+    _reset()
+    hardflow.register()
+    try:
+        target = _add_cube("Target", size=2.0)
+        cutter = _add_cube("Cutter", size=1.0, location=(1, 0, 0))
+        target.select_set(True)
+        cutter.select_set(True)
+        bpy.context.view_layer.objects.active = cutter   # active = cutter
+        before = len(target.data.polygons)
+        res = bpy.ops.object.hardflow_boolean(operation='DIFFERENCE')
+        assert res == {'FINISHED'}, res
+        # destructive by default: target changed, cutter removed
+        assert len(target.data.polygons) != before
+        assert bpy.data.objects.get("Cutter") is None
+    finally:
+        hardflow.unregister()
+
+
+def test_array_operators():
+    _reset()
+    hardflow.register()
+    try:
+        ob = _add_cube("Obj", size=1.0)
+        _activate(ob)
+        bpy.ops.object.hardflow_array(count=4, axis='X', factor=1.5)
+        arr = next((m for m in ob.modifiers if m.type == 'ARRAY'), None)
+        assert arr is not None and arr.count == 4
+        assert arr.use_relative_offset
+
+        ob2 = _add_cube("Obj2", size=1.0, location=(3, 0, 0))
+        _activate(ob2)
+        bpy.ops.object.hardflow_radial_array(count=6, axis='Z')
+        rad = next((m for m in ob2.modifiers if m.name == "HF_RadialArray"), None)
+        assert rad is not None and rad.count == 6
+        assert rad.use_object_offset and rad.offset_object is not None
+    finally:
+        hardflow.unregister()
+
+
+def test_asset_matrix_identity():
+    # a flat surface (normal +Z, tangent +X) gives an axis-aligned placement
+    m = asset.asset_matrix((1.0, 2.0, 3.0), (0, 0, 1), (1, 0, 0), scale=2.0)
+    assert tuple(round(c, 6) for c in m.translation) == (1.0, 2.0, 3.0)
+    z = m.to_3x3().col[2].normalized()
+    assert abs(z.z - 1.0) < 1e-6
+    # uniform scale baked into the basis columns
+    assert abs(m.to_3x3().col[0].length - 2.0) < 1e-6
+
+
+def test_place_asset_groups_under_root():
+    _reset()
+    # two loose objects act as an appended kit; place_asset parents them to an
+    # oriented root empty in the asset collection
+    a = _add_cube("PartA", size=0.5)
+    b = _add_cube("PartB", size=0.5, location=(0.5, 0, 0))
+    for o in (a, b):
+        for c in list(o.users_collection):
+            c.objects.unlink(o)
+    root = asset.place_asset(bpy.context, [a, b], (0, 0, 1), (0, 0, 1), (1, 0, 0),
+                             scale=1.0, name="HF_Kit")
+    assert root is not None and root.type == 'EMPTY'
+    coll = bpy.data.collections.get(asset.ASSET_COLLECTION)
+    assert coll is not None and root.name in coll.objects
+    assert a.parent is root and b.parent is root
+    assert a.get("hf_asset") == "HF_Kit"
+
+
+def test_make_asset_cutter_nondestructive():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    part = _add_cube("CutPart", size=1.0, location=(1, 0, 0))
+    for c in list(part.users_collection):
+        c.objects.unlink(part)
+    meshes = asset.make_asset_cutter(
+        bpy.context, [part], target, (0, 0, 0), (0, 0, 1), (1, 0, 0),
+        scale=1.0, operation='DIFFERENCE', non_destructive=True)
+    assert part in meshes
+    assert any(m.type == 'BOOLEAN' and m.object is part for m in target.modifiers)
+    coll = bpy.data.collections.get(boolean.CUTTER_COLLECTION)
+    assert coll is not None and part.name in coll.objects   # stashed
+
+
+def test_conform_and_transfer_shading():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    mat = bpy.data.materials.new("TgtMat")
+    target.data.materials.append(mat)
+    for p in target.data.polygons:
+        p.use_smooth = True
+    part = _add_cube("Part", size=0.5)
+
+    asset.conform_asset([part], target, offset=0.0)
+    sw = next((m for m in part.modifiers if m.type == 'SHRINKWRAP'), None)
+    assert sw is not None and sw.wrap_method == 'NEAREST_SURFACEPOINT'
+    assert sw.target is target
+
+    asset.transfer_shading(target, [part])
+    assert part.data.materials and part.data.materials[0] is mat
+    assert all(p.use_smooth for p in part.data.polygons)
+
+
+def test_asset_operators_registered():
+    _reset()
+    hardflow.register()
+    try:
+        assert hasattr(bpy.ops.object, "hardflow_place_asset")
+        assert hasattr(bpy.ops.object, "hardflow_load_asset")
+        assert hasattr(bpy.ops.object, "hardflow_asset_library_place")
+        assert hasattr(bpy.ops.object, "hardflow_mark_asset")
+        # mark-as-asset is non-modal and safe headless
+        ob = _add_cube("MarkMe", size=1.0)
+        _activate(ob)
+        res = bpy.ops.object.hardflow_mark_asset()
+        assert res == {'FINISHED'}, res
+        assert ob.asset_data is not None, "object not marked as asset"
     finally:
         hardflow.unregister()
 
