@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: the test job only needs to read the checked-out code.
+permissions:
+  contents: read
+
 jobs:
   core:
     name: Pure-core tests (no Blender)
