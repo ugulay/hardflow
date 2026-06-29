@@ -32,10 +32,13 @@ def decal_collection(context):
     return coll
 
 
-def build_decal_mesh(width, height, name="hf_decal"):
+def build_decal_mesh(width, height, name="hf_decal", uv_rect=(0.0, 0.0, 1.0, 1.0)):
     """A single UV-mapped quad centred on the local origin, lying in the local
-    XY plane (so local +Z is the decal's facing/projection axis)."""
+    XY plane (so local +Z is the decal's facing/projection axis). uv_rect
+    (u0,v0,u1,v1) maps the quad to a sub-region of the image -- (0,0,1,1) is the
+    whole image; a trim-sheet cell (see core/atlas.py) is a sub-rect."""
     hw, hh = width * 0.5, height * 0.5
+    u0, v0, u1, v1 = uv_rect
     bm = bmesh.new()
     v00 = bm.verts.new((-hw, -hh, 0.0))
     v10 = bm.verts.new((hw, -hh, 0.0))
@@ -43,7 +46,7 @@ def build_decal_mesh(width, height, name="hf_decal"):
     v01 = bm.verts.new((-hw, hh, 0.0))
     face = bm.faces.new((v00, v10, v11, v01))
     uv = bm.loops.layers.uv.new("UVMap")
-    coords = {v00: (0.0, 0.0), v10: (1.0, 0.0), v11: (1.0, 1.0), v01: (0.0, 1.0)}
+    coords = {v00: (u0, v0), v10: (u1, v0), v11: (u1, v1), v01: (u0, v1)}
     for loop in face.loops:
         loop[uv].uv = coords[loop.vert]
     bmesh.ops.recalc_face_normals(bm, faces=[face])
@@ -185,16 +188,12 @@ def _decal_node_group():
     return ng
 
 
-def decal_material(decal_type):
-    """Get/create a shared material template per decal type. Each material
-    instances the shared HF_DecalShader node group (v0.8 PBR graph) and tunes its
-    inputs, so the graph reads well in both Eevee and Cycles. v0.9 will plug image
-    textures into the very same group sockets."""
-    name = "HF_Decal_%s" % decal_type.capitalize()
-    mat = bpy.data.materials.get(name)
-    if mat is not None:
-        return mat
-
+def _new_decal_material(name):
+    """Create a node-based material wired around the shared HF_DecalShader group,
+    returning (material, group_node, node_tree). The stock Principled BSDF is
+    replaced by an instance of our group, and alpha blending is enabled. Shared
+    by the per-type templates and the v0.9 image decals; callers just feed the
+    group's inputs."""
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     # Alpha blending: EEVEE Next (Blender 4.2+) replaced `blend_method` with
@@ -219,10 +218,42 @@ def decal_material(decal_type):
     group.node_tree = _decal_node_group()
     group.location = (0, 0)
     tree.links.new(group.outputs["BSDF"], out.inputs["Surface"])
+    return mat, group, tree
 
+
+def decal_material(decal_type):
+    """Get/create a shared material template per decal type. Each material
+    instances the shared HF_DecalShader node group (v0.8 PBR graph) and tunes its
+    inputs, so the graph reads well in both Eevee and Cycles. v0.9 image decals
+    plug textures into the very same group sockets (see image_decal_material)."""
+    name = "HF_Decal_%s" % decal_type.capitalize()
+    mat = bpy.data.materials.get(name)
+    if mat is not None:
+        return mat
+
+    mat, group, _tree = _new_decal_material(name)
     for key, value in _DECAL_PRESETS.get(decal_type, {}).items():
         if key in group.inputs:
             group.inputs[key].default_value = value
+    return mat
+
+
+def image_decal_material(image):
+    """Get/create a material that drives the shared HF_DecalShader group from an
+    image: the image's Color feeds Base Color and its Alpha feeds Alpha, so a PNG
+    cut-out (logo, warning mark) reads as a transparent decal on the surface. One
+    material is cached per image data-block."""
+    name = "HF_Decal_Img_%s" % image.name
+    mat = bpy.data.materials.get(name)
+    if mat is not None:
+        return mat
+
+    mat, group, tree = _new_decal_material(name)
+    tex = tree.nodes.new('ShaderNodeTexImage')
+    tex.image = image
+    tex.location = (-320, 0)
+    tree.links.new(tex.outputs["Color"], group.inputs["Base Color"])
+    tree.links.new(tex.outputs["Alpha"], group.inputs["Alpha"])
     return mat
 
 
@@ -249,6 +280,20 @@ def bake_image(name, size, is_data=False):
     return img
 
 
+def atlas_image(name, w, h):
+    """Get/create a transparent RGBA image of exactly (w x h) to assemble a decal
+    atlas into. If an image of that name exists at a different size it is replaced
+    so a re-atlas never blits into a stale buffer."""
+    img = bpy.data.images.get(name)
+    if img is not None and tuple(img.size) != (w, h):
+        bpy.data.images.remove(img)
+        img = None
+    if img is None:
+        img = bpy.data.images.new(name, width=w, height=h, alpha=True)
+    img.colorspace_settings.name = 'sRGB'
+    return img
+
+
 def bake_image_node(material, image):
     """Add (or reuse) an Image Texture node holding image and make it the sole
     active+selected node of the material -- Cycles writes the bake there."""
@@ -265,18 +310,16 @@ def bake_image_node(material, image):
     return node
 
 
-def make_decal(context, target, location, normal, tangent,
-               width=0.2, height=0.2, decal_type='INFO', offset=0.001):
-    """Create a decal object on the target surface and return it. Orientation,
-    shrinkwrap adhesion, parenting, material, and collection are all set up
-    here. The caller supplies the surface hit (location, normal) and a tangent
-    (roll direction)."""
-    mesh = build_decal_mesh(width, height)
+def _assemble_decal(context, target, mesh, location, normal, tangent,
+                    material, offset, tag):
+    """Shared decal assembly: orient the quad to the surface, link it into the
+    decal collection, give it the material, stick it down with a shrinkwrap, and
+    parent it to the target so it follows the object. Returns the new object."""
     decal = bpy.data.objects.new("Hardflow_Decal", mesh)
     decal.matrix_world = decal_matrix(location, normal, tangent)
 
     decal_collection(context).objects.link(decal)
-    decal.data.materials.append(decal_material(decal_type))
+    decal.data.materials.append(material)
     add_shrinkwrap(decal, target, offset=offset)
 
     # follow the target when it moves, keeping the placed world pose
@@ -285,5 +328,30 @@ def make_decal(context, target, location, normal, tangent,
 
     decal.show_wire = False
     decal.hide_render = False
-    decal["hf_decal_type"] = decal_type
+    decal["hf_decal_type"] = tag
+    return decal
+
+
+def make_decal(context, target, location, normal, tangent,
+               width=0.2, height=0.2, decal_type='INFO', offset=0.001):
+    """Create a type-template decal (Info/Panel/Subset) on the target surface and
+    return it. The caller supplies the surface hit (location, normal) and a
+    tangent (roll direction)."""
+    mesh = build_decal_mesh(width, height)
+    return _assemble_decal(context, target, mesh, location, normal, tangent,
+                           decal_material(decal_type), offset, decal_type)
+
+
+def make_image_decal(context, target, location, normal, tangent, image,
+                     width=0.2, height=0.2, offset=0.001,
+                     uv_rect=(0.0, 0.0, 1.0, 1.0)):
+    """Create an image-driven decal (v0.9 library / 'decal from image') on the
+    target surface and return it. The quad carries the image's color+alpha via
+    image_decal_material; the caller usually sizes width/height to the image's
+    aspect (see core/decal_image.aspect_size). uv_rect selects a sub-region of
+    the image -- pass a trim-sheet cell (core/atlas.cell_rect) for a trim decal."""
+    mesh = build_decal_mesh(width, height, uv_rect=uv_rect)
+    decal = _assemble_decal(context, target, mesh, location, normal, tangent,
+                            image_decal_material(image), offset, 'IMAGE')
+    decal["hf_decal_image"] = image.name
     return decal

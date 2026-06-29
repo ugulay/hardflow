@@ -29,7 +29,15 @@ Compatible with the Blender 4.2+ extension system.
   (bisect + clip). The Hard Ops spirit.
 - **Decals** — stick Info / Panel / Subset decals onto any surface; they adhere
   via shrinkwrap and follow the target (the DECALmachine spirit). Wheel scales,
-  `[ ]` roll, click places; managed from the N-panel "Decals" section.
+  `[ ]` roll, click places; managed from the N-panel "Decals" section. Each type
+  drives a shared PBR shader (base/metallic/roughness/AO/normal/emission/alpha +
+  parallax depth), and detail can be **baked** into the target's texture.
+- **Decal image library** — point a folder of PNG/JPG/TGA images and place any of
+  them as a decal from an icon grid; images are sized to their aspect ratio.
+- **Trim sheets** — slice one sheet into a grid and place individual cells
+  (cycle cells with Up/Down while placing).
+- **Atlasing** — pack every image decal's texture into a single atlas image and
+  collapse them onto one shared material (fewer materials / draw calls).
 - **Pie menu**, preferences panel, customizable snap settings.
 
 ## Installation

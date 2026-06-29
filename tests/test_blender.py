@@ -21,7 +21,7 @@ if _PARENT not in sys.path:
 
 _PKG = os.path.basename(_REPO)            # usually "hardflow"
 hardflow = __import__(_PKG)
-from hardflow.core import geometry, boolean, decal   # noqa: E402
+from hardflow.core import geometry, boolean, decal, decal_image, atlas  # noqa: E402
 
 
 def _reset():
@@ -232,6 +232,89 @@ def test_make_decal_sticks_to_surface():
     assert abs(z_axis.z - 1.0) < 1e-6, z_axis
 
 
+def test_image_decal_material_and_make():
+    # v0.9: an image-driven decal plugs the image into the shared node group's
+    # Base Color + Alpha and sizes the quad to the image's aspect ratio.
+    _reset()
+    img = bpy.data.images.new("HF_T_Logo", width=200, height=100, alpha=True)
+    mat = decal.image_decal_material(img)
+    assert mat is not None and mat.use_nodes
+    tex = next((n for n in mat.node_tree.nodes if n.type == 'TEX_IMAGE'), None)
+    assert tex is not None and tex.image is img, "image texture node missing"
+    grp = next((n for n in mat.node_tree.nodes
+                if n.type == 'GROUP' and n.node_tree
+                and n.node_tree.name == decal.DECAL_NODE_GROUP), None)
+    assert grp is not None
+    assert grp.inputs["Base Color"].is_linked and grp.inputs["Alpha"].is_linked
+    assert decal.image_decal_material(img) is mat            # cached per image
+
+    target = _add_cube("Target", size=2.0)
+    w, h = decal_image.aspect_size(img.size[0], img.size[1], 0.4)  # 200x100 -> wide
+    assert abs(w - 0.4) < 1e-6 and abs(h - 0.2) < 1e-6
+    d = decal.make_image_decal(bpy.context, target, Vector((0, 0, 1)),
+                               Vector((0, 0, 1)), Vector((1, 0, 0)), img,
+                               width=w, height=h)
+    assert d.parent is target and d.get("hf_decal_type") == 'IMAGE'
+    assert d.get("hf_decal_image") == img.name
+    assert d.data.materials and d.data.materials[0] is mat
+
+
+def test_decal_mesh_uv_rect():
+    # v0.9 trim: build_decal_mesh maps the quad onto a UV sub-rect (a trim cell).
+    _reset()
+    cell = atlas.cell_rect(2, 2, 0)        # top-left quarter: (0, .5, .5, 1)
+    me = decal.build_decal_mesh(0.2, 0.2, uv_rect=cell)
+    uvs = me.uv_layers.active.data
+    us = [round(d.uv[0], 4) for d in uvs]
+    vs = [round(d.uv[1], 4) for d in uvs]
+    assert min(us) == 0.0 and max(us) == 0.5
+    assert min(vs) == 0.5 and max(vs) == 1.0
+    # default still spans the whole image
+    full = decal.build_decal_mesh(0.2, 0.2)
+    fus = [round(d.uv[0], 4) for d in full.uv_layers.active.data]
+    assert min(fus) == 0.0 and max(fus) == 1.0
+
+
+def test_atlas_decals():
+    # v0.9 atlasing: pack two image decals' textures into one atlas image and
+    # retarget their UVs + material. No bpy.ops.bake, so it runs headless.
+    _reset()
+    hardflow.register()
+    try:
+        target = _add_cube("Target", size=2.0)
+        n = Vector((0, 0, 1))
+        t = Vector((1, 0, 0))
+        ia = bpy.data.images.new("HF_T_A", width=64, height=32, alpha=True)
+        ib = bpy.data.images.new("HF_T_B", width=32, height=32, alpha=True)
+        da = decal.make_image_decal(bpy.context, target, Vector((0, 0, 1)), n, t, ia,
+                                    width=0.4, height=0.2)
+        db = decal.make_image_decal(bpy.context, target, Vector((0.5, 0, 1)), n, t, ib,
+                                    width=0.2, height=0.2)
+
+        res = bpy.ops.object.hardflow_atlas_decals()
+        assert res == {'FINISHED'}, res
+
+        atlas_img = bpy.data.images.get("HF_Decal_Atlas")
+        assert atlas_img is not None
+        w, h = atlas_img.size
+        assert w & (w - 1) == 0 and h & (h - 1) == 0, "atlas not power-of-two"
+
+        # both decals now share the single atlas material
+        assert len(da.data.materials) == 1 and len(db.data.materials) == 1
+        assert da.data.materials[0] is db.data.materials[0]
+        assert da.data.materials[0].name == "HF_Decal_Img_HF_Decal_Atlas"
+        assert da.get("hf_decal_atlas") == "HF_Decal_Atlas"
+
+        # every UV landed inside the atlas; the two decals map to different slots
+        def _uvs(ob):
+            return [tuple(round(c, 5) for c in d.uv) for d in ob.data.uv_layers.active.data]
+        for u, v in _uvs(da) + _uvs(db):
+            assert 0.0 <= u <= 1.0 and 0.0 <= v <= 1.0
+        assert set(_uvs(da)) != set(_uvs(db)), "decals share a slot"
+    finally:
+        hardflow.unregister()
+
+
 def test_decal_operators_registered():
     _reset()
     hardflow.register()
@@ -239,6 +322,10 @@ def test_decal_operators_registered():
         assert hasattr(bpy.ops.object, "hardflow_place_decal")
         assert hasattr(bpy.ops.object, "hardflow_select_decal")
         assert hasattr(bpy.ops.object, "hardflow_remove_decal")
+        assert hasattr(bpy.ops.object, "hardflow_load_decal_image")
+        assert hasattr(bpy.ops.object, "hardflow_library_place")
+        assert hasattr(bpy.ops.object, "hardflow_load_trim_sheet")
+        assert hasattr(bpy.ops.object, "hardflow_atlas_decals")
         # select/remove are non-modal and safe to exec headless
         target = _add_cube("Target", size=2.0)
         d = decal.make_decal(bpy.context, target, Vector((0, 0, 1)),

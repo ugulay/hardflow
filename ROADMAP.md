@@ -64,7 +64,7 @@ This is where Grid Modeler's real power lies.
       `pipe_radius`. Profile is round for now; square/custom cross-sections
       later.
 
-## v0.6 — UX polish (current release)
+## v0.6 — UX polish
 - [x] N-panel: tools + settings + active cutter list (`ui/panel.py`).
 - [x] HUD measurement display — the drawn shape's size in meters (Box W×H,
       Circle radius/diameter, Poly point count + last segment).
@@ -116,14 +116,32 @@ existing cut core.
       `bake_image_node`; `bake_size` preference; N-panel + per-decal button).
       Requires the target to be UV-unwrapped.
 
-### v0.9 — Library and performance
-- [ ] **Decal library** — load images/presets from disk, an icon grid in the
-      N-panel; a user library folder (path in preferences).
-- [ ] **Generate decal from image** — PNG/alpha → a ready decal object +
-      material.
-- [ ] **Trim sheet / trim decal** — UV slices from a single atlas.
-- [ ] **Atlasing** — gather the scene's decals into a single atlas texture
-      (reduce draw-call and material count); game-ready export.
+### v0.9 — Library and performance (current release)
+- [x] **Decal library** — `core/decal_image.py` `scan_library` (pure, tested)
+      finds image files in the `decal_library_path` preference folder;
+      `ui/decal_library.py` `HARDFLOW_PT_decal_library` shows them as an icon
+      grid (thumbnails via a `bpy.utils.previews` collection). Clicking a
+      thumbnail runs `HARDFLOW_OT_library_place` → place tool with that image.
+- [x] **Generate decal from image** — `HARDFLOW_OT_load_decal_image` picks any
+      image; `core/decal.py image_decal_material` plugs its Color+Alpha into the
+      shared `HF_DecalShader` group; `make_image_decal` sizes the quad to the
+      image aspect (`core/decal_image.py aspect_size`, tested). Reuses the modal
+      place tool via an `image_name` property on `HARDFLOW_OT_place_decal`.
+- [x] **Trim sheet / trim decal** — place one cell of a grid-sliced sheet as a
+      decal. `core/atlas.py slice_grid`/`cell_rect`/`rect_pixels` (pure, tested)
+      map the cell to a UV sub-rect; `core/decal.py build_decal_mesh` gained a
+      `uv_rect` arg, `make_image_decal` passes it through.
+      `HARDFLOW_OT_load_trim_sheet` (file browser, Columns/Rows) starts the place
+      tool with trim params; Up/Down cycle the cell, the quad is sized to the
+      cell aspect. N-panel: a grid button next to "Decal from Image".
+- [x] **Atlasing** — `HARDFLOW_OT_atlas_decals` packs every image decal's texture
+      into one `HF_Decal_Atlas` image, retargets each decal's UVs into its slot,
+      and swaps them all to a single shared material (fewer materials/draw calls).
+      Pure core in `core/atlas.py`: `pack_shelves` (shelf packing), `blit_pixels`
+      (RGBA block copy), `remap_uv`, `rect_to_uv`, `next_pow2` (all tested). No
+      `bpy.ops` — pixel + UV data only — so it is verified headless
+      (`tests/test_blender.py test_atlas_decals`); the blit/UV y-flip composition
+      is checked end-to-end. Preference `atlas_max_width`.
 
 ## v1.0+ — Asset/kitbash system (the KitOps spirit)
 After DECALmachine. Non-destructive kitbashing from a ready-part (INSERT)

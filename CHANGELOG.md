@@ -3,7 +3,11 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic; since the project is pre-1.0, minor versions add features.
 
-## [Unreleased]
+## [0.9.0] — 2026-06-29
+
+The decal subsystem (v0.7 placement → v0.8 PBR material/bake → v0.9 image
+library, trim sheets, atlasing) is feature-complete. Pure logic is unit-tested
+without Blender; the bpy-dependent paths still await a live-Blender smoke test.
 
 ### Added
 - **Decals (v0.7 placement core)** — a new DECALmachine-style subsystem. Stick a
@@ -39,6 +43,33 @@ logic; since the project is pre-1.0, minor versions add features.
   `bake_size` preference and a per-decal bake button in the N-panel "Decals"
   list. The target must be UV-unwrapped; render-engine and selection state are
   saved and restored around the bake.
+- **Decals (v0.9 image library)** — place any image as a decal. "Decal from
+  Image" (`HARDFLOW_OT_load_decal_image`) picks a file from disk; an image decal
+  drives the shared `HF_DecalShader` group from the image's Color + Alpha
+  (`core/decal.py image_decal_material` / `make_image_decal`) and is sized to the
+  image's aspect ratio (`core/decal_image.py aspect_size`, tested). The modal
+  place tool gained an `image_name` property so the same wheel-scale / `[` `]`
+  roll / click-to-place flow applies.
+- **Decals (v0.9 library browser)** — a "Decal Library" N-panel section
+  (`ui/decal_library.py`) shows the images in a user folder as an icon grid
+  (thumbnails via `bpy.utils.previews`); clicking one places it. New
+  `decal_library_path` preference; pure folder scan in `core/decal_image.py`
+  `scan_library` (tested).
+- **Decals (v0.9 trim sheets)** — place one cell of a grid-sliced sheet as a
+  decal. "Trim Sheet from Image" (`HARDFLOW_OT_load_trim_sheet`, Columns/Rows)
+  starts the place tool with trim params; Up/Down cycle the cell and the quad is
+  sized to the cell's aspect. `core/atlas.py` (new, pure, tested) does the UV
+  math (`slice_grid`, `cell_rect`, `rect_pixels`); `core/decal.py
+  build_decal_mesh` gained a `uv_rect` argument threaded through
+  `make_image_decal`.
+- **Decals (v0.9 atlasing)** — `HARDFLOW_OT_atlas_decals` (N-panel "Decals"
+  section) packs every image decal's texture into one `HF_Decal_Atlas` image,
+  retargets each decal's UVs into its slot, and collapses them to a single shared
+  material. Pure core in `core/atlas.py`: `pack_shelves` (shelf bin-packing),
+  `blit_pixels` (RGBA block copy with clipping), `remap_uv`, `rect_to_uv`,
+  `next_pow2` — all tested. The operator does pixel + UV data only (no
+  `bpy.ops`), so it is covered by a headless test. New `atlas_max_width`
+  preference; `core/decal.py atlas_image` allocates the target image.
 
 ## [0.6.0] — 2026-06-29
 

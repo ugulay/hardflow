@@ -7,9 +7,10 @@ context in every session.
 
 Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
 Blender 4.2+. The goal: deliver the core workflows of Grid Modeler, Boxcutter,
-and Hard Ops for free. Currently at **v0.6** — the core boolean/snap/cutter
-workflows are implemented; live Blender verification is still ongoing. The full
-roadmap is in `ROADMAP.md`.
+and Hard Ops for free. Currently at **v0.9** — the core boolean/snap/cutter
+workflows and the full decal subsystem (placement, PBR material, bake, image
+library, trim sheets, atlasing) are implemented; live Blender verification is
+still ongoing. The full roadmap is in `ROADMAP.md`.
 
 ## FIRST TASK: smoke test inside Blender
 
@@ -55,16 +56,19 @@ ops ─┘
 | `core/geometry.py` | bmesh generation (`build_prism`, `build_face`, `build_pipe`, `estimate_thickness`, `cleanup_mesh`) |
 | `core/boolean.py` | boolean + cutter management (`apply_boolean`, `add_boolean`, `duplicate_object`, `stash_cutter`, `cutter_collection`) |
 | `core/decal_math.py` | Pure decal orientation math, no bpy/mathutils (`orientation_basis`, `base_tangent`, `rotate_about_axis`) |
-| `core/decal.py` | Decal build/stick/material (`make_decal`, `build_decal_mesh`, `decal_matrix`, `add_shrinkwrap`, `decal_material` + shared PBR node group `_decal_node_group`/`HF_DecalShader` with base/metallic/roughness/AO/normal/height+depth/emission/alpha, bake helpers `bake_image`/`ensure_material`/`bake_image_node`, `decal_collection`, `DECAL_TYPES`) |
+| `core/decal_image.py` | Pure decal-library helpers, stdlib only (`scan_library`, `is_image_file`, `aspect_size`) |
+| `core/atlas.py` | Pure UV-rect + pixel math for trim sheets + atlasing (`slice_grid`, `cell_rect`, `rect_pixels`, `pack_shelves`, `remap_uv`, `blit_pixels`, `rect_to_uv`, `next_pow2`) |
+| `core/decal.py` | Decal build/stick/material (`make_decal`, `make_image_decal`, `build_decal_mesh`, `decal_matrix`, `add_shrinkwrap`, `decal_material`/`image_decal_material` + shared PBR node group `_decal_node_group`/`HF_DecalShader` with base/metallic/roughness/AO/normal/height+depth/emission/alpha, bake helpers `bake_image`/`ensure_material`/`bake_image_node`, atlas image `atlas_image`, `decal_collection`, `DECAL_TYPES`) |
 | `operators/draw_cut.py` | Main modal drawing operator (`HARDFLOW_OT_draw`): cut/slice/make/face, plane rotation, measurement HUD |
 | `operators/modifiers.py` | Bevel + mirror + clean (`HARDFLOW_OT_bevel/mirror/clean`) |
 | `operators/cutters.py` | Non-destructive cutter management (`HARDFLOW_OT_apply_cutters/select_cutter/remove_cutter`) |
 | `operators/pipe.py` | Pipe from a line (`HARDFLOW_OT_pipe`) |
-| `operators/decals.py` | Decal placement + management + bake (`HARDFLOW_OT_place_decal/select_decal/remove_decal/bake_decal`) |
+| `operators/decals.py` | Decal placement + management + bake + image library + trim sheets + atlasing (`HARDFLOW_OT_place_decal/select_decal/remove_decal/bake_decal/load_decal_image/library_place/load_trim_sheet/atlas_decals`) |
 | `ui/draw.py` | GPU + blf helpers |
 | `ui/pie.py` | Pie menu (`HARDFLOW_MT_pie`) |
 | `ui/panel.py` | N-panel: tools, snap settings, cutter list (`HARDFLOW_PT_*`) |
 | `ui/decal_panel.py` | N-panel "Decals" section: place by type + decal list (`HARDFLOW_PT_decals`) |
+| `ui/decal_library.py` | N-panel "Decal Library" section: image icon grid (`HARDFLOW_PT_decal_library`, `bpy.utils.previews`) |
 | `tests/test_core.py` | Pure core tests without Blender (`python tests/test_core.py`) |
 
 ## Registration rule

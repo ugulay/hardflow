@@ -2,7 +2,7 @@
 import bpy
 from bpy.types import AddonPreferences
 from bpy.props import (BoolProperty, IntProperty, FloatProperty,
-                       FloatVectorProperty, EnumProperty)
+                       FloatVectorProperty, EnumProperty, StringProperty)
 
 
 def get_prefs(context=None):
@@ -76,6 +76,18 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "target's texture map",
         default=1024, min=64, max=8192,
     )
+    decal_library_path: StringProperty(
+        name="Decal Library",
+        description="Folder scanned for decal images (PNG/JPG/TGA...); shown as "
+                    "an icon grid in the N-panel 'Decal Library' section",
+        subtype='DIR_PATH', default="",
+    )
+    atlas_max_width: IntProperty(
+        name="Atlas Max Width",
+        description="Maximum width (px) when packing image decals into a single "
+                    "atlas texture; the atlas height grows to fit",
+        default=2048, min=64, max=8192,
+    )
     non_destructive: BoolProperty(
         name="Non-Destructive",
         description="Leave a live modifier instead of applying the boolean; stash "
@@ -128,6 +140,8 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "decal_size")
         col.prop(self, "decal_offset")
         col.prop(self, "bake_size")
+        col.prop(self, "decal_library_path")
+        col.prop(self, "atlas_max_width")
         col.prop(self, "non_destructive")
         col.prop(self, "multi_object")
         col.prop(self, "cleanup_after_cut")

@@ -10,6 +10,7 @@
 import importlib.util
 import math
 import os
+import tempfile
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -26,6 +27,8 @@ def _load(name):
 grid = _load("grid")
 snap = _load("snap")
 decal_math = _load("decal_math")
+decal_image = _load("decal_image")
+atlas = _load("atlas")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -184,6 +187,136 @@ def test_rotate_about_axis_quarter_turn():
     assert math.isclose(r[0], 0.0, abs_tol=1e-9)
     assert math.isclose(r[1], 1.0, abs_tol=1e-9)
     assert math.isclose(r[2], 0.0, abs_tol=1e-9)
+
+
+# --- decal_image: library scan + aspect fit (v0.9) ---------------------------
+
+def test_is_image_file():
+    assert decal_image.is_image_file("logo.png")
+    assert decal_image.is_image_file("WARN.JPG")           # case-insensitive
+    assert decal_image.is_image_file("/a/b/c.tga")         # full path ok
+    assert not decal_image.is_image_file("notes.txt")
+    assert not decal_image.is_image_file("noext")
+
+
+def test_scan_library():
+    assert decal_image.scan_library("") == []
+    assert decal_image.scan_library("/no/such/folder/here") == []
+    with tempfile.TemporaryDirectory() as d:
+        for fn in ("b.png", "a.jpg", "readme.txt", "c.TGA"):
+            with open(os.path.join(d, fn), "w") as f:
+                f.write("x")
+        os.mkdir(os.path.join(d, "sub.png"))   # a dir named like an image: skip
+        items = decal_image.scan_library(d)
+        names = [n for n, _p in items]
+        assert names == ["a", "b", "c"]         # sorted, stems, txt+dir excluded
+        assert all(os.path.isfile(p) for _n, p in items)
+
+
+def test_aspect_size():
+    # wide image: width is the longest side, height shrinks
+    assert decal_image.aspect_size(200, 100, 1.0) == (1.0, 0.5)
+    # tall image: height is the longest side
+    assert decal_image.aspect_size(100, 200, 1.0) == (0.5, 1.0)
+    # square stays square
+    assert decal_image.aspect_size(256, 256, 0.4) == (0.4, 0.4)
+    # degenerate dimensions fall back to a square (never zero-area)
+    assert decal_image.aspect_size(0, 100, 2.0) == (2.0, 2.0)
+    assert decal_image.aspect_size(100, 100, 0.0) == (0.0, 0.0)
+
+
+# --- atlas: trim-sheet slicing + bin packing (v0.9) --------------------------
+
+def test_slice_grid():
+    cells = atlas.slice_grid(2, 2)
+    assert len(cells) == 4
+    # reading order: first cell is the TOP-LEFT (low u, high v)
+    assert cells[0] == (0.0, 0.5, 0.5, 1.0)
+    assert cells[1] == (0.5, 0.5, 1.0, 1.0)
+    assert cells[2] == (0.0, 0.0, 0.5, 0.5)
+    assert cells[3] == (0.5, 0.0, 1.0, 0.5)
+    # every cell is a quarter of the unit square; areas sum to 1
+    area = sum((u1 - u0) * (v1 - v0) for u0, v0, u1, v1 in cells)
+    assert math.isclose(area, 1.0, abs_tol=1e-9)
+    # degenerate counts clamp to at least 1 row/col
+    assert atlas.slice_grid(0, 0) == [(0.0, 0.0, 1.0, 1.0)]
+
+
+def test_cell_rect_wraps():
+    assert atlas.cell_rect(2, 2, 0) == (0.0, 0.5, 0.5, 1.0)
+    assert atlas.cell_rect(2, 2, 4) == atlas.cell_rect(2, 2, 0)   # wraps forward
+    assert atlas.cell_rect(2, 2, -1) == atlas.cell_rect(2, 2, 3)  # and backward
+
+
+def test_rect_pixels_and_next_pow2():
+    assert atlas.rect_pixels((0.0, 0.0, 0.5, 0.25), 1024, 1024) == (512.0, 256.0)
+    assert atlas.next_pow2(1) == 1
+    assert atlas.next_pow2(513) == 1024
+    assert atlas.next_pow2(1024) == 1024
+
+
+def test_pack_shelves_no_overlap_and_in_bounds():
+    sizes = [(100, 50), (40, 80), (60, 60), (30, 30)]
+    places, aw, ah = atlas.pack_shelves(sizes, max_width=128)
+    assert len(places) == len(sizes)
+    assert aw == 128 and ah > 0
+    # everything stays inside the atlas
+    for x, y, w, h in places:
+        assert 0 <= x and x + w <= aw
+        assert 0 <= y and y + h <= ah
+    # no two rects overlap
+    for i in range(len(places)):
+        for j in range(i + 1, len(places)):
+            ax, ay, aw_, ah_ = places[i]
+            bx, by, bw, bh = places[j]
+            separate = (ax + aw_ <= bx or bx + bw <= ax
+                        or ay + ah_ <= by or by + bh <= ay)
+            assert separate, "rect %d overlaps rect %d" % (i, j)
+
+
+def test_pack_shelves_widens_for_oversized_item():
+    # an item wider than max_width forces the atlas to grow to fit it
+    places, aw, ah = atlas.pack_shelves([(200, 30)], max_width=128)
+    assert aw == 200 and places[0] == (0, 0, 200, 30)
+    assert atlas.pack_shelves([], 128) == ([], 0, 0)
+
+
+def test_rect_to_uv_flips_y():
+    # top-left pixel rect -> UV with v=1 at the top of the image
+    assert atlas.rect_to_uv(0, 0, 64, 64, 128, 128) == (0.0, 0.5, 0.5, 1.0)
+    assert atlas.rect_to_uv(64, 64, 64, 64, 128, 128) == (0.5, 0.0, 1.0, 0.5)
+    assert atlas.rect_to_uv(0, 0, 1, 1, 0, 0) == (0.0, 0.0, 1.0, 1.0)  # guard
+
+
+def test_remap_uv_composes_into_slot():
+    slot = (0.5, 0.0, 1.0, 0.5)                       # bottom-right quadrant
+    assert atlas.remap_uv(0.0, 0.0, slot) == (0.5, 0.0)   # min corner -> slot min
+    assert atlas.remap_uv(1.0, 1.0, slot) == (1.0, 0.5)   # max corner -> slot max
+    assert atlas.remap_uv(0.5, 0.5, slot) == (0.75, 0.25)  # center -> slot center
+
+
+def _rgba(px, w, x, y):
+    i = (y * w + x) * 4
+    return px[i:i + 4]
+
+
+def test_blit_pixels_places_block():
+    # 4x4 transparent atlas; blit a 2x2 source at bottom-left (1, 1)
+    dst = [0.0] * (4 * 4 * 4)
+    src = [float(n) for n in range(2 * 2 * 4)]    # 16 distinct values
+    atlas.blit_pixels(dst, 4, 4, src, 2, 2, 1, 1)
+    assert _rgba(dst, 4, 1, 1) == src[0:4]        # src row 0 -> dst row 1
+    assert _rgba(dst, 4, 2, 2) == src[12:16]      # src (1,1) -> dst (2,2)
+    assert _rgba(dst, 4, 0, 0) == [0.0, 0.0, 0.0, 0.0]   # untouched stays clear
+
+
+def test_blit_pixels_clips_out_of_bounds():
+    dst = [0.0] * (2 * 2 * 4)
+    src = [1.0] * (2 * 2 * 4)
+    # place so only the bottom-left pixel lands inside (x0=-1, y0=-1)
+    atlas.blit_pixels(dst, 2, 2, src, 2, 2, -1, -1)
+    assert _rgba(dst, 2, 0, 0) == [1.0, 1.0, 1.0, 1.0]   # the one in-bounds pixel
+    assert _rgba(dst, 2, 1, 1) == [0.0, 0.0, 0.0, 0.0]   # the rest clipped away
 
 
 def _run_all():

@@ -31,6 +31,7 @@ class HARDFLOW_PT_decals(Panel):
 
         layout.prop(coll, "hide_viewport", text="Hide collection",
                     icon='HIDE_ON' if coll.hide_viewport else 'HIDE_OFF')
+        layout.operator("object.hardflow_atlas_decals", icon='IMGDISPLAY')
         box = layout.box().column(align=True)
         for ob in coll.objects:
             row = box.row(align=True)
