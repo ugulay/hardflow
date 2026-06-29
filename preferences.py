@@ -1,4 +1,4 @@
-# Eklenti tercihleri ve her yerden erisilebilen prefs yardimcisi.
+# Addon preferences and a prefs accessor reachable from anywhere.
 import bpy
 from bpy.types import AddonPreferences
 from bpy.props import (BoolProperty, IntProperty, FloatProperty,
@@ -6,9 +6,9 @@ from bpy.props import (BoolProperty, IntProperty, FloatProperty,
 
 
 def get_prefs(context=None):
-    """Bu modulun __package__'i temel eklenti paketidir (or. 'hardflow' ya da
-    'bl_ext.user_default.hardflow'), bu yuzden alt modullerden cagrilsa bile
-    dogru anahtari verir."""
+    """This module's __package__ is the base addon package (e.g. 'hardflow' or
+    'bl_ext.user_default.hardflow'), so it gives the correct key even when
+    called from submodules."""
     context = context or bpy.context
     return context.preferences.addons[__package__].preferences
 
@@ -18,64 +18,65 @@ class HARDFLOW_Preferences(AddonPreferences):
 
     snap_enabled: BoolProperty(
         name="Grid Snap",
-        description="Cizim noktalarini grid'e kilitle",
+        description="Lock drawing points to the grid",
         default=True,
     )
     grid_size: IntProperty(
         name="Grid Size (px)",
-        description="Eski ekran-uzayi grid araligi (legacy, kullanilmiyor)",
+        description="Old screen-space grid spacing (legacy, unused)",
         default=24, min=2, max=256,
     )
     grid_world: FloatProperty(
         name="Grid Size (m)",
-        description="Dunya-olcekli grid araligi (metre); projeksiyon duzleminde "
-                    "tutarli, kameradan bagimsiz snap",
+        description="World-scale grid spacing (meters); consistent on the "
+                    "projection plane, camera-independent snap",
         default=0.1, min=0.001, soft_max=10.0,
     )
     geo_snap: BoolProperty(
         name="Vertex/Edge Snap",
-        description="Cizim noktasini mevcut geometrinin vertex/kenar/orta "
-                    "noktasina kilitle (grid'i ezer)",
+        description="Lock the drawing point to an existing geometry's "
+                    "vertex/edge/midpoint (overrides the grid)",
         default=True,
     )
     snap_pixels: IntProperty(
         name="Snap Distance (px)",
-        description="Geometri snap'i icin ekran-uzayi yakalama yaricapi",
+        description="Screen-space capture radius for geometry snap",
         default=12, min=4, max=64,
     )
     angle_step: IntProperty(
         name="Angle Step (deg)",
-        description="Shift basiliyken cizim yonunun kilitlenecegi aci kademesi",
+        description="Angle step the drawing direction locks to while Shift is held",
         default=15, min=1, max=90,
     )
     pipe_radius: FloatProperty(
         name="Pipe Radius (m)",
-        description="Boru aracinin yuvarlak kesit yaricapi",
+        description="Round cross-section radius of the pipe tool",
         default=0.05, min=0.001, soft_max=1.0,
     )
     non_destructive: BoolProperty(
         name="Non-Destructive",
-        description="Boolean'i uygulamak yerine canli modifier birak; kesicileri "
-                    "ayri 'Hardflow Cutters' koleksiyonunda sakla (BoxCutter tarzi)",
+        description="Leave a live modifier instead of applying the boolean; stash "
+                    "cutters in a separate 'Hardflow Cutters' collection "
+                    "(BoxCutter style)",
         default=False,
     )
     multi_object: BoolProperty(
-        name="Çoklu Nesne",
-        description="CUT/MAKE'i seçili tüm mesh nesnelere uygula (tek kesici, "
-                    "çoklu hedef)",
+        name="Multi Object",
+        description="Apply CUT/MAKE to all selected mesh objects (single cutter, "
+                    "multiple targets)",
         default=False,
     )
     cleanup_after_cut: BoolProperty(
-        name="Cut Sonrası Temizle",
-        description="Destructive kesim sonrasi mesh'i temizle (remove doubles + "
-                    "coplanar yuzleri birlestir)",
+        name="Clean After Cut",
+        description="Clean up the mesh after a destructive cut (remove doubles + "
+                    "merge coplanar faces)",
         default=False,
     )
     default_solver: EnumProperty(
         name="Boolean Solver",
         items=[
-            ('EXACT', "Exact", "Daha dogru, daha yavas"),
-            ('FAST', "Fast", "Daha hizli, daha kirilgan"),
+            ('EXACT', "Exact", "More accurate, slower"),
+            ('FAST', "Fast", "Faster, more fragile"),
         ],
         default='EXACT',
     )
@@ -109,4 +110,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         row.prop(self, "fill_color")
         row.prop(self, "grid_color")
         col.separator()
-        col.label(text="Kisayollar: pie menu = Alt+Q, dogrudan cut = Ctrl+Shift+D")
+        box = col.box()
+        box.label(text="Shortcuts", icon='KEYINGSET')
+        from . import keymaps
+        keymaps.draw_keymap_prefs(box, context)

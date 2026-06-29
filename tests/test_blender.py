@@ -1,25 +1,25 @@
-# Headless Blender smoke testi -- bpy'ye bagli cekirdegi otomatik dogrular.
+# Headless Blender smoke test -- automatically verifies the bpy-dependent core.
 #
-# Calistirma (Blender 4.2+ kurulu olmali):
+# Run (Blender 4.2+ must be installed):
 #   blender --background --python tests/test_blender.py
 #
-# Sifir cikis kodu = gecti. Modal cizim operatoru (HARDFLOW_OT_draw) pencere/
-# region gerektirdiginden burada test EDILMEZ; bunun yerine onun kullandigi
-# yapi taslari (build_prism, apply/add_boolean) ve modal-olmayan bevel/mirror
-# operatorleri dogrulanir. Saf matematik icin: python tests/test_core.py.
+# Zero exit code = passed. The modal drawing operator (HARDFLOW_OT_draw) requires
+# a window/region, so it is NOT tested here; instead the building blocks it uses
+# (build_prism, apply/add_boolean) and the non-modal bevel/mirror operators are
+# verified. For pure math: python tests/test_core.py.
 import os
 import sys
 
 import bpy
 from mathutils import Vector
 
-# hardflow paketini import edebilmek icin repo'nun ust klasorunu path'e ekle.
+# Add the repo's parent folder to the path so the hardflow package can be imported.
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PARENT = os.path.dirname(_REPO)
 if _PARENT not in sys.path:
     sys.path.insert(0, _PARENT)
 
-_PKG = os.path.basename(_REPO)            # genelde "hardflow"
+_PKG = os.path.basename(_REPO)            # usually "hardflow"
 hardflow = __import__(_PKG)
 from hardflow.core import geometry, boolean   # noqa: E402
 
@@ -51,10 +51,10 @@ def test_build_prism():
                Vector((1, 1, 0)), Vector((-1, 1, 0))]
     view_dir = Vector((0, 0, -1))
     me = geometry.build_prism(corners, view_dir, thickness=4.0)
-    assert me is not None, "build_prism None dondu"
-    assert len(me.vertices) == 8, len(me.vertices)   # 4 on + 4 arka
-    assert len(me.polygons) == 6, len(me.polygons)   # kapali prizma (kutu)
-    # dejenere (tekrar eden kose) -> None
+    assert me is not None, "build_prism returned None"
+    assert len(me.vertices) == 8, len(me.vertices)   # 4 front + 4 back
+    assert len(me.polygons) == 6, len(me.polygons)   # closed prism (box)
+    # degenerate (repeated corner) -> None
     bad = geometry.build_prism([Vector((0, 0, 0))] * 4, view_dir, 4.0)
     assert bad is None
 
@@ -67,8 +67,8 @@ def test_apply_boolean_difference():
     before = len(target.data.polygons)
     boolean.apply_boolean(bpy.context, target, cutter, 'DIFFERENCE', 'EXACT')
     after = len(target.data.polygons)
-    assert after != before, "DIFFERENCE geometriyi degistirmedi"
-    assert len(target.modifiers) == 0, "modifier uygulanmadi (hala duruyor)"
+    assert after != before, "DIFFERENCE did not change the geometry"
+    assert len(target.modifiers) == 0, "modifier not applied (still present)"
 
 
 def test_add_boolean_nondestructive():
@@ -76,9 +76,9 @@ def test_add_boolean_nondestructive():
     target = _add_cube("Target", size=2.0)
     cutter = _add_cube("Cutter", size=1.0, location=(1, 0, 0))
     mod = boolean.add_boolean(target, cutter, 'DIFFERENCE', 'EXACT')
-    assert mod.name in target.modifiers, "modifier eklenmedi"
+    assert mod.name in target.modifiers, "modifier not added"
     assert mod.object is cutter
-    # stash_cutter kesiciyi ayri koleksiyona tasimali
+    # stash_cutter should move the cutter to a separate collection
     boolean.stash_cutter(bpy.context, cutter, target)
     coll = bpy.data.collections.get(boolean.CUTTER_COLLECTION)
     assert coll is not None and cutter.name in coll.objects
@@ -92,36 +92,36 @@ def test_bevel_and_mirror_operators():
     try:
         ob = _add_cube("Obj")
         _activate(ob)
-        # EXEC_DEFAULT -> execute() (redo yolu); modal invoke atlanir
+        # EXEC_DEFAULT -> execute() (redo path); modal invoke is skipped
         bpy.ops.object.hardflow_bevel(width=0.03, segments=3, weighted_normal=True)
-        assert any(m.type == 'BEVEL' for m in ob.modifiers), "bevel eklenmedi"
+        assert any(m.type == 'BEVEL' for m in ob.modifiers), "bevel not added"
         assert any(m.type == 'WEIGHTED_NORMAL' for m in ob.modifiers), \
-            "weighted normal eklenmedi"
+            "weighted normal not added"
         bev = next(m for m in ob.modifiers if m.type == 'BEVEL')
         assert bev.segments == 3 and abs(bev.width - 0.03) < 1e-6
         bpy.ops.object.hardflow_mirror(axis='X')
-        assert any(m.type == 'MIRROR' for m in ob.modifiers), "mirror eklenmedi"
+        assert any(m.type == 'MIRROR' for m in ob.modifiers), "mirror not added"
     finally:
         hardflow.unregister()
 
 
 def test_build_face_and_cleanup():
     _reset()
-    # build_face: 4 koseden tek n-gen
+    # build_face: a single n-gon from 4 corners
     me = geometry.build_face([Vector((0, 0, 0)), Vector((1, 0, 0)),
                               Vector((1, 1, 0)), Vector((0, 1, 0))])
     assert me is not None and len(me.polygons) == 1
     assert len(me.vertices) == 4
-    # cleanup_mesh: cakisik vertex'li mesh'i kaynat
+    # cleanup_mesh: weld a mesh with overlapping vertices
     cube = _add_cube("CleanMe", size=2.0)
-    # ikinci ust uste kup -> remove doubles birlestirmeli
+    # a second overlapping cube -> remove doubles should merge it
     extra = _add_cube("Extra", size=2.0)
     _activate(cube)
-    # cube'a cakisik vertexler eklemek icin Extra'yi join etmek yerine,
-    # dogrudan cleanup'in dusurmedigini/koruyamadigini sanity-check et:
+    # rather than joining Extra to add overlapping vertices to the cube,
+    # directly sanity-check that cleanup neither drops nor fails to preserve:
     before = len(cube.data.vertices)
     geometry.cleanup_mesh(cube)
-    assert len(cube.data.vertices) <= before  # temizleme vertex artirmamali
+    assert len(cube.data.vertices) <= before  # cleanup must not increase vertices
 
 
 def test_build_pipe():
@@ -132,7 +132,7 @@ def test_build_pipe():
     assert curve.bevel_depth == 0.1
     sp = curve.splines[0]
     assert sp.type == 'POLY' and len(sp.points) == 3
-    # tek nokta -> None
+    # single point -> None
     assert geometry.build_pipe([Vector((0, 0, 0))]) is None
 
 
@@ -144,7 +144,7 @@ def test_clean_operator():
         _activate(ob)
         before = len(ob.data.vertices)
         bpy.ops.object.hardflow_clean()
-        # temiz bir kup degismemeli (8 vertex korunur)
+        # a clean cube should not change (8 vertices preserved)
         assert len(ob.data.vertices) == before == 8
     finally:
         hardflow.unregister()
@@ -161,15 +161,15 @@ def test_apply_cutters_operator():
         _activate(target)
         before = len(target.data.polygons)
         bpy.ops.object.hardflow_apply_cutters(delete_cutters=True)
-        assert len(target.modifiers) == 0, "modifier uygulanmadi"
-        assert len(target.data.polygons) != before, "boolean bake edilmedi"
-        assert bpy.data.objects.get("Cutter") is None, "kullanilmayan kesici silinmedi"
+        assert len(target.modifiers) == 0, "modifier not applied"
+        assert len(target.data.polygons) != before, "boolean not baked"
+        assert bpy.data.objects.get("Cutter") is None, "unused cutter not deleted"
     finally:
         hardflow.unregister()
 
 
 def test_multi_object_difference():
-    # Tek kesici + iki hedef: ikisinin de poligon sayisi degismeli.
+    # Single cutter + two targets: both should change their polygon count.
     _reset()
     t1 = _add_cube("T1", size=2.0, location=(-2, 0, 0))
     t2 = _add_cube("T2", size=2.0, location=(2, 0, 0))
@@ -193,7 +193,7 @@ def _run():
         except Exception as ex:           # noqa: BLE001
             failed += 1
             print("FAIL ", fn.__name__, "->", repr(ex))
-    print("\n%d/%d gecti" % (len(tests) - failed, len(tests)))
+    print("\n%d/%d passed" % (len(tests) - failed, len(tests)))
     return failed
 
 

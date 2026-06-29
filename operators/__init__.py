@@ -1,1 +1,1 @@
-# operators: kullanici eylemleri.
+# operators: user actions.

@@ -1,54 +1,57 @@
 # Changelog
 
-Bu projedeki dikkate değer değişiklikler. Sürümleme [SemVer](https://semver.org)
-mantığında; proje 1.0 öncesi olduğundan minor sürümler özellik ekler.
+Notable changes in this project. Versioning follows [SemVer](https://semver.org)
+logic; since the project is pre-1.0, minor versions add features.
 
 ## [Unreleased]
 
-### Eklendi
-- **Dünya-ölçekli grid snap** — snap artık ekran-piksel yerine projeksiyon
-  düzleminin yerel (u,v) metre ekseninde; kameradan/zoom'dan bağımsız tutarlı
-  grid. Tercih: `grid_world` (metre).
-- **Vertex / edge snap** — çizim noktasını mevcut geometrinin köşe / kenar /
-  kenar-ortasına kilitle; renkli imleç (🟡 köşe, 🟢 orta, 🔵 kenar). `V` ile
-  toggle; `geo_snap` + `snap_pixels` tercihleri. Yoğun mesh'te otomatik kapanır.
-- **Açı kilidi** — Shift basılıyken çizim yönü açı kademesine kilitlenir
-  (`angle_step`, varsayılan 15°).
-- **Non-destructive mod** — boolean'ı uygulamak yerine canlı modifier bırakır;
-  kesiciler "Hardflow Cutters" koleksiyonunda (wire, render kapalı, hedefe
-  parent) saklanır. `N` ile toggle; `non_destructive` tercihi.
-- **N-panel** — View3D kenar çubuğunda araçlar, snap ayarları ve saklı kesici
-  listesi.
-- **Kendiyle-kesişme tespiti** — bozuk poligon kesim öncesi reddedilir.
-- **Grid düzlemini döndürme** — `←/→` ile düzlem VIEW / dünya X / Y / Z; kesici
-  düzlem normali boyunca extrude (`ray_to_plane`).
-- **Create Face modu** — çizim aracında `4` tuşu: çizilen şekilden tek n-gen
-  yüzey nesnesi (boolean değil).
-- **Kesici yönetimi** — N-panel'den kesici seç/sil + "Kesicileri Uygula (Bake)"
-  (`operators/cutters.py`).
-- **Clean operatörü** — remove doubles + coplanar birleştirme + başıboş silme
-  (Hard Ops "clean"); ayrıca `cleanup_after_cut` ile kesim sonrası otomatik.
-- **Pipe aracı** — çizilen çizgiden yuvarlak kesitli boru (`HARDFLOW_OT_pipe`,
+### Added
+- **World-scale grid snap** — snap now operates on the projection plane's local
+  (u,v) meter axes instead of screen pixels; a consistent grid independent of
+  camera/zoom. Preference: `grid_world` (meters).
+- **Vertex / edge snap** — lock the drawing point to the corner / edge / edge
+  midpoint of existing geometry; colored cursor (🟡 corner, 🟢 midpoint, 🔵
+  edge). Toggle with `V`; `geo_snap` + `snap_pixels` preferences. Disables
+  automatically on dense meshes.
+- **Angle lock** — while Shift is held, the drawing direction locks to an angle
+  step (`angle_step`, default 15°).
+- **Non-destructive mode** — leaves a live modifier instead of applying the
+  boolean; cutters are kept in the "Hardflow Cutters" collection (wire, render
+  disabled, parented to the target). Toggle with `N`; `non_destructive`
+  preference.
+- **N-panel** — tools, snap settings, and the stashed cutter list in the View3D
+  sidebar.
+- **Self-intersection detection** — a broken polygon is rejected before the cut.
+- **Rotating the grid plane** — `←/→` switches the plane between VIEW / world X /
+  Y / Z; the cutter is extruded along the plane normal (`ray_to_plane`).
+- **Create Face mode** — key `4` in the drawing tool: a single n-gon surface
+  object from the drawn shape (not a boolean).
+- **Cutter management** — select/remove a cutter from the N-panel + "Apply
+  Cutters (Bake)" (`operators/cutters.py`).
+- **Clean operator** — remove doubles + coplanar merge + delete loose (Hard Ops
+  "clean"); also automatic after a cut via `cleanup_after_cut`.
+- **Pipe tool** — a round-profile pipe from the drawn line (`HARDFLOW_OT_pipe`,
   `pipe_radius`).
-- **Gelişmiş bevel** — interaktif modal (sürükle=genişlik, tekerlek=segment),
-  profil + açı limiti + width-type ve **Weighted Normal** modifier (temiz
-  hard-surface gölgeleme).
-- **Çoklu nesne** — `multi_object`: CUT/MAKE seçili tüm mesh'lere uygulanır.
-- **HUD ölçü göstergesi** — çizim sırasında metre cinsinden boyut.
-- **Test paketi** — `tests/test_core.py` (11, bpy'siz) + `tests/test_blender.py`
+- **Advanced bevel** — interactive modal (drag = width, wheel = segments),
+  profile + angle limit + width-type, and the **Weighted Normal** modifier
+  (clean hard-surface shading).
+- **Multi-object** — `multi_object`: CUT/MAKE is applied to all selected meshes.
+- **HUD measurement display** — size in meters while drawing.
+- **Test suite** — `tests/test_core.py` (11, without bpy) + `tests/test_blender.py`
   (headless: build_prism/boolean/cutters/clean/pipe/face/multi-object).
-- **ROADMAP** — DECALmachine tarzı decal alt sistemi (v0.7–v0.9) eklendi.
+- **ROADMAP** — added a DECALmachine-style decal subsystem (v0.7–v0.9).
 
-### Düzeltildi
-- Bevel: Blender 4.1+'da kaldırılan `Mesh.use_auto_smooth` çağrısı (operatör
-  çöküyordu) kaldırıldı; smooth shading ile değiştirildi.
-- GPU çizim: `UNIFORM_COLOR` shader'ına vec3 (z=0) beslenmesi sağlandı.
-- Kesici nesneler boolean başarısız olsa bile `try/finally` ile temizleniyor.
-- Pie menü kısayolu `Alt+D` → `Alt+Q` (Alt+D Object Mode'da Duplicate Linked
-  ile çakışıyordu).
-- POLY commit'inde gezinen imleç artık fazladan vertex olarak eklenmiyor.
+### Fixed
+- Bevel: removed the `Mesh.use_auto_smooth` call that was removed in Blender
+  4.1+ (it was crashing the operator); replaced it with smooth shading.
+- GPU drawing: ensured the `UNIFORM_COLOR` shader is fed a vec3 (z=0).
+- Cutter objects are now cleaned up via `try/finally` even when the boolean
+  fails.
+- Pie menu shortcut `Alt+D` → `Alt+Q` (Alt+D collided with Duplicate Linked in
+  Object Mode).
+- The roving cursor is no longer added as an extra vertex on POLY commit.
 
 ## [0.1.0]
-- İlk modüler mimari: modal çizim operatörü (Box/Circle/Polygon),
-  Cut/Slice/Make modları, ekran-uzayı grid snap, akıllı bevel + mirror,
-  pie menu, tercihler, keymap.
+- First modular architecture: modal drawing operator (Box/Circle/Polygon),
+  Cut/Slice/Make modes, screen-space grid snap, smart bevel + mirror, pie menu,
+  preferences, keymap.

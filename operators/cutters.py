@@ -1,5 +1,5 @@
-# Non-destructive kesici yonetimi: uygula (bake), sec, sil.
-# N-panel'deki "Kesiciler" listesi bu operatorlere delege eder.
+# Non-destructive cutter management: apply (bake), select, delete.
+# The "Cutters" list in the N-panel delegates to these operators.
 import bpy
 from bpy.types import Operator
 from bpy.props import BoolProperty, StringProperty
@@ -8,7 +8,7 @@ from ..core import boolean
 
 
 def _still_used(cutter, ignore=None):
-    """Herhangi bir nesne hala bu cutter'i boolean modifier'da kullaniyor mu?"""
+    """Is any object still using this cutter in a boolean modifier?"""
     for ob in bpy.data.objects:
         if ob is ignore:
             continue
@@ -20,14 +20,14 @@ def _still_used(cutter, ignore=None):
 
 class HARDFLOW_OT_apply_cutters(Operator):
     bl_idname = "object.hardflow_apply_cutters"
-    bl_label = "Kesicileri Uygula"
-    bl_description = ("Aktif nesnedeki tum canli Hardflow boolean'larini uygula "
-                      "(bake); artik kullanilmayan kesicileri sil")
+    bl_label = "Apply Cutters"
+    bl_description = ("Apply all live Hardflow booleans on the active object "
+                      "(bake); delete cutters no longer used")
     bl_options = {'REGISTER', 'UNDO'}
 
     delete_cutters: BoolProperty(
-        name="Kesicileri Sil",
-        description="Uygulamadan sonra baska yerde kullanilmayan kesicileri sil",
+        name="Delete Cutters",
+        description="After applying, delete cutters not used anywhere else",
         default=True,
     )
 
@@ -54,14 +54,14 @@ class HARDFLOW_OT_apply_cutters(Operator):
                 if not _still_used(cutter):
                     bpy.data.objects.remove(cutter, do_unlink=True)
                     removed += 1
-        self.report({'INFO'}, "Kesiciler uygulandi (%d silindi)" % removed)
+        self.report({'INFO'}, "Cutters applied (%d deleted)" % removed)
         return {'FINISHED'}
 
 
 class HARDFLOW_OT_select_cutter(Operator):
     bl_idname = "object.hardflow_select_cutter"
-    bl_label = "Kesiciyi Seç"
-    bl_description = "Kesiciyi gorunur yap, sec ve aktif et (duzenlemek icin)"
+    bl_label = "Select Cutter"
+    bl_description = "Make the cutter visible, select and activate it (to edit)"
     bl_options = {'REGISTER', 'UNDO'}
 
     name: StringProperty()
@@ -69,7 +69,7 @@ class HARDFLOW_OT_select_cutter(Operator):
     def execute(self, context):
         cutter = bpy.data.objects.get(self.name)
         if cutter is None:
-            self.report({'WARNING'}, "Kesici bulunamadi")
+            self.report({'WARNING'}, "Cutter not found")
             return {'CANCELLED'}
         for o in list(context.selected_objects):
             o.select_set(False)
@@ -82,9 +82,9 @@ class HARDFLOW_OT_select_cutter(Operator):
 
 class HARDFLOW_OT_remove_cutter(Operator):
     bl_idname = "object.hardflow_remove_cutter"
-    bl_label = "Kesiciyi Sil"
-    bl_description = ("Kesiciyi sahneden sil; onu kullanan boolean modifier'lar "
-                      "etkisiz kalir (geri al ile donulebilir)")
+    bl_label = "Delete Cutter"
+    bl_description = ("Delete the cutter from the scene; boolean modifiers using "
+                      "it become ineffective (reversible with undo)")
     bl_options = {'REGISTER', 'UNDO'}
 
     name: StringProperty()

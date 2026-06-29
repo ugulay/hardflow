@@ -1,4 +1,4 @@
-# Hard Ops tarzi yardimci operatorler: akilli bevel, mirror, clean.
+# Hard Ops style helper operators: smart bevel, mirror, clean.
 from math import radians
 
 import bpy
@@ -11,8 +11,8 @@ from ..core import geometry
 class HARDFLOW_OT_bevel(Operator):
     bl_idname = "object.hardflow_bevel"
     bl_label = "Hardflow Bevel"
-    bl_description = ("Akilli bevel: interaktif (sürükle=genişlik, tekerlek="
-                      "segment) + profil, açi limiti, harden + weighted normal")
+    bl_description = ("Smart bevel: interactive (drag=width, wheel="
+                      "segments) + profile, angle limit, harden + weighted normal")
     bl_options = {'REGISTER', 'UNDO'}
 
     width: FloatProperty(name="Width", default=0.02, min=0.0, soft_max=0.5)
@@ -28,19 +28,19 @@ class HARDFLOW_OT_bevel(Operator):
     harden: BoolProperty(name="Harden Normals", default=True)
     weighted_normal: BoolProperty(
         name="Weighted Normal", default=True,
-        description="Bevel sonrasi temiz golgeleme icin Weighted Normal modifier")
+        description="Weighted Normal modifier for clean shading after bevel")
 
     @classmethod
     def poll(cls, context):
         obj = context.active_object
         return obj is not None and obj.type == 'MESH'
 
-    # --- modifier kurulumu (execute = redo yolu; invoke modal kurar) --------
+    # --- modifier setup (execute = redo path; invoke sets up modal) ---------
 
     def _create(self, context):
-        """HF_Bevel (+istege bagli Weighted Normal) ekle; eklenen adlari sakla.
-        REGISTER|UNDO oldugundan redo'da Blender once geri alir, sonra bunu
-        tekrar cagirir -- bu yuzden her seferinde taze ekleme dogru desendir."""
+        """Add HF_Bevel (+ optional Weighted Normal); store the added names.
+        Since this is REGISTER|UNDO, on redo Blender first undoes, then calls
+        this again -- so adding fresh each time is the correct pattern."""
         obj = context.active_object
         if self.harden:
             for poly in obj.data.polygons:
@@ -73,7 +73,7 @@ class HARDFLOW_OT_bevel(Operator):
         self._create(context)
         return {'FINISHED'}
 
-    # --- interaktif modal (HardOps tarzi canli ayar) ------------------------
+    # --- interactive modal (HardOps style live adjustment) ------------------
 
     def invoke(self, context, event):
         self._start_x = event.mouse_x
@@ -85,8 +85,8 @@ class HARDFLOW_OT_bevel(Operator):
 
     def _status(self, context):
         context.workspace.status_text_set(
-            "Bevel  |  sürükle: genişlik %.3f  ·  tekerlek: segment %d  ·  "
-            "Enter/Sol onayla  ·  Esc iptal" % (self.width, self.segments))
+            "Bevel  |  drag: width %.3f  ·  wheel: segments %d  ·  "
+            "Enter/Left confirm  ·  Esc cancel" % (self.width, self.segments))
 
     def modal(self, context, event):
         if event.type == 'MOUSEMOVE':
@@ -150,8 +150,8 @@ class HARDFLOW_OT_mirror(Operator):
 class HARDFLOW_OT_clean(Operator):
     bl_idname = "object.hardflow_clean"
     bl_label = "Hardflow Clean"
-    bl_description = ("Mesh temizligi: cakisik vertex'leri kaynat, coplanar "
-                      "yuzleri birlestir, başıboş geometriyi sil (Hard Ops clean)")
+    bl_description = ("Mesh cleanup: weld overlapping vertices, merge coplanar "
+                      "faces, delete stray geometry (Hard Ops clean)")
     bl_options = {'REGISTER', 'UNDO'}
 
     merge_dist: FloatProperty(name="Merge Distance", default=0.0001,

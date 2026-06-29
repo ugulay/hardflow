@@ -1,4 +1,4 @@
-# Hard Ops tarzi pie menu: tum operatorlere tek kisayoldan eris.
+# Hard Ops style pie menu: access all operators from a single shortcut.
 import bpy
 from bpy.types import Menu
 
@@ -9,16 +9,16 @@ class HARDFLOW_MT_pie(Menu):
     def draw(self, context):
         pie = self.layout.menu_pie()
 
-        # Sol
+        # Left
         pie.operator("mesh.hardflow_draw", text="Cut", icon='MOD_BOOLEAN').mode = 'CUT'
-        # Sag
+        # Right
         pie.operator("mesh.hardflow_draw", text="Slice", icon='MOD_EDGESPLIT').mode = 'SLICE'
-        # Alt
+        # Bottom
         op = pie.operator("mesh.hardflow_draw", text="Make", icon='MESH_PLANE')
         op.mode = 'MAKE'
-        # Ust
+        # Top
         pie.operator("object.hardflow_bevel", text="Bevel", icon='MOD_BEVEL')
-        # Kose slotlari
+        # Corner slots
         pie.operator("object.hardflow_mirror", text="Mirror", icon='MOD_MIRROR')
         circle = pie.operator("mesh.hardflow_draw", text="Circle Cut", icon='MESH_CIRCLE')
         circle.shape = 'CIRCLE'

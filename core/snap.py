@@ -1,6 +1,7 @@
-# Geometri (vertex / edge) snap -- saf 2D ekran-uzayi matematigi.
-# Operator, hedefin dunya koselerini ekrana projekte eder; bu modul yalnizca
-# "imlece en yakin"i bulur. bpy/mathutils gerekmez, duz tuple ile test edilebilir.
+# Geometry (vertex / edge) snap -- pure 2D screen-space math.
+# The operator projects the target's world vertices onto the screen; this module
+# only finds the "nearest to the cursor". No bpy/mathutils needed, testable with
+# plain tuples.
 import math
 
 
@@ -9,9 +10,9 @@ def _dist(a, b):
 
 
 def nearest_point(cursor, points, threshold):
-    """points: [(x, y) | None, ...]. cursor'a en yakin nokta esik icindeyse
-    (index, (x, y), dist) doner; yoksa None. None elemanlar atlanir (kamera
-    arkasinda kalan projeksiyonlar)."""
+    """points: [(x, y) | None, ...]. If the nearest point to cursor is within
+    the threshold, returns (index, (x, y), dist); otherwise None. None elements
+    are skipped (projections that fall behind the camera)."""
     best = None
     for i, p in enumerate(points):
         if p is None:
@@ -23,13 +24,13 @@ def nearest_point(cursor, points, threshold):
 
 
 def closest_point_on_segment(p, a, b):
-    """p noktasinin [a, b] dogru parcasi uzerindeki en yakin noktasi (2D)."""
+    """The nearest point on the segment [a, b] to point p (2D)."""
     ax, ay = a
     bx, by = b
     px, py = p
     dx, dy = bx - ax, by - ay
     ll = dx * dx + dy * dy
-    if ll <= 1e-12:           # dejenere kenar (a == b)
+    if ll <= 1e-12:           # degenerate edge (a == b)
         return (ax, ay)
     t = ((px - ax) * dx + (py - ay) * dy) / ll
     t = max(0.0, min(1.0, t))
@@ -37,8 +38,9 @@ def closest_point_on_segment(p, a, b):
 
 
 def nearest_on_segments(cursor, segments, threshold):
-    """segments: [((x1,y1),(x2,y2)) | uçları None olabilen, ...]. cursor'a en
-    yakin kenar uzeri noktasi esik icindeyse (index, (x, y), dist) doner."""
+    """segments: [((x1,y1),(x2,y2)) | endpoints may be None, ...]. If the nearest
+    on-edge point to cursor is within the threshold, returns (index, (x, y),
+    dist)."""
     best = None
     for i, seg in enumerate(segments):
         a, b = seg

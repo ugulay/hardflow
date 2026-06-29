@@ -1,1 +1,1 @@
-# ui: GPU cizim, HUD ve menuler.
+# ui: GPU drawing, HUD and menus.

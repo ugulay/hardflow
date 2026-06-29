@@ -1,97 +1,101 @@
 # CLAUDE.md — Hardflow
 
-Bu dosya Claude Code'un projeyi her oturumda doğru bağlamla ele alması içindir.
+This file exists so that Claude Code approaches the project with the right
+context in every session.
 
-## Proje nedir
+## What the project is
 
-Hardflow, Blender 4.2+ için **açık kaynak (GPLv3) hard-surface boolean
-modelleme** araç setidir. Hedef: Grid Modeler, Boxcutter ve Hard Ops'un
-çekirdek iş akışlarını ücretsiz sunmak. Şu an **v0.1** — temel mimari kurulu,
-birkaç özellik çalışıyor. Tam yol haritası `ROADMAP.md`'de.
+Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
+Blender 4.2+. The goal: deliver the core workflows of Grid Modeler, Boxcutter,
+and Hard Ops for free. Currently at **v0.1** — the basic architecture is in
+place and a handful of features work. The full roadmap is in `ROADMAP.md`.
 
-## İLK İŞ: Blender içinde smoke test
+## FIRST TASK: smoke test inside Blender
 
-Bu kod **yazıldı ve sözdizimi doğrulandı, ama henüz canlı Blender'da
-çalıştırılmadı.** Herhangi bir özellik geliştirmeden önce:
+This code **has been written and syntax-verified, but has not yet been run in a
+live Blender.** Before developing any feature:
 
-1. Eklentiyi kur, etkinleştir, hata almadan register olduğunu doğrula.
-2. Object Mode'da bir küp seç → Ctrl+Shift+D → Box çiz → Cut'ın çalıştığını gör.
-3. Pie menu (Alt+Q), bevel, mirror, slice, make modlarını tek tek dene.
-4. Özellikle şüpheli iki nokta: `core/boolean.py`'deki `temp_override` +
-   `modifier_apply` çağrısı, ve `operators/draw_cut.py`'deki `_build_and_apply`
-   geometri/projeksiyon matematiği. Bunlar runtime'da test edilmedi.
+1. Install the addon, enable it, and verify it registers without errors.
+2. Select a cube in Object Mode → Ctrl+Shift+D → draw a Box → see the Cut work.
+3. Try the pie menu (Alt+Q), bevel, mirror, slice, and make modes one by one.
+4. Two especially suspect spots: the `temp_override` + `modifier_apply` call in
+   `core/boolean.py`, and the geometry/projection math in `_build_and_apply` in
+   `operators/draw_cut.py`. These have not been tested at runtime.
 
-Hata çıkarsa önce bunları düzelt, sonra ROADMAP'e geç.
+If errors come up, fix these first, then move on to the ROADMAP.
 
-## Mimari — değişmez kural
+## Architecture — an inviolable rule
 
-Katman bağımlılığı **tek yönlüdür**:
+Layer dependency is **one-directional**:
 
 ```
 ui  ─┐
-     ├─► core      (core ASLA yukarı bakmaz)
+     ├─► core      (core NEVER looks upward)
 ops ─┘
 ```
 
-- `core/` saf mantıktır: `bpy.ops`, `gpu`, `blf` **kullanmaz**. Tek istisna:
-  `core/boolean.py` içindeki `modifier_apply` (bilinçli kabul edildi).
-- `core` test edilebilir kalmalı. Yeni bir özellik = `core`'a saf fonksiyon +
-  onu çağıran ince bir `operator`.
-- UI çizimi `ui/draw.py`'de toplanır; operatörler oraya delege eder.
+- `core/` is pure logic: it **does not use** `bpy.ops`, `gpu`, or `blf`. The only
+  exception: `modifier_apply` inside `core/boolean.py` (a deliberate
+  concession).
+- `core` must stay testable. A new feature = a pure function in `core` + a thin
+  `operator` that calls it.
+- UI drawing is gathered in `ui/draw.py`; operators delegate to it.
 
-## Dosya haritası
+## File map
 
-| Yol | Sorumluluk |
+| Path | Responsibility |
 |-----|-----------|
-| `__init__.py` | Kayıt orkestrasyonu, `_classes` tuple, keymap |
-| `preferences.py` | Ayarlar + `get_prefs(context)` erişimcisi |
-| `core/raycast.py` | Ekran↔3D projeksiyon + düzlem (u,v) (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`) |
-| `core/grid.py` | Dünya-ölçekli + açı snap, şekil noktaları (`snap_world`, `world_grid_segments`, `snap_angle`, `box_points`, `circle_points`) |
-| `core/snap.py` | Vertex/edge geometri snap, saf 2D (`nearest_point`, `closest_point_on_segment`, `nearest_on_segments`) |
-| `core/geometry.py` | bmesh üretimi (`build_prism`, `build_face`, `build_pipe`, `estimate_thickness`, `cleanup_mesh`) |
-| `core/boolean.py` | boolean + kesici yönetimi (`apply_boolean`, `add_boolean`, `duplicate_object`, `stash_cutter`, `cutter_collection`) |
-| `operators/draw_cut.py` | Ana modal çizim operatörü (`HARDFLOW_OT_draw`): cut/slice/make/face, düzlem döndürme, ölçü HUD |
+| `__init__.py` | Registration orchestration, the `_classes` tuple |
+| `keymaps.py` | Shortcut registration + preferences rebind UI (`register_keymaps`, `draw_keymap_prefs`); defaults Alt+Q / Ctrl+Shift+D |
+| `preferences.py` | Settings + the `get_prefs(context)` accessor |
+| `core/raycast.py` | Screen↔3D projection + plane (u,v) (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`) |
+| `core/grid.py` | World-scale + angle snap, shape points (`snap_world`, `world_grid_segments`, `snap_angle`, `box_points`, `circle_points`) |
+| `core/snap.py` | Vertex/edge geometry snap, pure 2D (`nearest_point`, `closest_point_on_segment`, `nearest_on_segments`) |
+| `core/geometry.py` | bmesh generation (`build_prism`, `build_face`, `build_pipe`, `estimate_thickness`, `cleanup_mesh`) |
+| `core/boolean.py` | boolean + cutter management (`apply_boolean`, `add_boolean`, `duplicate_object`, `stash_cutter`, `cutter_collection`) |
+| `operators/draw_cut.py` | Main modal drawing operator (`HARDFLOW_OT_draw`): cut/slice/make/face, plane rotation, measurement HUD |
 | `operators/modifiers.py` | Bevel + mirror + clean (`HARDFLOW_OT_bevel/mirror/clean`) |
-| `operators/cutters.py` | Non-destructive kesici yönetimi (`HARDFLOW_OT_apply_cutters/select_cutter/remove_cutter`) |
-| `operators/pipe.py` | Çizgiden boru (`HARDFLOW_OT_pipe`) |
-| `ui/draw.py` | GPU + blf yardımcıları |
+| `operators/cutters.py` | Non-destructive cutter management (`HARDFLOW_OT_apply_cutters/select_cutter/remove_cutter`) |
+| `operators/pipe.py` | Pipe from a line (`HARDFLOW_OT_pipe`) |
+| `ui/draw.py` | GPU + blf helpers |
 | `ui/pie.py` | Pie menu (`HARDFLOW_MT_pie`) |
-| `ui/panel.py` | N-panel: araçlar, snap ayarları, kesici listesi (`HARDFLOW_PT_*`) |
-| `tests/test_core.py` | Blender'sız saf çekirdek testleri (`python tests/test_core.py`) |
+| `ui/panel.py` | N-panel: tools, snap settings, cutter list (`HARDFLOW_PT_*`) |
+| `tests/test_core.py` | Pure core tests without Blender (`python tests/test_core.py`) |
 
-## Kayıt kuralı
+## Registration rule
 
-Yeni her sınıf `__init__.py` içindeki `_classes` tuple'ına eklenmelidir,
-aksi halde register edilmez. Keymap'ler `_register_keymaps()` içinde.
+Every new class must be added to the `_classes` tuple in `__init__.py`,
+otherwise it won't be registered. Keymaps live in `keymaps.register_keymaps()`;
+users can rebind them from the standard Blender keymap editor in preferences.
 
-## Blender API kısıtları (4.2 LTS+ hedef)
+## Blender API constraints (4.2 LTS+ target)
 
-- 2D çizim shader'ı: `'UNIFORM_COLOR'` / `'POLYLINE_UNIFORM_COLOR'`.
-  **`'2D_UNIFORM_COLOR'` KULLANMA** (3.x'te kaldırıldı).
-- `blf.size(font_id, size)` — eski dpi parametresi yok.
-- `batch_for_shader` primitifleri: `LINE_STRIP`, `LINES`, `TRIS`, `POINTS`.
-  **`LINE_LOOP` / `TRI_FAN` kullanma** (deprecated).
-- Context override için `with context.temp_override(...)`.
+- 2D drawing shader: `'UNIFORM_COLOR'` / `'POLYLINE_UNIFORM_COLOR'`.
+  **DO NOT USE `'2D_UNIFORM_COLOR'`** (removed in 3.x).
+- `blf.size(font_id, size)` — no legacy dpi parameter.
+- `batch_for_shader` primitives: `LINE_STRIP`, `LINES`, `TRIS`, `POINTS`.
+  **Do not use `LINE_LOOP` / `TRI_FAN`** (deprecated).
+- For context override, use `with context.temp_override(...)`.
 
-## Geliştirme döngüsü
+## Development loop
 
-Yeniden zip'lemeden hızlı iterasyon için symlink kur:
+For fast iteration without re-zipping, set up a symlink:
 
 ```bash
 ln -s "$(pwd)" ~/.config/blender/4.2/extensions/user_default/hardflow
 ```
 
-Blender'da değişikliği yüklemek: `F3 > Reload Scripts` ya da eklentiyi
-kapat/aç. System Console'u açık tut (Window > Toggle System Console).
+To load a change in Blender: `F3 > Reload Scripts` or disable/enable the addon.
+Keep the System Console open (Window > Toggle System Console).
 
-Not: `bpy` Blender dışında çalışmaz; birim testleri Blender'ın Python'u içinde
-ya da headless `blender --background --python test.py` ile koşar. `core/`
-modüllerinin çoğu bpy'siz mock'lanarak test edilebilir (bilinçli tasarım).
+Note: `bpy` does not run outside Blender; unit tests run inside Blender's Python
+or headless via `blender --background --python test.py`. Most `core/` modules can
+be tested with bpy mocked out (a deliberate design choice).
 
-## Konvansiyonlar
+## Conventions
 
-- Sınıf adları: `HARDFLOW_OT_*` (operator), `HARDFLOW_MT_*` (menu),
+- Class names: `HARDFLOW_OT_*` (operator), `HARDFLOW_MT_*` (menu),
   `HARDFLOW_Preferences`.
-- Operator `bl_idname`: `mesh.hardflow_*` veya `object.hardflow_*`.
-- PEP 8, ~90 karakter satır.
-- Lisans GPLv3 — yeni dosyalara da geçerli.
+- Operator `bl_idname`: `mesh.hardflow_*` or `object.hardflow_*`.
+- PEP 8, ~90 character lines.
+- License GPLv3 — applies to new files too.

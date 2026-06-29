@@ -1,5 +1,5 @@
-# Boolean islemleri. Hem destructive (uygula-sil) hem non-destructive
-# (modifier birak) yollari var.
+# Boolean operations. Provides both destructive (apply-and-delete) and
+# non-destructive (leave a modifier) paths.
 import bpy
 
 
@@ -12,19 +12,21 @@ def _new_bool(target, cutter, operation, solver):
 
 
 def apply_boolean(context, target, cutter, operation='DIFFERENCE', solver='EXACT'):
-    """Destructive: modifier ekle, uygula. cutter cagiran tarafindan silinir."""
+    """Destructive: add a modifier and apply it. The cutter is deleted by the
+    caller."""
     mod = _new_bool(target, cutter, operation, solver)
     with context.temp_override(active_object=target, object=target):
         bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
 def add_boolean(target, cutter, operation='DIFFERENCE', solver='EXACT'):
-    """Non-destructive: sadece modifier ekle, dondur. cutter sahnede kalir."""
+    """Non-destructive: just add a modifier and return it. The cutter stays in
+    the scene."""
     return _new_bool(target, cutter, operation, solver)
 
 
 def duplicate_object(context, obj, name_suffix="_slice"):
-    """Mesh verisini de kopyalayarak bagimsiz bir nesne klonu olusturur."""
+    """Create an independent clone of an object, copying the mesh data too."""
     new = obj.copy()
     new.data = obj.data.copy()
     new.name = obj.name + name_suffix
@@ -36,7 +38,7 @@ CUTTER_COLLECTION = "Hardflow Cutters"
 
 
 def cutter_collection(context):
-    """Non-destructive kesicileri toplayan koleksiyonu getir/olustur."""
+    """Get/create the collection that gathers non-destructive cutters."""
     coll = bpy.data.collections.get(CUTTER_COLLECTION)
     if coll is None:
         coll = bpy.data.collections.new(CUTTER_COLLECTION)
@@ -45,14 +47,14 @@ def cutter_collection(context):
 
 
 def stash_cutter(context, cutter, target):
-    """Kesiciyi ayri koleksiyona tasi, wire goster, hedefe parentla.
-    Boolean modifier hedefte canli kaldigindan kesici sahnede saklanir
-    (BoxCutter tarzi non-destructive akis)."""
+    """Move the cutter to a separate collection, show it as wire, parent it to
+    the target. Since the boolean modifier stays live on the target, the cutter
+    is kept in the scene (BoxCutter-style non-destructive flow)."""
     for c in list(cutter.users_collection):
         c.objects.unlink(cutter)
     cutter_collection(context).objects.link(cutter)
     cutter.display_type = 'WIRE'
     cutter.hide_render = True
-    # Hedef tasininca/donunce kesici de onunla gelsin; dunya pozu sabit kalsin.
+    # When the target moves/rotates, the cutter follows; keep its world pose fixed.
     cutter.parent = target
     cutter.matrix_parent_inverse = target.matrix_world.inverted()

@@ -1,4 +1,4 @@
-# N-panel (View3D > Sidebar > Hardflow): araclar, snap ayarlari, kesici listesi.
+# N-panel (View3D > Sidebar > Hardflow): tools, snap settings, cutter list.
 import bpy
 from bpy.types import Panel
 
@@ -17,7 +17,7 @@ class HARDFLOW_PT_tools(Panel):
         layout = self.layout
 
         col = layout.column(align=True)
-        col.label(text="Boolean Çizim", icon='MOD_BOOLEAN')
+        col.label(text="Boolean Draw", icon='MOD_BOOLEAN')
         row = col.row(align=True)
         row.operator("mesh.hardflow_draw", text="Cut").mode = 'CUT'
         row.operator("mesh.hardflow_draw", text="Slice").mode = 'SLICE'
@@ -37,7 +37,7 @@ class HARDFLOW_PT_tools(Panel):
 
 
 class HARDFLOW_PT_snap(Panel):
-    bl_label = "Snapping & Ayarlar"
+    bl_label = "Snapping & Settings"
     bl_idname = "HARDFLOW_PT_snap"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -63,14 +63,14 @@ class HARDFLOW_PT_snap(Panel):
         col.separator()
         col.prop(prefs, "pipe_radius")
         col.separator()
-        col.label(text="Renkler (canlı önizleme)")
+        col.label(text="Colors (live preview)")
         row = col.row(align=True)
         row.prop(prefs, "line_color", text="")
         row.prop(prefs, "grid_color", text="")
 
 
 class HARDFLOW_PT_cutters(Panel):
-    bl_label = "Kesiciler"
+    bl_label = "Cutters"
     bl_idname = "HARDFLOW_PT_cutters"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -83,15 +83,15 @@ class HARDFLOW_PT_cutters(Panel):
 
         if context.active_object is not None:
             layout.operator("object.hardflow_apply_cutters",
-                            text="Kesicileri Uygula (Bake)", icon='CHECKMARK')
+                            text="Apply Cutters (Bake)", icon='CHECKMARK')
 
         coll = bpy.data.collections.get(boolean.CUTTER_COLLECTION)
         if coll is None or not coll.objects:
-            layout.label(text="Saklı kesici yok", icon='INFO')
-            layout.label(text="(Non-destructive 'N' ile kesim yap)")
+            layout.label(text="No stashed cutters", icon='INFO')
+            layout.label(text="(Cut with non-destructive 'N')")
             return
 
-        layout.prop(coll, "hide_viewport", text="Koleksiyonu gizle",
+        layout.prop(coll, "hide_viewport", text="Hide collection",
                     icon='HIDE_ON' if coll.hide_viewport else 'HIDE_OFF')
         box = layout.box().column(align=True)
         for ob in coll.objects:

@@ -1,12 +1,13 @@
-# bmesh ile geometri uretimi.
+# Geometry generation with bmesh.
 import bpy
 import bmesh
 
 
 def build_prism(corners, view_dir, thickness, name="hf_cutter"):
-    """Bir duzlem uzerindeki 3D kose listesini, bakis yonunde extrude ederek
-    kapali bir prizmaya (kesici hacme) cevirir. corners en az 3 nokta.
-    Konkav n-gen kabul eder; kendiyle kesisen poligonlar bozuk sonuc verir."""
+    """Turn a list of 3D corners on a plane into a closed prism (a cutter
+    volume) by extruding along the view direction. corners must be at least 3
+    points. Concave n-gons are accepted; self-intersecting polygons give broken
+    results."""
     half = view_dir * (thickness * 0.5)
     front = [c - half for c in corners]
     back = [c + half for c in corners]
@@ -16,10 +17,10 @@ def build_prism(corners, view_dir, thickness, name="hf_cutter"):
     vb = [bm.verts.new(co) for co in back]
 
     try:
-        bm.faces.new(vf)               # on kapak
-        bm.faces.new(list(reversed(vb)))  # arka kapak
+        bm.faces.new(vf)               # front cap
+        bm.faces.new(list(reversed(vb)))  # back cap
     except ValueError:
-        # ayni konumda tekrar eden kose vs.
+        # repeated vertex at the same position, etc.
         bm.free()
         return None
 
@@ -27,7 +28,7 @@ def build_prism(corners, view_dir, thickness, name="hf_cutter"):
     for i in range(n):
         j = (i + 1) % n
         try:
-            bm.faces.new((vf[i], vf[j], vb[j], vb[i]))  # yan duvarlar
+            bm.faces.new((vf[i], vf[j], vb[j], vb[i]))  # side walls
         except ValueError:
             pass
 
@@ -39,19 +40,20 @@ def build_prism(corners, view_dir, thickness, name="hf_cutter"):
 
 
 def estimate_thickness(obj, factor=2.0, minimum=1.0):
-    """Kesicinin nesneyi delip gecmesi icin yeterli kalinlik."""
+    """Thickness sufficient for the cutter to pierce all the way through the
+    object."""
     d = obj.dimensions
     return max(d.x, d.y, d.z, minimum) * factor
 
 
 def build_face(corners, name="hf_face"):
-    """Bir duzlem uzerindeki kose listesinden tek bir n-gen yuzey uretir
-    (boolean degil; Grid Modeler 'create face'). En az 3 nokta."""
+    """Build a single n-gon face from a list of corners on a plane (not a
+    boolean; Grid Modeler 'create face'). At least 3 points."""
     bm = bmesh.new()
     verts = [bm.verts.new(co) for co in corners]
     try:
         bm.faces.new(verts)
-    except ValueError:        # tekrar eden kose / gecersiz
+    except ValueError:        # repeated vertex / invalid
         bm.free()
         return None
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
@@ -62,14 +64,15 @@ def build_face(corners, name="hf_face"):
 
 
 def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
-    """3D nokta listesinden, yuvarlak kesitli boru curve'u uretir (Grid Modeler
-    'pipes'). En az 2 nokta. Curve data dondurur; cagiran nesneye baglar."""
+    """Build a round-section pipe curve from a list of 3D points (Grid Modeler
+    'pipes'). At least 2 points. Returns curve data; the caller links it to an
+    object."""
     if len(points) < 2:
         return None
     curve = bpy.data.curves.new(name, 'CURVE')
     curve.dimensions = '3D'
     spline = curve.splines.new('POLY')
-    spline.points.add(len(points) - 1)   # zaten 1 nokta var
+    spline.points.add(len(points) - 1)   # one point already exists
     for i, p in enumerate(points):
         spline.points[i].co = (p[0], p[1], p[2], 1.0)
     curve.bevel_depth = radius
@@ -79,14 +82,15 @@ def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
 
 
 def cleanup_mesh(obj, merge_dist=1e-4, dissolve_angle=0.0873, remove_loose=True):
-    """Boolean/bevel sonrasi mesh temizligi: kaynak (remove doubles) + sinirli
-    cozme (coplanar yuzleri birlestir) + başıboş geometri sil. Object Mode.
-    dissolve_angle radyan (varsayilan ~5 derece); 0 ise cozme atlanir."""
+    """Mesh cleanup after boolean/bevel: merge (remove doubles) + limited
+    dissolve (merge coplanar faces) + delete loose geometry. Object Mode.
+    dissolve_angle in radians (default ~5 degrees); if 0 the dissolve is
+    skipped."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=merge_dist)
     if dissolve_angle > 0.0:
-        bmesh.ops.dissolve_limited(
+        bmesh.ops.dissolve_limit(
             bm, angle_limit=dissolve_angle,
             verts=list(bm.verts), edges=list(bm.edges))
     if remove_loose:

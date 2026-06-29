@@ -1,122 +1,136 @@
-# Yol Haritası
+# Roadmap
 
-Rakip araçların özellikleri ve Hardflow'da nereye/nasıl oturdukları. Her madde
-mümkün olduğunca tek bir modüle izole edilmiştir ki katkı verenler birbirine
-çarpmadan ilerleyebilsin.
+The features of competing tools and where/how they fit into Hardflow. Each item
+is isolated to a single module as much as possible, so that contributors can make
+progress without colliding with one another.
 
-## v0.1 — Mevcut (çekirdek döngü çalışıyor)
-- [x] Modal çizim operatörü (Box / Circle / Polygon)
-- [x] Cut / Slice / Make modları (boolean DIFFERENCE / INTERSECT / UNION)
-- [x] Ekran-uzayı grid snap + canlı GPU çizim + HUD
-- [x] Akıllı bevel ve mirror operatörleri
-- [x] Pie menu, tercihler, keymap
+## v0.1 — Current (core loop working)
+- [x] Modal drawing operator (Box / Circle / Polygon)
+- [x] Cut / Slice / Make modes (boolean DIFFERENCE / INTERSECT / UNION)
+- [x] Screen-space grid snap + live GPU drawing + HUD
+- [x] Smart bevel and mirror operators
+- [x] Pie menu, preferences, keymap
 
-## v0.2 — Snapping ve hassasiyet (en yüksek değer)
-Grid Modeler'ın asıl gücü burada.
-- [x] **Dünya-ölçekli grid** — `core/grid.py` `snap_world` + `world_grid_segments`,
+## v0.2 — Snapping and precision (highest value)
+This is where Grid Modeler's real power lies.
+- [x] **World-scale grid** — `core/grid.py` `snap_world` + `world_grid_segments`,
       `core/raycast.py` `world_to_plane_uv`/`plane_uv_to_world`/`world_to_screen`.
-      Snap artık projeksiyon düzleminin yerel (u,v) metre ekseninde; tercih
-      `grid_world` (metre). Çekirdek matematik bpy'siz test edildi.
-- [x] **Vertex / edge snap** — `core/snap.py` (saf 2D, test edildi): hedefin
-      dünya köşelerini ekrana projekte edip en yakın vertex/orta-nokta/kenara
-      kilitle. Operatörde `V` toggle, tercih `geo_snap`+`snap_pixels`, renkli
-      imleç (sarı=köşe, yeşil=orta, mavi=kenar). Yoğun mesh'te otomatik kapanır.
-- [x] **Açı kilidi** — Shift basılıyken çizim yönünü `angle_step` kademesine
-      kilitle (`core/grid.py snap_angle`, test edildi).
-- [x] **Grid düzlemini döndürme** — `←/→` ile düzlem VIEW / dünya X / Y / Z
-      arasında geçer (`core/raycast.py ray_to_plane`); kesici düzlem normali
-      boyunca extrude edilir. Dünya-eksenli grid = Grid Modeler hizalı çizim.
+      Snap now operates on the projection plane's local (u,v) meter axes;
+      preference `grid_world` (meters). Core math tested without bpy.
+- [x] **Vertex / edge snap** — `core/snap.py` (pure 2D, tested): project the
+      target's world corners to the screen and lock to the nearest
+      vertex/midpoint/edge. `V` toggle in the operator, preferences
+      `geo_snap`+`snap_pixels`, colored cursor (yellow=corner, green=midpoint,
+      blue=edge). Disables automatically on dense meshes.
+- [x] **Angle lock** — while Shift is held, lock the drawing direction to the
+      `angle_step` step (`core/grid.py snap_angle`, tested).
+- [x] **Rotating the grid plane** — `←/→` cycles the plane between VIEW / world
+      X / Y / Z (`core/raycast.py ray_to_plane`); the cutter is extruded along
+      the plane normal. World-aligned grid = Grid Modeler aligned drawing.
 
-## v0.3 — Non-destructive iş akışı (Boxcutter ruhu)
-- [x] Boolean'ları uygulamak yerine canlı modifier bırak — operatörde `N` ile
-      toggle, tercih `non_destructive`. CUT/SLICE/MAKE üçü de destekli.
-- [x] Kesici nesneleri ayrı "Hardflow Cutters" koleksiyonunda sakla (WIRE
-      görünüm, render kapalı, hedefe parent) — `core/boolean.py stash_cutter`.
-- [x] Kesicileri gizleme/koleksiyon toggle UI — N-panel "Kesiciler" bölümü:
-      koleksiyon + nesne bazlı göster/gizle.
-- [x] "Recut" temeli — N-panel'den kesiciyi seç (görünür yap + aktif et) ile
-      mesh'ini düzenle; "Kesicileri Uygula (Bake)" ile hepsini destructive
-      uygula (`operators/cutters.py`).
+## v0.3 — Non-destructive workflow (the Boxcutter spirit)
+- [x] Leave a live modifier instead of applying booleans — toggle with `N` in
+      the operator, preference `non_destructive`. CUT/SLICE/MAKE are all
+      supported.
+- [x] Keep cutter objects in a separate "Hardflow Cutters" collection (WIRE
+      display, render disabled, parented to the target) — `core/boolean.py
+      stash_cutter`.
+- [x] Cutter hide/collection toggle UI — N-panel "Cutters" section:
+      collection- and object-level show/hide.
+- [x] "Recut" foundation — select a cutter from the N-panel (make it visible +
+      active) to edit its mesh; "Apply Cutters (Bake)" applies them all
+      destructively (`operators/cutters.py`).
 
-## v0.4 — Geometri kalitesi
-- [x] Polygon için kendiyle-kesişme tespiti ve uyarı — `core/grid.py`
-      `is_self_intersecting`; commit'te bozuk poly reddedilir (test edildi).
-- [x] Kesim sonrası temizlik — tercih `cleanup_after_cut`; `core/geometry.py
-      cleanup_mesh` (remove doubles + sınırlı çözme + başıboş sil).
-- [x] Bevel sonrası ölü vertex temizliği — `HARDFLOW_OT_clean` (Hard Ops "clean").
-- [x] Create face — çizim operatöründe `FACE` modu (tuş `4`): çizilen şekilden
-      tek n-gen yüzey nesnesi (`geometry.build_face`). Extrude native `E` ile.
-- [x] **Gelişmiş bevel** — `HARDFLOW_OT_bevel` modal/interaktif (sürükle=genişlik,
-      tekerlek=segment) + profil, açı limiti, width-type ve **Weighted Normal**
-      modifier (temiz hard-surface gölgeleme). İleride: özel profil eğrisi,
-      bevel preset'leri, vertex bevel.
+## v0.4 — Geometry quality
+- [x] Self-intersection detection and warning for polygons — `core/grid.py`
+      `is_self_intersecting`; a broken poly is rejected at commit (tested).
+- [x] Post-cut cleanup — preference `cleanup_after_cut`; `core/geometry.py
+      cleanup_mesh` (remove doubles + limited dissolve + delete loose).
+- [x] Dead-vertex cleanup after bevel — `HARDFLOW_OT_clean` (Hard Ops "clean").
+- [x] Create face — `FACE` mode in the drawing operator (key `4`): a single
+      n-gon surface object from the drawn shape (`geometry.build_face`). Extrude
+      with native `E`.
+- [x] **Advanced bevel** — `HARDFLOW_OT_bevel` modal/interactive (drag = width,
+      wheel = segments) + profile, angle limit, width-type, and **Weighted
+      Normal** modifier (clean hard-surface shading). Later: custom profile
+      curve, bevel presets, vertex bevel.
 
-## v0.5 — Boru ve profil (Grid Modeler "pipes")
-- [x] Çizilen çizgi boyunca curve + bevel ile boru üretimi —
-      `HARDFLOW_OT_pipe` modal + `core/geometry.py build_pipe`; yarıçap tercihi
-      `pipe_radius`. Profil şimdilik yuvarlak; ileride kare/özel kesit.
+## v0.5 — Pipe and profile (Grid Modeler "pipes")
+- [x] Pipe generation with a curve + bevel along the drawn line —
+      `HARDFLOW_OT_pipe` modal + `core/geometry.py build_pipe`; radius preference
+      `pipe_radius`. Profile is round for now; square/custom cross-sections
+      later.
 
-## v0.6 — UX cilası
-- [x] N-panel: araçlar + ayarlar + aktif kesiciler listesi (`ui/panel.py`).
-- [x] HUD ölçü göstergesi — çizilen şeklin metre cinsinden boyutu (Box W×H,
-      Circle yarıçap/çap, Poly nokta + son segment).
-- [x] Tema/renk canlı önizleme — N-panel'de çizgi/grid rengi (anında yansır).
-- [x] Çoklu nesne desteği — `multi_object` tercihi; CUT/MAKE seçili tüm
-      mesh'lere tek kesiciyle uygulanır.
+## v0.6 — UX polish
+- [x] N-panel: tools + settings + active cutter list (`ui/panel.py`).
+- [x] HUD measurement display — the drawn shape's size in meters (Box W×H,
+      Circle radius/diameter, Poly point count + last segment).
+- [x] Theme/color live preview — line/grid color in the N-panel (applies
+      instantly).
+- [x] Multi-object support — `multi_object` preference; CUT/MAKE is applied to
+      all selected meshes with a single cutter.
 
-## v0.7+ — Decaller (DECALmachine ruhu)
-Yeni bir alt sistem; yüzeye yapışan detay geçişleri (panel çizgileri, logolar,
-vida/uyarı işaretleri) ile hard-surface'i "bitmiş" gösterir. Mimariye uygun ayrı
-bir `decals/` paketi: saf mantık `core/decal*.py`, eylemler `operators/decal*.py`,
-arayüz `ui/decal_panel.py`. Decal'ler boolean değil, **shrinkwrap + malzeme**
-katmanıdır; mevcut kesim çekirdeğinden bağımsız ilerleyebilir.
+## v0.7+ — Decals (the DECALmachine spirit)
+A new subsystem; surface-adhering detail passes (panel lines, logos,
+screw/warning marks) make hard-surface look "finished". A separate `decals/`
+package that fits the architecture: pure logic in `core/decal*.py`, actions in
+`operators/decal*.py`, interface in `ui/decal_panel.py`. Decals are not booleans
+but a **shrinkwrap + material** layer; they can progress independently of the
+existing cut core.
 
-### v0.7 — Decal yerleştirme çekirdeği
-- [ ] **Decal nesnesi** — yüzeye projekte edilen ince bir düzlem/mesh; hedefe
-      `SHRINKWRAP` (PROJECT) + `parent` ile yapışır, yüzey eğrisini takip eder.
-- [ ] **Yüzeye yerleştir** — `core/raycast.py` ray_cast ile tıklanan noktaya
-      decal'i çağır; normal + yüzey teğetine göre hizala, fareyle döndür/ölçekle.
-- [ ] **Decal türleri** — Info (logo/yazı/uyarı), Panel (panel çizgisi/dikiş),
-      Subset (maskeli alt-malzeme). Her tür bir malzeme şablonu.
-- [ ] **Decal koleksiyonu** — `Hardflow Decals` altında topla, gizle/göster
-      (kesici koleksiyonuyla aynı desen — `core/boolean.py stash_cutter` örneği).
+### v0.7 — Decal placement core
+- [ ] **Decal object** — a thin plane/mesh projected onto the surface; adheres to
+      the target via `SHRINKWRAP` (PROJECT) + `parent`, following the surface
+      curvature.
+- [ ] **Place on surface** — call the decal at the clicked point via
+      `core/raycast.py` ray_cast; align it to the normal + surface tangent,
+      rotate/scale with the mouse.
+- [ ] **Decal types** — Info (logo/text/warning), Panel (panel line/seam), Subset
+      (masked sub-material). Each type is a material template.
+- [ ] **Decal collection** — gather them under `Hardflow Decals`, hide/show (same
+      pattern as the cutter collection — see `core/boolean.py stash_cutter`).
 
-### v0.8 — Decal malzeme ve görünüm
-- [ ] **PBR malzeme kurulumu** — normal + AO + curvature + emission kanalları,
-      alpha ile yüzeye karışım (Eevee + Cycles uyumlu node grupları).
-- [ ] **Parallax decal** — height/parallax ile sahte derinlik (panel kanalları).
-- [ ] **Decal'i mesh'e bake et** — yüksek-poli detayını hedef normal map'ine
-      aktar (yıkıcı "apply"; geri dönüşsüz seçenek).
+### v0.8 — Decal material and appearance
+- [ ] **PBR material setup** — normal + AO + curvature + emission channels,
+      blending into the surface with alpha (Eevee + Cycles compatible node
+      groups).
+- [ ] **Parallax decal** — fake depth via height/parallax (panel channels).
+- [ ] **Bake decal into mesh** — transfer the high-poly detail into the target's
+      normal map (destructive "apply"; an irreversible option).
 
-### v0.9 — Kütüphane ve performans
-- [ ] **Decal kütüphanesi** — diskten görüntü/preset yükle, N-panel'de ikon
-      grid'i; kullanıcı kütüphanesi klasörü (tercihlerde yol).
-- [ ] **Görüntüden decal üret** — PNG/alpha → hazır decal nesnesi + malzeme.
-- [ ] **Trim sheet / trim decal** — tek atlas üzerinden UV dilimleri.
-- [ ] **Atlasing** — sahnedeki decal'leri tek atlas dokusuna topla (draw-call
-      ve malzeme sayısını düşür); oyun-hazır export.
+### v0.9 — Library and performance
+- [ ] **Decal library** — load images/presets from disk, an icon grid in the
+      N-panel; a user library folder (path in preferences).
+- [ ] **Generate decal from image** — PNG/alpha → a ready decal object +
+      material.
+- [ ] **Trim sheet / trim decal** — UV slices from a single atlas.
+- [ ] **Atlasing** — gather the scene's decals into a single atlas texture
+      (reduce draw-call and material count); game-ready export.
 
-## v1.0+ — Asset/kitbash sistemi (KitOps ruhu)
-DECALmachine'den sonra. Hazır parça (INSERT) kütüphanesinden non-destructive
-kitbashing: hard-surface detayları boolean/snap ile yüzeye yapıştır. Ayrı bir
-`assets/` paketi; mevcut boolean + snap + kesici-koleksiyon çekirdeğini yeniden
-kullanır (decal alt sisteminden bağımsız).
-- [ ] **INSERT yerleştirme** — kütüphaneden bir parçayı imleç/yüzey normaline
-      göre çağır; fareyle döndür/ölçekle (Boxcutter yerleştirme akışına benzer).
-- [ ] **Boolean INSERT'ler** — parça otomatik kesici olur (CUT/MAKE), `core/
-      boolean.py` + `stash_cutter` ile non-destructive bağlanır.
-- [ ] **Asset kütüphanesi** — `.blend`/koleksiyon tabanlı INSERT'ler; N-panel'de
-      ikon grid'i + kullanıcı kütüphane klasörü (tercih).
-- [ ] **Wrap/Conform INSERT** — eğri yüzeye shrinkwrap ile sarılan parçalar.
-- [ ] **Blender Asset Browser entegrasyonu** — INSERT'leri asset olarak işaretle,
-      sürükle-bırak; mark-as-asset + katalog.
-- [ ] **Material/auto-smooth aktarımı** — yerleştirilen parçaya hedefin gölgeleme
-      ayarlarını uygula.
+## v1.0+ — Asset/kitbash system (the KitOps spirit)
+After DECALmachine. Non-destructive kitbashing from a ready-part (INSERT)
+library: stick hard-surface details onto the surface with boolean/snap. A
+separate `assets/` package; it reuses the existing boolean + snap +
+cutter-collection core (independent of the decal subsystem).
+- [ ] **INSERT placement** — call a part from the library at the cursor/surface
+      normal; rotate/scale with the mouse (similar to the Boxcutter placement
+      flow).
+- [ ] **Boolean INSERTs** — a part automatically becomes a cutter (CUT/MAKE),
+      bound non-destructively via `core/boolean.py` + `stash_cutter`.
+- [ ] **Asset library** — `.blend`/collection-based INSERTs; an icon grid in the
+      N-panel + a user library folder (preference).
+- [ ] **Wrap/Conform INSERT** — parts wrapped onto a curved surface via
+      shrinkwrap.
+- [ ] **Blender Asset Browser integration** — mark INSERTs as assets,
+      drag-and-drop; mark-as-asset + catalog.
+- [ ] **Material/auto-smooth transfer** — apply the target's shading settings to
+      the placed part.
 
-## Bilinen sınırlamalar
-- Grid düzlemi bakış yönüne dik (nesne orijininden geçer); henüz nesne
-  yüzeyine/dünya eksenlerine hizalı değil (bkz. v0.2 "grid düzlemini döndürme").
-- Sadece Object Mode. Edit Mode akışı (`bmesh.from_edit_mesh`) henüz yok.
-- Konkav poligonlar çalışır; kendiyle kesişenler bozuk kesici üretir.
-- EXACT solver çakışan/ters-normal geometride başarısız olabilir — kesim
-      yapmazsa hedefin normallerini düzelt veya kesiciyi biraz kaydır.
+## Known limitations
+- The grid plane is perpendicular to the view direction (passing through the
+  object origin); it is not yet aligned to the object surface/world axes (see
+  v0.2 "rotating the grid plane").
+- Object Mode only. There is no Edit Mode flow (`bmesh.from_edit_mesh`) yet.
+- Concave polygons work; self-intersecting ones produce a broken cutter.
+- The EXACT solver can fail on overlapping/inverted-normal geometry — if a cut
+  doesn't happen, fix the target's normals or nudge the cutter slightly.

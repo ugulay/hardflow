@@ -1,60 +1,62 @@
-# Katkı Rehberi
+# Contributing Guide
 
-## Kurulum (geliştirme)
+## Setup (development)
 
-Hızlı döngü için eklentiyi sembolik link ile Blender'ın extensions klasörüne
-bağla, böylece her değişiklikte yeniden zip'lemen gerekmez:
+For a fast iteration loop, link the addon into Blender's extensions folder with a
+symbolic link so you don't have to re-zip on every change:
 
 ```bash
-# Linux/macOS örneği — yolu kendi sürümüne göre düzelt
+# Linux/macOS example — adjust the path to your version
 ln -s "$(pwd)/hardflow" \
   ~/.config/blender/4.2/extensions/user_default/hardflow
 ```
 
-Blender içinde tekrar yüklemek için: System Console açıkken
-`F3 > Reload Scripts` ya da eklentiyi kapat/aç.
+To reload inside Blender: with the System Console open, use
+`F3 > Reload Scripts`, or disable/enable the addon.
 
-## Test
+## Testing
 
-`core/grid.py` ve `core/snap.py` bilinçli olarak `bpy`'siz tutulur; bu yüzden
-matematik katmanı Blender olmadan normal CPython ile koşulabilir:
+`core/grid.py` and `core/snap.py` are deliberately kept free of `bpy`, so the
+math layer can run without Blender using plain CPython:
 
 ```bash
-python tests/test_core.py     # bağımsız çalışır, pytest gerekmez
+python tests/test_core.py     # runs standalone, no pytest required
 ```
 
-`bpy`'ye bağlı çekirdek (geometry/boolean + bevel/mirror operatörleri) için
-headless Blender smoke testi:
+For the `bpy`-dependent core (geometry/boolean + bevel/mirror operators), a
+headless Blender smoke test:
 
 ```bash
 blender --background --python tests/test_blender.py
 ```
 
-Yeni saf çekirdek fonksiyonu eklediğinde `tests/test_core.py`'a, `bpy`'ye bağlı
-bir yapı taşı eklediğinde `tests/test_blender.py`'a test ekle. Modal çizim
-operatörü (pencere/region gerektirir) elde, canlı Blender'da doğrulanır.
+When you add a new pure core function, add a test to `tests/test_core.py`; when
+you add a `bpy`-dependent building block, add one to `tests/test_blender.py`. The
+modal drawing operator (which requires a window/region) is verified by hand, in a
+live Blender.
 
-## Mimari kuralları
+## Architecture rules
 
-1. **Katman yönü tek yönlü:** `ui` ve `operators` → `core`. `core` asla yukarı
-   bağımlı olmaz ve `bpy.ops`/`gpu`/`blf` kullanmaz (boolean.py'deki tek
-   `modifier_apply` istisnası hariç). Bu sayede `core` saf ve test edilebilir
-   kalır.
-2. **Bir özellik = core'da saf fonksiyon + ince operator.** Mantığı operatöre
-   gömme.
-3. **Yeni sınıfı `__init__.py`'deki `_classes`'a ekle.** Aksi halde kayıt
-   edilmez.
-4. **API uyumu:** Hedef Blender 4.2 LTS+. 3.x'e özgü çağrılardan kaçın
-   (`2D_UNIFORM_COLOR`, `blf.size`'ın eski dpi imzası, `LINE_LOOP` primitifi).
+1. **Layering is one-directional:** `ui` and `operators` → `core`. `core` never
+   depends upward and does not use `bpy.ops`/`gpu`/`blf` (with the sole
+   `modifier_apply` exception in boolean.py). This keeps `core` pure and
+   testable.
+2. **One feature = a pure function in core + a thin operator.** Don't bury the
+   logic in the operator.
+3. **Add your new class to `_classes` in `__init__.py`.** Otherwise it won't be
+   registered.
+4. **API compatibility:** the target is Blender 4.2 LTS+. Avoid 3.x-specific
+   calls (`2D_UNIFORM_COLOR`, the old dpi signature of `blf.size`, the
+   `LINE_LOOP` primitive).
 
-## PR akışı
+## PR flow
 
-- Tek bir özellik/düzeltme = tek PR.
-- ROADMAP.md'deki bir maddeye denk geliyorsa kutucuğu işaretle.
-- Yeni bir kullanıcı eylemi eklediysen README'deki tuş tablosunu güncelle.
+- One feature/fix = one PR.
+- If it maps to an item in ROADMAP.md, check the box.
+- If you added a new user action, update the key table in the README.
 
-## Stil
+## Style
 
-- PEP 8, ~90 karakter satır.
-- Operator/sınıf adları `HARDFLOW_OT_*`, `HARDFLOW_MT_*` deseninde.
-- Yorumlar Türkçe ya da İngilizce olabilir; tutarlı ol.
+- PEP 8, ~90 character lines.
+- Operator/class names follow the `HARDFLOW_OT_*`, `HARDFLOW_MT_*` pattern.
+- Comments and docstrings must be in English.

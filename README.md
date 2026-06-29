@@ -1,103 +1,107 @@
 # Hardflow
 
-Açık kaynak hard-surface boolean modelleme araç seti — Grid Modeler, Boxcutter
-ve Hard Ops'un çekirdek iş akışlarını ücretsiz ve GPLv3 altında sunmayı
-hedefler. Blender 4.2+ uzantı sistemiyle uyumludur.
+An open-source hard-surface boolean modeling toolkit — aiming to deliver the
+core workflows of Grid Modeler, Boxcutter, and Hard Ops for free under GPLv3.
+Compatible with the Blender 4.2+ extension system.
 
-> Geliştirme aşamasında. Çekirdek kesim döngüsü, dünya-ölçekli + vertex/edge
-> snapping ve non-destructive akış çalışır durumda. Tam yol haritası (decaller
-> dahil) için ROADMAP.md.
+> Under active development. The core cut loop, world-scale + vertex/edge
+> snapping, and the non-destructive flow are all working. See ROADMAP.md for the
+> full roadmap (including decals).
 
-## Özellikler
+## Features
 
-- **Modal çizim ile boolean** — Box / Circle / Polygon şekilleri; Cut (kes),
-  Slice (ikiye böl), Make (ekle), Face (yüzey oluştur) modları.
-- **Dünya-ölçekli grid snap** — kameradan bağımsız, metre cinsinden tutarlı grid
-  (Grid Modeler "absolute size" mantığı); düzlem `←/→` ile VIEW / X / Y / Z.
-- **Çoklu nesne** — CUT/MAKE'i seçili tüm mesh'lere tek kesiciyle uygula.
-- **Boru (pipe)** — çizilen çizgiden yuvarlak kesitli boru; **Clean** ile mesh
-  temizliği (Hard Ops tarzı).
-- **Vertex / edge snap** — çizim noktasını mevcut geometrinin köşe / kenar /
-  kenar-ortasına kilitle; renkli imleç geri bildirimi.
-- **Açı kilidi** — Shift ile çizim yönünü 15° (ayarlanabilir) kademelere kilitle.
-- **Non-destructive mod** — boolean'ı uygulamak yerine canlı modifier bırak;
-  kesicileri ayrı koleksiyonda sakla (Boxcutter ruhu).
-- **Gelişmiş bevel** — interaktif (sürükle=genişlik, tekerlek=segment), profil +
-  açı limiti + width-type + **Weighted Normal** (temiz gölgeleme); mirror
-  (bisect + clip). Hard Ops ruhu.
-- **Pie menu**, tercihler paneli, özelleştirilebilir snap ayarları.
+- **Boolean via modal drawing** — Box / Circle / Polygon shapes; Cut, Slice
+  (split in two), Make (add), and Face (create a surface) modes.
+- **World-scale grid snap** — a camera-independent grid that stays consistent in
+  meters (Grid Modeler's "absolute size" logic); plane switches with `←/→`
+  between VIEW / X / Y / Z.
+- **Multi-object** — apply CUT/MAKE to all selected meshes with a single cutter.
+- **Pipe** — a round-profile pipe from a drawn line; mesh cleanup via **Clean**
+  (Hard Ops style).
+- **Vertex / edge snap** — lock the drawing point to the corner / edge / edge
+  midpoint of existing geometry; colored cursor feedback.
+- **Angle lock** — hold Shift to lock the drawing direction to 15° (adjustable)
+  steps.
+- **Non-destructive mode** — instead of applying the boolean, leave a live
+  modifier; keep cutters in a separate collection (the Boxcutter spirit).
+- **Advanced bevel** — interactive (drag = width, wheel = segments), with profile
+  + angle limit + width-type + **Weighted Normal** (clean shading); mirror
+  (bisect + clip). The Hard Ops spirit.
+- **Pie menu**, preferences panel, customizable snap settings.
 
-## Kurulum
+## Installation
 
-Blender 4.2+: **Edit > Preferences > Get Extensions > (sağ üst ⌄) > Install
-from Disk** → `hardflow` zip'ini seç.
+Blender 4.2+: **Edit > Preferences > Get Extensions > (top-right ⌄) > Install
+from Disk** → select the `hardflow` zip.
 
-## Kullanım
+## Usage
 
-Object Mode'da bir mesh seç:
+Select a mesh in Object Mode:
 
-- **Alt+Q** → pie menu (tüm araçlar)
-- **Ctrl+Shift+D** → doğrudan çizim aracı
+- **Alt+Q** → pie menu (all tools)
+- **Ctrl+Shift+D** → direct drawing tool
 
-Çizim modunda:
+In drawing mode:
 
-| Tuş | İşlev |
-|-----|-------|
-| Sol tık | Nokta koy / şekli başlat-bitir |
-| Enter | POLY şeklini kapat ve uygula |
-| Backspace | Son POLY noktasını sil |
+| Key | Function |
+|-----|-----------|
+| Left click | Place point / start-finish shape |
+| Enter | Close the POLY shape and apply |
+| Backspace | Delete the last POLY point |
 | Q / W / E | Shape: Box / Circle / Polygon |
 | 1 / 2 / 3 / 4 | Mode: Cut / Slice / Make / Face |
-| ← / → | Çizim düzlemi: VIEW / X / Y / Z |
-| X | Dünya-ölçekli grid snap aç/kapat |
-| V | Vertex/edge snap aç/kapat |
-| Shift (basılı) | Çizim yönünü açı kademesine kilitle |
-| N | Non-destructive (canlı modifier) aç/kapat |
-| Sağ tık / Esc | İptal |
+| ← / → | Drawing plane: VIEW / X / Y / Z |
+| X | Toggle world-scale grid snap |
+| V | Toggle vertex/edge snap |
+| Shift (held) | Lock drawing direction to angle steps |
+| N | Toggle non-destructive (live modifier) |
+| Right click / Esc | Cancel |
 
-**Mode'lar:** Cut = boolean DIFFERENCE · Slice = nesneyi ikiye böl · Make =
-geometri ekle (UNION) · Face = çizilen şekilden yüzey oluştur (boolean değil).
+**Modes:** Cut = boolean DIFFERENCE · Slice = split the object in two · Make =
+add geometry (UNION) · Face = create a surface from the drawn shape (not a
+boolean).
 
-**Diğer araçlar:** Bevel · Mirror · **Clean** (mesh temizliği) · **Pipe**
-(çizgiden boru) · **Kesicileri Uygula** — hepsi N-panel ve pie menüde.
+**Other tools:** Bevel · Mirror · **Clean** (mesh cleanup) · **Pipe** (pipe from
+a line) · **Apply Cutters** — all in the N-panel and the pie menu.
 
-**Snap imleç renkleri:** 🟡 köşe · 🟢 kenar ortası · 🔵 kenar üzeri.
+**Snap cursor colors:** 🟡 corner · 🟢 edge midpoint · 🔵 on edge.
 
-## Mimari
+## Architecture
 
 ```
 hardflow/
-├── blender_manifest.toml   # uzantı kimliği (4.2+)
-├── __init__.py             # kayıt orkestrasyonu + keymap
-├── preferences.py          # ayarlar + get_prefs() erişimcisi
-├── core/                   # saf mantık (UI'dan bağımsız, test edilebilir)
-│   ├── raycast.py          # ekran <-> 3D projeksiyon, düzlem (u,v)
-│   ├── grid.py             # dünya-ölçekli + açı snap, şekil noktaları
-│   ├── snap.py             # vertex/edge geometri snap (saf 2D)
-│   ├── geometry.py         # bmesh ile kesici hacim üretimi
+├── blender_manifest.toml   # extension identity (4.2+)
+├── __init__.py             # registration orchestration + keymap
+├── preferences.py          # settings + get_prefs() accessor
+├── core/                   # pure logic (UI-independent, testable)
+│   ├── raycast.py          # screen <-> 3D projection, plane (u,v)
+│   ├── grid.py             # world-scale + angle snap, shape points
+│   ├── snap.py             # vertex/edge geometry snap (pure 2D)
+│   ├── geometry.py         # cutter volume generation via bmesh
 │   └── boolean.py          # destructive + non-destructive boolean
-├── operators/              # kullanıcı eylemleri
-│   ├── draw_cut.py         # ana modal çizim operatörü (cut/slice/make/face)
-│   ├── modifiers.py        # akıllı bevel + mirror + clean
-│   ├── cutters.py          # non-destructive kesici yönetimi (uygula/seç/sil)
-│   └── pipe.py             # çizgiden boru üretimi
-├── ui/                     # GPU çizim, HUD, menüler
-│   ├── draw.py             # gpu + blf yardımcıları
-│   ├── pie.py              # Hard Ops tarzı pie menu
-│   └── panel.py            # N-panel: araçlar, ayarlar, kesici listesi
-└── tests/                  # testler
-    ├── test_core.py        # saf çekirdek, Blender'sız (python tests/test_core.py)
+├── operators/              # user actions
+│   ├── draw_cut.py         # main modal drawing operator (cut/slice/make/face)
+│   ├── modifiers.py        # smart bevel + mirror + clean
+│   ├── cutters.py          # non-destructive cutter management (apply/select/remove)
+│   └── pipe.py             # pipe generation from a line
+├── ui/                     # GPU drawing, HUD, menus
+│   ├── draw.py             # gpu + blf helpers
+│   ├── pie.py              # Hard Ops style pie menu
+│   └── panel.py            # N-panel: tools, settings, cutter list
+└── tests/                  # tests
+    ├── test_core.py        # pure core, without Blender (python tests/test_core.py)
     └── test_blender.py     # headless (blender --background --python ...)
 ```
 
-`core/grid.py` ve `core/snap.py` bilinçli olarak `bpy`'siz tutulur; bu yüzden
-matematik katmanı normal CPython ile (`python tests/test_core.py`) test edilir.
+`core/grid.py` and `core/snap.py` are deliberately kept free of `bpy`, so the
+math layer is tested with plain CPython (`python tests/test_core.py`).
 
-Katman kuralı: `ui` ve `operators` → `core`'a bağımlı olabilir; `core` hiçbir
-zaman `ui`'a bağımlı **olmaz**. Yeni bir özellik genelde core'a saf bir
-fonksiyon + onu çağıran ince bir operator eklemek demektir.
+Layering rule: `ui` and `operators` → may depend on `core`; `core` **never**
+depends on `ui`. A new feature usually means adding a pure function to core plus
+a thin operator that calls it.
 
-## Lisans
+## License
 
-GPLv3. `bpy` ile dağıtılan tüm Blender eklentileri pratikte GPL'dir; bu proje
-de öyle. Tam lisans metni için LICENSE dosyasına bak.
+GPLv3. Every Blender addon distributed with `bpy` is effectively GPL in
+practice, and this project is no exception. See the LICENSE file for the full
+license text.

@@ -1,8 +1,8 @@
-# Boru/profil cizim operatoru: bir cizgi ciz, yuvarlak kesitli boruya cevir.
-# Grid Modeler "pipes" akisinin sade hali.
+# Pipe/profile draw operator: draw a line, convert to a round-section pipe.
+# A simplified version of the Grid Modeler "pipes" flow.
 #
-# Kisayollar (modal): sol tik nokta, Enter olustur, Backspace geri al,
-#                     sag tik / Esc iptal, orta tik / tekerlek navigasyon.
+# Shortcuts (modal): left click point, Enter create, Backspace undo,
+#                    right click / Esc cancel, middle click / wheel navigation.
 import bpy
 from bpy.types import Operator
 
@@ -14,7 +14,7 @@ from ..ui import draw as hud
 class HARDFLOW_OT_pipe(Operator):
     bl_idname = "mesh.hardflow_pipe"
     bl_label = "Hardflow Pipe"
-    bl_description = "Bir çizgi çiz, yuvarlak kesitli boruya çevir"
+    bl_description = "Draw a line, convert it to a round-section pipe"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -23,16 +23,16 @@ class HARDFLOW_OT_pipe(Operator):
 
     def invoke(self, context, event):
         if context.area is None or context.area.type != 'VIEW_3D':
-            self.report({'WARNING'}, "View3D icinde calistir")
+            self.report({'WARNING'}, "Run inside View3D")
             return {'CANCELLED'}
-        # Duzlemi invoke aninda sabitle (kullanici orbit etse de tutarli kalsin).
+        # Fix the plane at invoke time (stays consistent even if the user orbits).
         rv3d = context.region_data
         obj = context.active_object
         self._origin = (obj.matrix_world.translation if obj is not None
                         else context.scene.cursor.location.copy())
         self._normal = raycast.view_direction(rv3d)
-        self._pts = []            # onaylanmis 3D noktalar
-        self._cursor3d = None     # anlik 3D nokta
+        self._pts = []            # confirmed 3D points
+        self._cursor3d = None     # current 3D point
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
@@ -89,8 +89,8 @@ class HARDFLOW_OT_pipe(Operator):
         hud.draw_points([s for s in self._screen_points(context)][:len(self._pts)],
                         tuple(prefs.line_color))
         hud.draw_hud(context.region, [
-            "Pipe — sol tık nokta · Enter oluştur · Backspace geri · Esc iptal",
-            "Yarıçap: %.3f m (tercihlerden ayarla)" % prefs.pipe_radius,
+            "Pipe — left click point · Enter create · Backspace undo · Esc cancel",
+            "Radius: %.3f m (set in preferences)" % prefs.pipe_radius,
         ])
 
     def _commit(self, context):
