@@ -21,7 +21,7 @@ if _PARENT not in sys.path:
 
 _PKG = os.path.basename(_REPO)            # usually "hardflow"
 hardflow = __import__(_PKG)
-from hardflow.core import geometry, boolean   # noqa: E402
+from hardflow.core import geometry, boolean, decal   # noqa: E402
 
 
 def _reset():
@@ -180,6 +180,113 @@ def test_multi_object_difference():
     boolean.apply_boolean(bpy.context, t2, cutter2, 'DIFFERENCE', 'EXACT')
     assert len(t1.data.polygons) != b1
     assert len(t2.data.polygons) != b2
+
+
+def test_decal_mesh_and_material():
+    _reset()
+    me = decal.build_decal_mesh(0.2, 0.3)
+    assert me is not None
+    assert len(me.vertices) == 4 and len(me.polygons) == 1
+    assert me.uv_layers, "decal mesh has no UV map"
+    for type_id, _label, _desc in decal.DECAL_TYPES:
+        mat = decal.decal_material(type_id)
+        assert mat is not None and mat.use_nodes
+        # v0.8: each material instances the shared PBR node group, wired to output
+        grp = next((n for n in mat.node_tree.nodes
+                    if n.type == 'GROUP'
+                    and n.node_tree and n.node_tree.name == decal.DECAL_NODE_GROUP),
+                   None)
+        assert grp is not None, "material does not use HF_DecalShader group"
+        out = next((n for n in mat.node_tree.nodes
+                    if n.type == 'OUTPUT_MATERIAL'), None)
+        assert out is not None and out.inputs['Surface'].is_linked
+        for chan in ("Base Color", "AO", "Normal", "Emission Color", "Alpha"):
+            assert chan in grp.inputs, "missing decal channel: %s" % chan
+    # the node group itself is a shared singleton, not duplicated per material
+    assert decal._decal_node_group() is decal._decal_node_group()
+    # materials are cached/shared, not recreated
+    assert decal.decal_material('INFO') is decal.decal_material('INFO')
+
+
+def test_make_decal_sticks_to_surface():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    location = Vector((0.0, 0.0, 1.0))   # top face of the cube
+    normal = Vector((0.0, 0.0, 1.0))
+    tangent = Vector((1.0, 0.0, 0.0))
+    d = decal.make_decal(bpy.context, target, location, normal, tangent,
+                         width=0.3, height=0.3, decal_type='PANEL', offset=0.001)
+    assert d is not None
+    # shrinkwrap PROJECT adhesion
+    sw = next((m for m in d.modifiers if m.type == 'SHRINKWRAP'), None)
+    assert sw is not None and sw.wrap_method == 'PROJECT'
+    assert sw.target is target
+    # parented + collected + materialed
+    assert d.parent is target
+    coll = bpy.data.collections.get(decal.DECAL_COLLECTION)
+    assert coll is not None and d.name in coll.objects
+    assert len(d.data.materials) == 1
+    assert d.get("hf_decal_type") == 'PANEL'
+    # the decal plane faces along the surface normal (local +Z == world +Z here)
+    z_axis = d.matrix_world.to_3x3().col[2].normalized()
+    assert abs(z_axis.z - 1.0) < 1e-6, z_axis
+
+
+def test_decal_operators_registered():
+    _reset()
+    hardflow.register()
+    try:
+        assert hasattr(bpy.ops.object, "hardflow_place_decal")
+        assert hasattr(bpy.ops.object, "hardflow_select_decal")
+        assert hasattr(bpy.ops.object, "hardflow_remove_decal")
+        # select/remove are non-modal and safe to exec headless
+        target = _add_cube("Target", size=2.0)
+        d = decal.make_decal(bpy.context, target, Vector((0, 0, 1)),
+                             Vector((0, 0, 1)), Vector((1, 0, 0)))
+        name = d.name
+        bpy.ops.object.hardflow_remove_decal(name=name)
+        assert bpy.data.objects.get(name) is None, "decal not removed"
+    finally:
+        hardflow.unregister()
+
+
+def test_bake_helpers():
+    _reset()
+    # bake_image: square, Non-Color for data maps
+    norm = decal.bake_image("HF_T_Norm", 256, is_data=True)
+    assert norm.size[0] == 256 and norm.size[1] == 256
+    assert norm.colorspace_settings.name == 'Non-Color'
+    col = decal.bake_image("HF_T_Col", 128, is_data=False)
+    assert col.colorspace_settings.name == 'sRGB'
+    assert decal.bake_image("HF_T_Norm", 256) is norm   # reused, not duplicated
+
+    # ensure_material gives a node material; bake_image_node sets it active+sole
+    target = _add_cube("Target", size=2.0)
+    mat = decal.ensure_material(target)
+    assert mat.use_nodes and target.active_material is mat
+    node = decal.bake_image_node(mat, norm)
+    assert node.type == 'TEX_IMAGE' and node.image is norm
+    assert mat.node_tree.nodes.active is node
+    assert all((n.select == (n is node)) for n in mat.node_tree.nodes)
+    assert decal.bake_image_node(mat, norm) is node     # reused
+
+
+def test_bake_decal_guards():
+    _reset()
+    hardflow.register()
+    try:
+        assert hasattr(bpy.ops.object, "hardflow_bake_decal")
+        # a bmesh cube has no UV map; the bake must early-out before touching the
+        # render engine (so a missing unwrap is a clean rejection, not a crash)
+        target = _add_cube("Target", size=2.0)
+        assert not target.data.uv_layers
+        d = decal.make_decal(bpy.context, target, Vector((0, 0, 1)),
+                             Vector((0, 0, 1)), Vector((1, 0, 0)))
+        res = bpy.ops.object.hardflow_bake_decal(name=d.name)
+        assert res == {'CANCELLED'}, res
+        assert bpy.context.scene.render.engine != 'CYCLES'  # early-out, no switch
+    finally:
+        hardflow.unregister()
 
 
 def _run():

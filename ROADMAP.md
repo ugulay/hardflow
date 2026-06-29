@@ -82,24 +82,39 @@ but a **shrinkwrap + material** layer; they can progress independently of the
 existing cut core.
 
 ### v0.7 — Decal placement core
-- [ ] **Decal object** — a thin plane/mesh projected onto the surface; adheres to
-      the target via `SHRINKWRAP` (PROJECT) + `parent`, following the surface
-      curvature.
-- [ ] **Place on surface** — call the decal at the clicked point via
-      `core/raycast.py` ray_cast; align it to the normal + surface tangent,
-      rotate/scale with the mouse.
-- [ ] **Decal types** — Info (logo/text/warning), Panel (panel line/seam), Subset
-      (masked sub-material). Each type is a material template.
-- [ ] **Decal collection** — gather them under `Hardflow Decals`, hide/show (same
-      pattern as the cutter collection — see `core/boolean.py stash_cutter`).
+- [x] **Decal object** — a thin UV-mapped plane that adheres to the target via a
+      `SHRINKWRAP` (PROJECT, ABOVE_SURFACE) modifier + `parent`, following the
+      surface (`core/decal.py make_decal` / `add_shrinkwrap`).
+- [x] **Place on surface** — `HARDFLOW_OT_place_decal` (modal): raycasts the
+      surface under the cursor (`core/raycast.py ray_cast_surface`), aligns the
+      decal to the hit normal + a rollable tangent; wheel scales, `[`/`]` roll,
+      click places. Orientation math in `core/decal_math.py` (pure, tested).
+- [x] **Decal types** — Info (emissive accent), Panel (dark recessed), Subset
+      (masked patch); each is a reusable material template
+      (`core/decal.py decal_material`, `DECAL_TYPES`). Full PBR node groups in
+      v0.8.
+- [x] **Decal collection** — gathered under `Hardflow Decals`; N-panel "Decals"
+      section lists them with show/hide, select, delete (mirrors the cutter
+      collection). `ui/decal_panel.py`, `operators/decals.py`.
 
 ### v0.8 — Decal material and appearance
-- [ ] **PBR material setup** — normal + AO + curvature + emission channels,
-      blending into the surface with alpha (Eevee + Cycles compatible node
-      groups).
-- [ ] **Parallax decal** — fake depth via height/parallax (panel channels).
-- [ ] **Bake decal into mesh** — transfer the high-poly detail into the target's
-      normal map (destructive "apply"; an irreversible option).
+- [x] **PBR material setup** — a shared `HF_DecalShader` node group
+      (`core/decal.py _decal_node_group`) exposing base color / metallic /
+      roughness / AO / normal / emission / alpha channels wired into a Principled
+      BSDF, blending into the surface with alpha (Eevee + Cycles compatible).
+      Per-type materials instance the group and tune its inputs; v0.9's image
+      library plugs textures into the same sockets. Curvature-driven edge wear
+      lands with parallax below.
+- [x] **Parallax decal** — fake depth: the `HF_DecalShader` group gained Height +
+      Depth channels feeding a Bump node that recesses panel lines (Depth = bump
+      strength; PANEL preset enables it). No-op until a height map is plugged in
+      (v0.9). View-dependent parallax-occlusion UV offset is deferred to v0.9, as
+      it needs a UV-sampled height texture to act on.
+- [x] **Bake decal into mesh** — `HARDFLOW_OT_bake_decal` bakes the decal's
+      Normal or Combined detail into an image on the target via Cycles
+      selected-to-active (`core/decal.py bake_image`/`ensure_material`/
+      `bake_image_node`; `bake_size` preference; N-panel + per-decal button).
+      Requires the target to be UV-unwrapped.
 
 ### v0.9 — Library and performance
 - [ ] **Decal library** — load images/presets from disk, an icon grid in the

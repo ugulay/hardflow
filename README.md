@@ -27,6 +27,9 @@ Compatible with the Blender 4.2+ extension system.
 - **Advanced bevel** — interactive (drag = width, wheel = segments), with profile
   + angle limit + width-type + **Weighted Normal** (clean shading); mirror
   (bisect + clip). The Hard Ops spirit.
+- **Decals** — stick Info / Panel / Subset decals onto any surface; they adhere
+  via shrinkwrap and follow the target (the DECALmachine spirit). Wheel scales,
+  `[ ]` roll, click places; managed from the N-panel "Decals" section.
 - **Pie menu**, preferences panel, customizable snap settings.
 
 ## Installation
@@ -64,6 +67,9 @@ boolean).
 
 **Other tools:** Bevel · Mirror · **Clean** (mesh cleanup) · **Pipe** (pipe from
 a line) · **Apply Cutters** — all in the N-panel and the pie menu.
+
+**Decals:** N-panel "Decals" → Info / Panel / Subset. In the placement tool:
+wheel = scale, `[ ]` = roll, left click = place, Esc = cancel.
 
 **Snap cursor colors:** 🟡 corner · 🟢 edge midpoint · 🔵 on edge.
 

@@ -25,6 +25,7 @@ def _load(name):
 
 grid = _load("grid")
 snap = _load("snap")
+decal_math = _load("decal_math")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -132,6 +133,57 @@ def test_nearest_on_segments():
     # an edge with a None endpoint is skipped
     segs2 = [(None, (1, 1)), ((0, 0), (10, 0))]
     assert snap.nearest_on_segments((5, 3), segs2, 5)[0] == 1
+
+
+# --- decal_math: orientation basis -------------------------------------------
+
+def _is_unit(v):
+    return math.isclose(math.sqrt(sum(c * c for c in v)), 1.0, abs_tol=1e-9)
+
+
+def _dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+
+def test_orientation_basis_identity():
+    x, y, z = decal_math.orientation_basis((0, 0, 1), (1, 0, 0))
+    assert math.isclose(z[2], 1.0, abs_tol=1e-9)      # z follows the normal
+    assert math.isclose(y[0], 1.0, abs_tol=1e-9)      # tangent preserved as +y
+    assert _is_unit(x) and _is_unit(y) and _is_unit(z)
+
+
+def test_orientation_basis_orthonormal_and_right_handed():
+    # an arbitrary tilted normal with a tangent not on the surface
+    x, y, z = decal_math.orientation_basis((0.3, 0.4, 0.866), (1, 0, 0))
+    for v in (x, y, z):
+        assert _is_unit(v)
+    assert math.isclose(_dot(x, y), 0.0, abs_tol=1e-9)
+    assert math.isclose(_dot(y, z), 0.0, abs_tol=1e-9)
+    assert math.isclose(_dot(x, z), 0.0, abs_tol=1e-9)
+    # right-handed: x cross y == z
+    cx = decal_math._cross(x, y)
+    assert all(math.isclose(a, b, abs_tol=1e-9) for a, b in zip(cx, z))
+
+
+def test_orientation_basis_degenerate_tangent():
+    # tangent parallel to the normal -> falls back to a valid surface tangent
+    x, y, z = decal_math.orientation_basis((0, 0, 1), (0, 0, 1))
+    assert _is_unit(x) and _is_unit(y) and _is_unit(z)
+    assert math.isclose(_dot(x, z), 0.0, abs_tol=1e-9)
+
+
+def test_base_tangent_on_floor_falls_back():
+    # a horizontal surface (normal == world up) cannot use world up as tangent
+    t = decal_math.base_tangent((0, 0, 1))
+    assert _is_unit(t)
+    assert math.isclose(_dot(t, (0, 0, 1)), 0.0, abs_tol=1e-9)
+
+
+def test_rotate_about_axis_quarter_turn():
+    r = decal_math.rotate_about_axis((1, 0, 0), (0, 0, 1), math.pi / 2)
+    assert math.isclose(r[0], 0.0, abs_tol=1e-9)
+    assert math.isclose(r[1], 1.0, abs_tol=1e-9)
+    assert math.isclose(r[2], 0.0, abs_tol=1e-9)
 
 
 def _run_all():

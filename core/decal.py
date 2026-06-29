@@ -1,0 +1,289 @@
+# Decal logic (DECALmachine spirit): build a thin plane, orient it to a surface,
+# stick it down with a SHRINKWRAP (PROJECT) modifier + parent, assign a
+# type-specific material, and gather it in a "Hardflow Decals" collection.
+#
+# This module uses bpy.data / bmesh / mathutils but NEVER bpy.ops / gpu / blf,
+# keeping with the core layer rule. The pure orientation math lives in
+# core/decal_math.py so it can be tested without Blender.
+import bpy
+import bmesh
+from mathutils import Matrix, Vector
+
+from . import decal_math
+
+
+DECAL_COLLECTION = "Hardflow Decals"
+
+# (id, label, description) -- shared by the operator enum and the panel.
+DECAL_TYPES = (
+    ('INFO', "Info", "Logo / text / warning mark (emissive accent)"),
+    ('PANEL', "Panel", "Panel line / seam (dark recessed look)"),
+    ('SUBSET', "Subset", "Masked sub-material patch"),
+)
+
+
+def decal_collection(context):
+    """Get/create the collection that gathers decals (mirrors
+    core/boolean.py cutter_collection)."""
+    coll = bpy.data.collections.get(DECAL_COLLECTION)
+    if coll is None:
+        coll = bpy.data.collections.new(DECAL_COLLECTION)
+        context.scene.collection.children.link(coll)
+    return coll
+
+
+def build_decal_mesh(width, height, name="hf_decal"):
+    """A single UV-mapped quad centred on the local origin, lying in the local
+    XY plane (so local +Z is the decal's facing/projection axis)."""
+    hw, hh = width * 0.5, height * 0.5
+    bm = bmesh.new()
+    v00 = bm.verts.new((-hw, -hh, 0.0))
+    v10 = bm.verts.new((hw, -hh, 0.0))
+    v11 = bm.verts.new((hw, hh, 0.0))
+    v01 = bm.verts.new((-hw, hh, 0.0))
+    face = bm.faces.new((v00, v10, v11, v01))
+    uv = bm.loops.layers.uv.new("UVMap")
+    coords = {v00: (0.0, 0.0), v10: (1.0, 0.0), v11: (1.0, 1.0), v01: (0.0, 1.0)}
+    for loop in face.loops:
+        loop[uv].uv = coords[loop.vert]
+    bmesh.ops.recalc_face_normals(bm, faces=[face])
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def decal_matrix(location, normal, tangent, scale=1.0):
+    """Build a world matrix that places a decal at location, with local +Z along
+    the surface normal and local +Y along tangent (re-orthogonalized). Uses the
+    pure core basis."""
+    x, y, z = decal_math.orientation_basis(tuple(normal), tuple(tangent))
+    basis = Matrix((
+        (x[0] * scale, y[0] * scale, z[0] * scale, location[0]),
+        (x[1] * scale, y[1] * scale, z[1] * scale, location[1]),
+        (x[2] * scale, y[2] * scale, z[2] * scale, location[2]),
+        (0.0, 0.0, 0.0, 1.0),
+    ))
+    return basis
+
+
+def add_shrinkwrap(decal, target, offset=0.001):
+    """Stick the decal to the target surface: PROJECT the plane down its local
+    -Z onto the target, hovering just above the surface to avoid z-fighting."""
+    mod = decal.modifiers.new("HF_Shrinkwrap", 'SHRINKWRAP')
+    mod.wrap_method = 'PROJECT'
+    mod.wrap_mode = 'ABOVE_SURFACE'
+    mod.use_negative_direction = True
+    mod.use_positive_direction = False
+    mod.use_project_z = True
+    mod.target = target
+    mod.offset = offset
+    return mod
+
+
+DECAL_NODE_GROUP = "HF_DecalShader"
+
+# Per-type tuning of the shared node group's inputs. v0.9's image library will
+# plug textures into the same group sockets; here we just set flat defaults.
+_DECAL_PRESETS = {
+    'INFO': {"Base Color": (0.9, 0.9, 0.9, 1.0),
+             "Emission Color": (0.1, 0.8, 1.0, 1.0),
+             "Emission Strength": 1.5},
+    'PANEL': {"Base Color": (0.02, 0.02, 0.02, 1.0),
+              "Metallic": 0.8, "Roughness": 0.35, "Depth": 1.0},
+    'SUBSET': {"Base Color": (0.8, 0.25, 0.1, 1.0),
+               "Roughness": 0.5},
+}
+
+
+def _color_io(node):
+    """The RGBA input/output sockets of a node, found by socket type rather than
+    index. ShaderNodeMix exposes Float, Vector and Color variants of the same
+    A/B/Result names, so name- or index-based access is fragile; type is stable."""
+    ins = [s for s in node.inputs if s.type == 'RGBA']
+    out = next((s for s in node.outputs if s.type == 'RGBA'), None)
+    return ins, out
+
+
+def _link_if_present(links, source, node, input_name):
+    """Link source into node.inputs[input_name] only if it exists (Blender 4.0
+    renamed the Principled 'Emission' socket to 'Emission Color')."""
+    if input_name in node.inputs:
+        links.new(source, node.inputs[input_name])
+
+
+def _decal_node_group():
+    """Get/create the shared decal PBR shader node group. It exposes the standard
+    decal channels (base color, metallic, roughness, AO, normal, emission, alpha)
+    on a Group Input and wires them into a Principled BSDF, so per-type materials
+    -- and the v0.9 image library -- just feed one shared graph. Plain Principled
+    + a Mix node keeps it Eevee + Cycles compatible."""
+    ng = bpy.data.node_groups.get(DECAL_NODE_GROUP)
+    if ng is not None:
+        return ng
+
+    ng = bpy.data.node_groups.new(DECAL_NODE_GROUP, 'ShaderNodeTree')
+    iface = ng.interface
+
+    def _in(name, socket_type, default=None):
+        sock = iface.new_socket(name=name, in_out='INPUT', socket_type=socket_type)
+        if default is not None:
+            sock.default_value = default
+        return sock
+
+    _in("Base Color", 'NodeSocketColor', (0.8, 0.8, 0.8, 1.0))
+    _in("Metallic", 'NodeSocketFloat', 0.0)
+    _in("Roughness", 'NodeSocketFloat', 0.5)
+    _in("AO", 'NodeSocketFloat', 1.0)
+    _in("Normal", 'NodeSocketVector')
+    _in("Height", 'NodeSocketFloat', 0.0)
+    _in("Depth", 'NodeSocketFloat', 0.0)
+    _in("Emission Color", 'NodeSocketColor', (0.0, 0.0, 0.0, 1.0))
+    _in("Emission Strength", 'NodeSocketFloat', 0.0)
+    _in("Alpha", 'NodeSocketFloat', 1.0)
+    iface.new_socket(name="BSDF", in_out='OUTPUT', socket_type='NodeSocketShader')
+
+    nodes, links = ng.nodes, ng.links
+    g_in = nodes.new('NodeGroupInput')
+    g_in.location = (-600, 0)
+    g_out = nodes.new('NodeGroupOutput')
+    g_out.location = (300, 0)
+    bsdf = nodes.new('ShaderNodeBsdfPrincipled')
+    bsdf.location = (0, 0)
+
+    # AO * Base Color. A float AO auto-converts to greyscale on the color socket.
+    mix = nodes.new('ShaderNodeMix')
+    mix.data_type = 'RGBA'
+    mix.blend_type = 'MULTIPLY'
+    mix.location = (-300, 120)
+    mix.inputs[0].default_value = 1.0           # Factor (index 0) = full multiply
+    color_ins, color_out = _color_io(mix)
+    links.new(g_in.outputs["Base Color"], color_ins[0])
+    links.new(g_in.outputs["AO"], color_ins[1])
+
+    links.new(color_out, bsdf.inputs["Base Color"])
+    links.new(g_in.outputs["Metallic"], bsdf.inputs["Metallic"])
+    links.new(g_in.outputs["Roughness"], bsdf.inputs["Roughness"])
+    links.new(g_in.outputs["Alpha"], bsdf.inputs["Alpha"])
+
+    # Fake depth (v0.8 "parallax"): a Height channel drives a Bump node that
+    # perturbs the normal, recessing panel lines. Depth = bump strength; with the
+    # default Depth=0 (or a flat Height) the bump passes the base normal through,
+    # so this is a no-op until a height map is plugged in (v0.9 image library).
+    # View-dependent parallax-occlusion UV offset also lands there (needs a UV-
+    # sampled height texture to act on).
+    bump = nodes.new('ShaderNodeBump')
+    bump.location = (-300, -220)
+    links.new(g_in.outputs["Height"], bump.inputs["Height"])
+    links.new(g_in.outputs["Depth"], bump.inputs["Strength"])
+    links.new(g_in.outputs["Normal"], bump.inputs["Normal"])
+    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    _link_if_present(links, g_in.outputs["Emission Color"], bsdf, "Emission Color")
+    _link_if_present(links, g_in.outputs["Emission Strength"], bsdf,
+                     "Emission Strength")
+    links.new(bsdf.outputs["BSDF"], g_out.inputs["BSDF"])
+    return ng
+
+
+def decal_material(decal_type):
+    """Get/create a shared material template per decal type. Each material
+    instances the shared HF_DecalShader node group (v0.8 PBR graph) and tunes its
+    inputs, so the graph reads well in both Eevee and Cycles. v0.9 will plug image
+    textures into the very same group sockets."""
+    name = "HF_Decal_%s" % decal_type.capitalize()
+    mat = bpy.data.materials.get(name)
+    if mat is not None:
+        return mat
+
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    # Alpha blending: EEVEE Next (Blender 4.2+) replaced `blend_method` with
+    # `surface_render_method`; the legacy attribute was removed. Set whichever
+    # the running build exposes.
+    if hasattr(mat, "surface_render_method"):
+        mat.surface_render_method = 'BLENDED'
+    elif hasattr(mat, "blend_method"):
+        mat.blend_method = 'BLEND'
+
+    tree = mat.node_tree
+    # Replace the stock Principled BSDF with our shared decal node group.
+    out = next((n for n in tree.nodes if n.type == 'OUTPUT_MATERIAL'), None)
+    for node in list(tree.nodes):
+        if node.type == 'BSDF_PRINCIPLED':
+            tree.nodes.remove(node)
+    if out is None:
+        out = tree.nodes.new('ShaderNodeOutputMaterial')
+    out.location = (300, 0)
+
+    group = tree.nodes.new('ShaderNodeGroup')
+    group.node_tree = _decal_node_group()
+    group.location = (0, 0)
+    tree.links.new(group.outputs["BSDF"], out.inputs["Surface"])
+
+    for key, value in _DECAL_PRESETS.get(decal_type, {}).items():
+        if key in group.inputs:
+            group.inputs[key].default_value = value
+    return mat
+
+
+def ensure_material(obj, name_hint="HF_Baked"):
+    """Return obj's active node-based material, creating one if it has none. The
+    bake target needs a material to host the destination image node."""
+    mat = obj.active_material
+    if mat is None:
+        mat = bpy.data.materials.new("%s_%s" % (name_hint, obj.name))
+        mat.use_nodes = True
+        obj.data.materials.append(mat)
+    elif not mat.use_nodes:
+        mat.use_nodes = True
+    return mat
+
+
+def bake_image(name, size, is_data=False):
+    """Get/create a square image to bake into. Normal/data maps use the Non-Color
+    space so values are not gamma-twisted."""
+    img = bpy.data.images.get(name)
+    if img is None:
+        img = bpy.data.images.new(name, width=size, height=size, alpha=False)
+    img.colorspace_settings.name = 'Non-Color' if is_data else 'sRGB'
+    return img
+
+
+def bake_image_node(material, image):
+    """Add (or reuse) an Image Texture node holding image and make it the sole
+    active+selected node of the material -- Cycles writes the bake there."""
+    tree = material.node_tree
+    node = next((n for n in tree.nodes
+                 if n.type == 'TEX_IMAGE' and n.image is image), None)
+    if node is None:
+        node = tree.nodes.new('ShaderNodeTexImage')
+        node.image = image
+        node.location = (-500, -350)
+    tree.nodes.active = node
+    for other in tree.nodes:
+        other.select = (other is node)
+    return node
+
+
+def make_decal(context, target, location, normal, tangent,
+               width=0.2, height=0.2, decal_type='INFO', offset=0.001):
+    """Create a decal object on the target surface and return it. Orientation,
+    shrinkwrap adhesion, parenting, material, and collection are all set up
+    here. The caller supplies the surface hit (location, normal) and a tangent
+    (roll direction)."""
+    mesh = build_decal_mesh(width, height)
+    decal = bpy.data.objects.new("Hardflow_Decal", mesh)
+    decal.matrix_world = decal_matrix(location, normal, tangent)
+
+    decal_collection(context).objects.link(decal)
+    decal.data.materials.append(decal_material(decal_type))
+    add_shrinkwrap(decal, target, offset=offset)
+
+    # follow the target when it moves, keeping the placed world pose
+    decal.parent = target
+    decal.matrix_parent_inverse = target.matrix_world.inverted()
+
+    decal.show_wire = False
+    decal.hide_render = False
+    decal["hf_decal_type"] = decal_type
+    return decal

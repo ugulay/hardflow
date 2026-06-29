@@ -52,3 +52,18 @@ def world_to_screen(region, rv3d, point):
     """Project a 3D world point onto a 2D screen (region) coordinate.
     Returns None if the point is behind the camera."""
     return view3d_utils.location_3d_to_region_2d(region, rv3d, point)
+
+
+def ray_cast_surface(context, region, rv3d, coord):
+    """Shoot the mouse ray into the scene and return the first surface hit as
+    (location, normal, object) in world space, or None if nothing is hit. Used
+    by decal placement to stick a decal onto whatever is under the cursor."""
+    co = Vector((coord[0], coord[1]))
+    direction = view3d_utils.region_2d_to_vector_3d(region, rv3d, co)
+    origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, co)
+    depsgraph = context.evaluated_depsgraph_get()
+    hit, location, normal, _index, obj, _matrix = context.scene.ray_cast(
+        depsgraph, origin, direction)
+    if not hit:
+        return None
+    return location, normal, obj

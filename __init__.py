@@ -3,8 +3,8 @@
 import bpy
 
 from . import preferences, keymaps
-from .operators import draw_cut, modifiers, cutters, pipe
-from .ui import pie, panel
+from .operators import draw_cut, modifiers, cutters, pipe, decals
+from .ui import pie, panel, decal_panel
 
 # Registration order doesn't matter, but keep it tidy:
 _classes = (
@@ -17,10 +17,15 @@ _classes = (
     cutters.HARDFLOW_OT_apply_cutters,
     cutters.HARDFLOW_OT_select_cutter,
     cutters.HARDFLOW_OT_remove_cutter,
+    decals.HARDFLOW_OT_place_decal,
+    decals.HARDFLOW_OT_select_decal,
+    decals.HARDFLOW_OT_remove_decal,
+    decals.HARDFLOW_OT_bake_decal,
     pie.HARDFLOW_MT_pie,
     panel.HARDFLOW_PT_tools,
     panel.HARDFLOW_PT_snap,
     panel.HARDFLOW_PT_cutters,
+    decal_panel.HARDFLOW_PT_decals,
 )
 
 def register():

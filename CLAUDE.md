@@ -49,18 +49,22 @@ ops ─┘
 | `__init__.py` | Registration orchestration, the `_classes` tuple |
 | `keymaps.py` | Shortcut registration + preferences rebind UI (`register_keymaps`, `draw_keymap_prefs`); defaults Alt+Q / Ctrl+Shift+D |
 | `preferences.py` | Settings + the `get_prefs(context)` accessor |
-| `core/raycast.py` | Screen↔3D projection + plane (u,v) (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`) |
+| `core/raycast.py` | Screen↔3D projection + plane (u,v) + surface ray (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`, `ray_cast_surface`) |
 | `core/grid.py` | World-scale + angle snap, shape points (`snap_world`, `world_grid_segments`, `snap_angle`, `box_points`, `circle_points`, `ngon_points`) |
 | `core/snap.py` | Vertex/edge geometry snap, pure 2D (`nearest_point`, `closest_point_on_segment`, `nearest_on_segments`) |
 | `core/geometry.py` | bmesh generation (`build_prism`, `build_face`, `build_pipe`, `estimate_thickness`, `cleanup_mesh`) |
 | `core/boolean.py` | boolean + cutter management (`apply_boolean`, `add_boolean`, `duplicate_object`, `stash_cutter`, `cutter_collection`) |
+| `core/decal_math.py` | Pure decal orientation math, no bpy/mathutils (`orientation_basis`, `base_tangent`, `rotate_about_axis`) |
+| `core/decal.py` | Decal build/stick/material (`make_decal`, `build_decal_mesh`, `decal_matrix`, `add_shrinkwrap`, `decal_material` + shared PBR node group `_decal_node_group`/`HF_DecalShader` with base/metallic/roughness/AO/normal/height+depth/emission/alpha, bake helpers `bake_image`/`ensure_material`/`bake_image_node`, `decal_collection`, `DECAL_TYPES`) |
 | `operators/draw_cut.py` | Main modal drawing operator (`HARDFLOW_OT_draw`): cut/slice/make/face, plane rotation, measurement HUD |
 | `operators/modifiers.py` | Bevel + mirror + clean (`HARDFLOW_OT_bevel/mirror/clean`) |
 | `operators/cutters.py` | Non-destructive cutter management (`HARDFLOW_OT_apply_cutters/select_cutter/remove_cutter`) |
 | `operators/pipe.py` | Pipe from a line (`HARDFLOW_OT_pipe`) |
+| `operators/decals.py` | Decal placement + management + bake (`HARDFLOW_OT_place_decal/select_decal/remove_decal/bake_decal`) |
 | `ui/draw.py` | GPU + blf helpers |
 | `ui/pie.py` | Pie menu (`HARDFLOW_MT_pie`) |
 | `ui/panel.py` | N-panel: tools, snap settings, cutter list (`HARDFLOW_PT_*`) |
+| `ui/decal_panel.py` | N-panel "Decals" section: place by type + decal list (`HARDFLOW_PT_decals`) |
 | `tests/test_core.py` | Pure core tests without Blender (`python tests/test_core.py`) |
 
 ## Registration rule

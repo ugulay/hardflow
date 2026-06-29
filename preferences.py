@@ -59,6 +59,23 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "with [ and ] while drawing",
         default=6, min=3, max=64,
     )
+    decal_size: FloatProperty(
+        name="Decal Size (m)",
+        description="Default size of a placed decal; adjust live with the wheel",
+        default=0.2, min=0.001, soft_max=5.0,
+    )
+    decal_offset: FloatProperty(
+        name="Decal Offset (m)",
+        description="How far the decal hovers above the surface (avoids "
+                    "z-fighting); shrinkwrap ABOVE_SURFACE distance",
+        default=0.001, min=0.0, soft_max=0.1,
+    )
+    bake_size: IntProperty(
+        name="Bake Resolution",
+        description="Resolution (px) of the image when baking a decal into the "
+                    "target's texture map",
+        default=1024, min=64, max=8192,
+    )
     non_destructive: BoolProperty(
         name="Non-Destructive",
         description="Leave a live modifier instead of applying the boolean; stash "
@@ -108,6 +125,9 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "angle_step")
         col.prop(self, "ngon_sides")
         col.prop(self, "pipe_radius")
+        col.prop(self, "decal_size")
+        col.prop(self, "decal_offset")
+        col.prop(self, "bake_size")
         col.prop(self, "non_destructive")
         col.prop(self, "multi_object")
         col.prop(self, "cleanup_after_cut")
