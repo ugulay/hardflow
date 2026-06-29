@@ -23,3 +23,5 @@ class HARDFLOW_MT_pie(Menu):
         circle = pie.operator("mesh.hardflow_draw", text="Circle Cut", icon='MESH_CIRCLE')
         circle.shape = 'CIRCLE'
         circle.mode = 'CUT'
+        pie.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
+        pie.operator("object.hardflow_clean", text="Clean", icon='BRUSH_DATA')

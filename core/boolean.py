@@ -30,3 +30,29 @@ def duplicate_object(context, obj, name_suffix="_slice"):
     new.name = obj.name + name_suffix
     context.collection.objects.link(new)
     return new
+
+
+CUTTER_COLLECTION = "Hardflow Cutters"
+
+
+def cutter_collection(context):
+    """Non-destructive kesicileri toplayan koleksiyonu getir/olustur."""
+    coll = bpy.data.collections.get(CUTTER_COLLECTION)
+    if coll is None:
+        coll = bpy.data.collections.new(CUTTER_COLLECTION)
+        context.scene.collection.children.link(coll)
+    return coll
+
+
+def stash_cutter(context, cutter, target):
+    """Kesiciyi ayri koleksiyona tasi, wire goster, hedefe parentla.
+    Boolean modifier hedefte canli kaldigindan kesici sahnede saklanir
+    (BoxCutter tarzi non-destructive akis)."""
+    for c in list(cutter.users_collection):
+        c.objects.unlink(cutter)
+    cutter_collection(context).objects.link(cutter)
+    cutter.display_type = 'WIRE'
+    cutter.hide_render = True
+    # Hedef tasininca/donunce kesici de onunla gelsin; dunya pozu sabit kalsin.
+    cutter.parent = target
+    cutter.matrix_parent_inverse = target.matrix_world.inverted()

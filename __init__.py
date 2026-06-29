@@ -3,8 +3,8 @@
 import bpy
 
 from . import preferences
-from .operators import draw_cut, modifiers
-from .ui import pie
+from .operators import draw_cut, modifiers, cutters, pipe
+from .ui import pie, panel
 
 # Kayit sirasi onemli degil ama duzenli olsun:
 _classes = (
@@ -12,7 +12,15 @@ _classes = (
     draw_cut.HARDFLOW_OT_draw,
     modifiers.HARDFLOW_OT_bevel,
     modifiers.HARDFLOW_OT_mirror,
+    modifiers.HARDFLOW_OT_clean,
+    pipe.HARDFLOW_OT_pipe,
+    cutters.HARDFLOW_OT_apply_cutters,
+    cutters.HARDFLOW_OT_select_cutter,
+    cutters.HARDFLOW_OT_remove_cutter,
     pie.HARDFLOW_MT_pie,
+    panel.HARDFLOW_PT_tools,
+    panel.HARDFLOW_PT_snap,
+    panel.HARDFLOW_PT_cutters,
 )
 
 _addon_keymaps = []
@@ -25,9 +33,9 @@ def _register_keymaps():
         return
     km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
 
-    # Pie menu -> Alt+D
+    # Pie menu -> Alt+Q  (Alt+D Object Mode'da Duplicate Linked ile cakisir)
     kmi = km.keymap_items.new(
-        'wm.call_menu_pie', 'D', 'PRESS', alt=True)
+        'wm.call_menu_pie', 'Q', 'PRESS', alt=True)
     kmi.properties.name = pie.HARDFLOW_MT_pie.__name__
     _addon_keymaps.append((km, kmi))
 

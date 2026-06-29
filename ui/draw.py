@@ -11,7 +11,10 @@ def _draw_lines(points, color, primitive='LINE_STRIP', width=2.0):
         return
     gpu.state.blend_set('ALPHA')
     gpu.state.line_width_set(width)
-    batch = batch_for_shader(_shader, primitive, {"pos": points})
+    # UNIFORM_COLOR shader'i pos icin vec3 bekler (2D_UNIFORM_COLOR kaldirildi);
+    # ekran-uzayi 2D noktalari z=0 ile 3D'ye tasi.
+    coords = [(p[0], p[1], 0.0) for p in points]
+    batch = batch_for_shader(_shader, primitive, {"pos": coords})
     _shader.bind()
     _shader.uniform_float("color", color)
     batch.draw(_shader)
@@ -38,7 +41,8 @@ def draw_points(points, color, size=6.0):
         return
     gpu.state.blend_set('ALPHA')
     gpu.state.point_size_set(size)
-    batch = batch_for_shader(_shader, 'POINTS', {"pos": list(points)})
+    coords = [(p[0], p[1], 0.0) for p in points]
+    batch = batch_for_shader(_shader, 'POINTS', {"pos": coords})
     _shader.bind()
     _shader.uniform_float("color", color)
     batch.draw(_shader)

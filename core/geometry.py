@@ -42,3 +42,57 @@ def estimate_thickness(obj, factor=2.0, minimum=1.0):
     """Kesicinin nesneyi delip gecmesi icin yeterli kalinlik."""
     d = obj.dimensions
     return max(d.x, d.y, d.z, minimum) * factor
+
+
+def build_face(corners, name="hf_face"):
+    """Bir duzlem uzerindeki kose listesinden tek bir n-gen yuzey uretir
+    (boolean degil; Grid Modeler 'create face'). En az 3 nokta."""
+    bm = bmesh.new()
+    verts = [bm.verts.new(co) for co in corners]
+    try:
+        bm.faces.new(verts)
+    except ValueError:        # tekrar eden kose / gecersiz
+        bm.free()
+        return None
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
+    """3D nokta listesinden, yuvarlak kesitli boru curve'u uretir (Grid Modeler
+    'pipes'). En az 2 nokta. Curve data dondurur; cagiran nesneye baglar."""
+    if len(points) < 2:
+        return None
+    curve = bpy.data.curves.new(name, 'CURVE')
+    curve.dimensions = '3D'
+    spline = curve.splines.new('POLY')
+    spline.points.add(len(points) - 1)   # zaten 1 nokta var
+    for i, p in enumerate(points):
+        spline.points[i].co = (p[0], p[1], p[2], 1.0)
+    curve.bevel_depth = radius
+    curve.bevel_resolution = bevel_res
+    curve.use_fill_caps = True
+    return curve
+
+
+def cleanup_mesh(obj, merge_dist=1e-4, dissolve_angle=0.0873, remove_loose=True):
+    """Boolean/bevel sonrasi mesh temizligi: kaynak (remove doubles) + sinirli
+    cozme (coplanar yuzleri birlestir) + başıboş geometri sil. Object Mode.
+    dissolve_angle radyan (varsayilan ~5 derece); 0 ise cozme atlanir."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.remove_doubles(bm, verts=list(bm.verts), dist=merge_dist)
+    if dissolve_angle > 0.0:
+        bmesh.ops.dissolve_limited(
+            bm, angle_limit=dissolve_angle,
+            verts=list(bm.verts), edges=list(bm.edges))
+    if remove_loose:
+        loose = [v for v in bm.verts if not v.link_faces]
+        if loose:
+            bmesh.ops.delete(bm, geom=loose, context='VERTS')
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()

@@ -4,10 +4,10 @@ id = "hardflow"
 version = "0.1.0"
 name = "Hardflow"
 tagline = "Open source hard surface boolean modeling toolkit"
-maintainer = "Ugur Gulay <you@example.com>"
+maintainer = "Ugur Gulay <ugurgulay@gmail.com>"
 type = "add-on"
 
-website = "https://github.com/USERNAME/hardflow"
+website = "https://github.com/ugulay/hardflow"
 
 blender_version_min = "4.2.0"
 license = ["SPDX:GPL-3.0-or-later"]

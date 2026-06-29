@@ -14,6 +14,26 @@ ln -s "$(pwd)/hardflow" \
 Blender içinde tekrar yüklemek için: System Console açıkken
 `F3 > Reload Scripts` ya da eklentiyi kapat/aç.
 
+## Test
+
+`core/grid.py` ve `core/snap.py` bilinçli olarak `bpy`'siz tutulur; bu yüzden
+matematik katmanı Blender olmadan normal CPython ile koşulabilir:
+
+```bash
+python tests/test_core.py     # bağımsız çalışır, pytest gerekmez
+```
+
+`bpy`'ye bağlı çekirdek (geometry/boolean + bevel/mirror operatörleri) için
+headless Blender smoke testi:
+
+```bash
+blender --background --python tests/test_blender.py
+```
+
+Yeni saf çekirdek fonksiyonu eklediğinde `tests/test_core.py`'a, `bpy`'ye bağlı
+bir yapı taşı eklediğinde `tests/test_blender.py`'a test ekle. Modal çizim
+operatörü (pencere/region gerektirir) elde, canlı Blender'da doğrulanır.
+
 ## Mimari kuralları
 
 1. **Katman yönü tek yönlü:** `ui` ve `operators` → `core`. `core` asla yukarı
