@@ -1,0 +1,81 @@
+name: release
+
+# Build the extension zip and publish a GitHub Release whenever a v* tag is
+# pushed (e.g. `git tag -a v1.2.0 -m ...` && `git push origin v1.2.0`).
+# Free on public repos. The zip is laid out with blender_manifest.toml at the
+# archive root, which is what Blender 4.2+ "Install from Disk" expects.
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Lets you publish a release for a tag that was pushed before this workflow
+  # existed: Actions tab -> release -> Run workflow -> pick the tag (e.g. v1.2.0).
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # required to create the release + upload assets
+
+jobs:
+  release:
+    name: Build zip & publish release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Sanity-check manifest version matches tag
+        run: |
+          manifest_ver=$(grep -E '^version' blender_manifest.toml | head -1 \
+            | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "tag=${{ steps.ver.outputs.version }}  manifest=$manifest_ver"
+          if [ "$manifest_ver" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::blender_manifest.toml version ($manifest_ver) does not match tag (${{ steps.ver.outputs.version }})"
+            exit 1
+          fi
+
+      - name: Stage add-on files
+        run: |
+          stage="hardflow-${{ steps.ver.outputs.version }}"
+          mkdir "$stage"
+          rsync -a ./ "$stage/" \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'tests' \
+            --exclude 'docs' \
+            --exclude '*.md' \
+            --exclude '__pycache__' \
+            --exclude '.gitignore' \
+            --exclude '.gitattributes' \
+            --exclude "$stage"
+          echo "Staged files:"; find "$stage" -type f | sort
+
+      - name: Zip (manifest at archive root)
+        run: |
+          stage="hardflow-${{ steps.ver.outputs.version }}"
+          ( cd "$stage" && zip -r "../$stage.zip" . -x '*/__pycache__/*' )
+          ls -la "$stage.zip"
+
+      - name: Extract changelog section
+        run: |
+          ver="${{ steps.ver.outputs.version }}"
+          awk -v ver="$ver" '
+            index($0, "## [" ver "]") == 1 { flag=1; next }
+            flag && index($0, "## [") == 1 { exit }
+            flag { print }
+          ' CHANGELOG.md > RELEASE_BODY.md
+          if [ ! -s RELEASE_BODY.md ]; then
+            echo "Hardflow $ver" > RELEASE_BODY.md
+          fi
+          echo "--- release body ---"; cat RELEASE_BODY.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Hardflow ${{ github.ref_name }}
+          body_path: RELEASE_BODY.md
+          files: hardflow-${{ steps.ver.outputs.version }}.zip
+          fail_on_unmatched_files: true
