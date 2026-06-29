@@ -89,16 +89,64 @@ def closest_axis_distance(region, rv3d, coord, axis_co, axis_dir):
     return (b * f - c * e) / denom
 
 
-def ray_cast_surface(context, region, rv3d, coord):
-    """Shoot the mouse ray into the scene and return the first surface hit as
-    (location, normal, object) in world space, or None if nothing is hit. Used
-    by decal placement to stick a decal onto whatever is under the cursor."""
+def ray_cast_surface_ex(context, region, rv3d, coord, ignore=None):
+    """Shoot the mouse ray into the scene and return the first non-ignored hit as
+    (location, normal, object, face_index, matrix_world) in world space, or None
+    if nothing is hit. The extended form also gives the hit face index + the
+    object's world matrix, for callers that need the face's geometry (e.g. an
+    edge-aligned construction tangent).
+
+    `ignore` is an optional set/list of objects to skip -- crucially the live
+    placement preview itself, which otherwise sits under the cursor and steals the
+    hit. The ray is restarted just past each ignored hit until it reaches a real
+    surface."""
     co = Vector((coord[0], coord[1]))
     direction = view3d_utils.region_2d_to_vector_3d(region, rv3d, co)
     origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, co)
     depsgraph = context.evaluated_depsgraph_get()
-    hit, location, normal, _index, obj, _matrix = context.scene.ray_cast(
-        depsgraph, origin, direction)
-    if not hit:
+    ignore = set(ignore or ())
+    for _ in range(16):     # bounded: skip at most 16 ignored layers
+        hit, location, normal, index, obj, matrix = context.scene.ray_cast(
+            depsgraph, origin, direction)
+        if not hit:
+            return None
+        if obj not in ignore:
+            return location, normal, obj, index, matrix
+        origin = location + direction * 1e-4   # step past the ignored hit
+    return None
+
+
+def ray_cast_surface(context, region, rv3d, coord, ignore=None):
+    """Shoot the mouse ray into the scene and return the first surface hit as
+    (location, normal, object) in world space, or None if nothing is hit. Used
+    by decal/asset placement to stick onto whatever is under the cursor. See
+    ray_cast_surface_ex for the face index + matrix and the `ignore` behaviour."""
+    hit = ray_cast_surface_ex(context, region, rv3d, coord, ignore)
+    if hit is None:
         return None
+    location, normal, obj, _index, _matrix = hit
     return location, normal, obj
+
+
+def face_edge_tangent(obj, index, matrix, normal):
+    """World-space tangent aligned to the longest edge of obj's face `index`,
+    projected onto the surface plane, or None when the face can't be read (bad
+    index / generative modifiers). Uses the base mesh, matching the Push/Pull
+    index clamp. The shared glue that gives the surface tools their smart,
+    edge-aligned orientation (delegates the math to decal_math.dominant_tangent)."""
+    from . import decal_math
+    if obj is None or getattr(obj, 'type', None) != 'MESH':
+        return None
+    polys = obj.data.polygons
+    if index < 0 or index >= len(polys):
+        return None
+    rot = matrix.to_3x3()
+    verts = obj.data.vertices
+    vids = list(polys[index].vertices)
+    edges = []
+    for i in range(len(vids)):
+        a = verts[vids[i]].co
+        b = verts[vids[(i + 1) % len(vids)]].co
+        edges.append(tuple(rot @ (b - a)))
+    t = decal_math.dominant_tangent(edges, tuple(normal))
+    return Vector(t) if t is not None else None

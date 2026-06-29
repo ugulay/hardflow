@@ -70,9 +70,21 @@ def decal_matrix(location, normal, tangent, scale=1.0):
     return basis
 
 
-def add_shrinkwrap(decal, target, offset=0.001):
+def adaptive_decal_offset(target):
+    """A surface hover gap scaled to the target's size: ~0.05% of its average
+    dimension, floored at 0.1 mm. A fixed 1 mm z-fights on a large mesh and looks
+    like a thick gap on a small one; scaling keeps the decal flush at any scale."""
+    dims = [d for d in target.dimensions if d > 1e-6]
+    size = (sum(dims) / len(dims)) if dims else 0.1
+    return max(1e-4, size * 0.0005)
+
+
+def add_shrinkwrap(decal, target, offset=None):
     """Stick the decal to the target surface: PROJECT the plane down its local
-    -Z onto the target, hovering just above the surface to avoid z-fighting."""
+    -Z onto the target, hovering just above the surface to avoid z-fighting.
+    `offset=None` picks a size-proportional gap (adaptive_decal_offset)."""
+    if offset is None:
+        offset = adaptive_decal_offset(target)
     mod = decal.modifiers.new("HF_Shrinkwrap", 'SHRINKWRAP')
     mod.wrap_method = 'PROJECT'
     mod.wrap_mode = 'ABOVE_SURFACE'
@@ -333,7 +345,7 @@ def _assemble_decal(context, target, mesh, location, normal, tangent,
 
 
 def make_decal(context, target, location, normal, tangent,
-               width=0.2, height=0.2, decal_type='INFO', offset=0.001):
+               width=0.2, height=0.2, decal_type='INFO', offset=None):
     """Create a type-template decal (Info/Panel/Subset) on the target surface and
     return it. The caller supplies the surface hit (location, normal) and a
     tangent (roll direction)."""
@@ -343,7 +355,7 @@ def make_decal(context, target, location, normal, tangent,
 
 
 def make_image_decal(context, target, location, normal, tangent, image,
-                     width=0.2, height=0.2, offset=0.001,
+                     width=0.2, height=0.2, offset=None,
                      uv_rect=(0.0, 0.0, 1.0, 1.0)):
     """Create an image-driven decal (v0.9 library / 'decal from image') on the
     target surface and return it. The quad carries the image's color+alpha via

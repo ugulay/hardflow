@@ -15,7 +15,7 @@ from bpy.types import Operator
 from bpy.props import EnumProperty
 from mathutils import Vector
 
-from ..core import raycast, geometry, boolean, grid, snap
+from ..core import raycast, geometry, boolean, grid, snap, decal_math
 from ..preferences import get_prefs
 from ..ui import draw as hud
 
@@ -63,6 +63,7 @@ class HARDFLOW_OT_draw(Operator):
         self.geo = prefs.geo_snap        # vertex/edge snap (overrides grid)
         self.nd = prefs.non_destructive  # non-destructive: leave a live modifier
         self.plane = 'VIEW'              # projection plane: VIEW / X / Y / Z
+        self.plane_spin = 0.0            # live in-plane grid rotation (Shift+arrows)
         self.sides = prefs.ngon_sides    # N-gon side count (adjust live with [ ])
         # In-draw operations (v1.4): all baked into one cutter at commit.
         self.inset = 0.0          # offset the drawn loop in/out (m); -/= adjust
@@ -78,9 +79,17 @@ class HARDFLOW_OT_draw(Operator):
         self._snap_hit = None     # (screen_point, kind) -- for visual marker
         self._surface_basis = None  # locked (origin,right,up,normal) in SURFACE
         self._surface_miss = False  # SURFACE ray missed -> fell back to VIEW
+        self._edges_basis = None    # locked basis from selected edges (EDGES plane)
         self.committing = False
         self._preview = None        # live 3D cutter/face volume object
         self._collect_snap_geometry(context)
+
+        # Grid Modeler workflow: if you enter with edge(s) selected in Edit Mode,
+        # start on the EDGES plane (grid laid on the selection).
+        if self.edit:
+            self._edges_basis = self._capture_edges_basis(context)
+            if self._edges_basis is not None:
+                self.plane = 'EDGES'
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
@@ -120,6 +129,11 @@ class HARDFLOW_OT_draw(Operator):
                     return self._commit(context)
 
         elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
+            if self.shape == 'POLY' and len(self.points) >= 3:
+                return self._commit(context)
+
+        # Z: close the in-progress polygon immediately (Grid Modeler quick-close).
+        elif event.type == 'Z' and event.value == 'PRESS':
             if self.shape == 'POLY' and len(self.points) >= 3:
                 return self._commit(context)
 
@@ -177,11 +191,19 @@ class HARDFLOW_OT_draw(Operator):
             self.geo = not self.geo
 
         elif event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and event.value == 'PRESS':
-            order = self._PLANE_ORDER
-            step = 1 if event.type == 'RIGHT_ARROW' else -1
-            self.plane = order[(order.index(self.plane) + step) % len(order)]
-            self.points = []  # plane changed -> reset the half-drawn shape
-            self._surface_basis = None  # re-pick the surface on the next click
+            direction = 1 if event.type == 'RIGHT_ARROW' else -1
+            if event.shift:
+                # Shift + arrows: rotate the grid plane in place (Grid Modeler).
+                import math
+                self.plane_spin += direction * math.radians(
+                    get_prefs(context).angle_step)
+            else:
+                order = self._PLANE_ORDER
+                self.plane = order[(order.index(self.plane) + direction)
+                                   % len(order)]
+                self.points = []  # plane changed -> reset the half-drawn shape
+                self._surface_basis = None  # re-pick the surface on next click
+                self._edges_basis = None    # re-read the selected edges for EDGES
 
         elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
             self._cleanup(context)
@@ -208,7 +230,7 @@ class HARDFLOW_OT_draw(Operator):
 
     # --- world-scale snap (v0.2) ----------------------------------------
 
-    _PLANE_ORDER = ['VIEW', 'SURFACE', 'X', 'Y', 'Z']
+    _PLANE_ORDER = ['VIEW', 'SURFACE', 'EDGES', 'X', 'Y', 'Z']
 
     # World bases (right, up, normal) for axis-aligned planes.
     _AXIS_BASIS = {
@@ -228,11 +250,17 @@ class HARDFLOW_OT_draw(Operator):
         (origin, right, up, normal) from the surface hit, or None if the ray
         misses geometry."""
         region, rv3d = context.region, context.region_data
-        hit = raycast.ray_cast_surface(context, region, rv3d, screen_co)
+        hit = raycast.ray_cast_surface_ex(context, region, rv3d, screen_co)
         if hit is None:
             return None
-        location, normal, _obj = hit
-        right, up, n = raycast.basis_from_normal(normal)
+        location, normal, obj, index, matrix = hit
+        # Smart tangent: align the on-surface grid to the hit face's dominant edge
+        # so the drawn shape lines up with existing panel lines. Fall back to the
+        # view's up (which beats world up on an angled face) when no edge is found.
+        up_hint = raycast.face_edge_tangent(obj, index, matrix, normal)
+        if up_hint is None:
+            _vr, up_hint = raycast.view_right_up(rv3d)
+        right, up, n = raycast.basis_from_normal(normal, up_hint=up_hint)
         return location.copy(), right, up, n
 
     def _lock_surface_basis(self, context, screen_co):
@@ -240,24 +268,79 @@ class HARDFLOW_OT_draw(Operator):
         shape stays on one plane. Falls back silently to VIEW if no surface."""
         self._surface_basis = self._surface_basis_at(context, screen_co)
 
+    def _capture_edges_basis(self, context):
+        """Grid Modeler 'grid plane on edge(s)': build a construction basis from
+        the selected edit-mesh edges -- one edge gives a plane along that edge +
+        its face normal, two edges give the plane they span. Cached because the
+        selection doesn't change during the draw. Returns the basis tuple or None
+        (not in Edit Mode / nothing selected)."""
+        if context.mode != 'EDIT_MESH':
+            return None
+        import bmesh
+        obj = context.active_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        sel = [e for e in bm.edges if e.select]
+        if not sel:
+            return None
+        mw = obj.matrix_world
+        rot = mw.to_3x3()
+
+        def edge_vec(e):
+            return rot @ (e.verts[1].co - e.verts[0].co)
+
+        def edge_mid(e):
+            return (e.verts[0].co + e.verts[1].co) * 0.5
+
+        if len(sel) >= 2:
+            r, u, n = decal_math.basis_from_two_edges(
+                tuple(edge_vec(sel[0])), tuple(edge_vec(sel[1])))
+            origin = mw @ ((edge_mid(sel[0]) + edge_mid(sel[1])) * 0.5)
+        else:
+            e = sel[0]
+            if e.link_faces:
+                nrm = rot @ e.link_faces[0].normal
+            else:
+                nrm = raycast.view_direction(context.region_data)
+            r, u, n = decal_math.basis_from_edge(tuple(edge_vec(e)), tuple(nrm))
+            origin = mw @ edge_mid(e)
+        return (origin, Vector(r), Vector(u), Vector(n))
+
     def _plane_basis(self, context):
-        """Origin, local axes and normal of the projection plane.
-        VIEW = perpendicular to view; SURFACE = aligned to the picked face;
-        X/Y/Z = world-axis aligned (Grid Modeler grid)."""
+        """Origin, local axes and normal of the projection plane, after the live
+        in-plane spin (Shift + arrows). VIEW = perpendicular to view; SURFACE =
+        aligned to the picked face; EDGES = aligned to the selected edit-mesh
+        edge(s); X/Y/Z = world-axis aligned (Grid Modeler grid)."""
         if self.plane == 'VIEW':
             self._surface_miss = False
-            return self._view_basis(context)
-        if self.plane == 'SURFACE':
-            basis = self._surface_basis
-            if basis is None:
+            basis = self._view_basis(context)
+        elif self.plane == 'EDGES':
+            b = self._edges_basis or self._capture_edges_basis(context)
+            self._surface_miss = b is None
+            basis = b if b is not None else self._view_basis(context)
+        elif self.plane == 'SURFACE':
+            b = self._surface_basis
+            if b is None:
                 # Before the first click, preview-track the face under the cursor.
-                basis = self._surface_basis_at(context, self.cursor)
-            self._surface_miss = basis is None
-            return basis if basis is not None else self._view_basis(context)
-        self._surface_miss = False
-        right, up, normal = self._AXIS_BASIS[self.plane]
-        origin = context.active_object.matrix_world.translation
-        return origin, right, up, normal
+                b = self._surface_basis_at(context, self.cursor)
+            self._surface_miss = b is None
+            basis = b if b is not None else self._view_basis(context)
+        else:
+            self._surface_miss = False
+            right, up, normal = self._AXIS_BASIS[self.plane]
+            origin = context.active_object.matrix_world.translation
+            basis = (origin, right, up, normal)
+        return self._apply_spin(basis)
+
+    def _apply_spin(self, basis):
+        """Rotate the plane's right/up axes around its normal by the live grid
+        spin (Shift + arrows) -- Grid Modeler's 'rotate the grid plane'. The
+        normal and origin are unchanged."""
+        if abs(self.plane_spin) < 1e-9:
+            return basis
+        from mathutils import Matrix
+        origin, right, up, normal = basis
+        rot = Matrix.Rotation(self.plane_spin, 3, normal)
+        return origin, rot @ right, rot @ up, normal
 
     def _snap_screen(self, context, screen_co):
         """Snap the cursor in order: 1) vertex/edge geometry, 2) world grid,
@@ -324,8 +407,9 @@ class HARDFLOW_OT_draw(Operator):
             self._geo_mids.append((self._geo_verts[i] + self._geo_verts[j]) * 0.5)
 
     def _geo_snap(self, context, screen_co):
-        """Nearest vertex/midpoint/edge screen point to the cursor.
-        Returns ((x, y), kind) ('VERT'/'MID'/'EDGE') or None."""
+        """Nearest vertex/midpoint/edge screen point to the cursor, disambiguated
+        so the *geometrically closest* target wins (vertex priority only breaks
+        near-ties). Returns ((x, y), kind) ('VERT'/'MID'/'EDGE') or None."""
         prefs = get_prefs(context)
         region, rv3d = context.region, context.region_data
         thr = prefs.snap_pixels
@@ -338,19 +422,17 @@ class HARDFLOW_OT_draw(Operator):
             return out
 
         vscr = to_screen(self._geo_verts)
-        hit = snap.nearest_point(screen_co, vscr, thr)
-        if hit is not None:
-            return (hit[1], 'VERT')
-
-        hit = snap.nearest_point(screen_co, to_screen(self._geo_mids), thr)
-        if hit is not None:
-            return (hit[1], 'MID')
-
         segs = [(vscr[i], vscr[j]) for (i, j) in self._geo_edges]
-        hit = snap.nearest_on_segments(screen_co, segs, thr)
-        if hit is not None:
-            return (hit[1], 'EDGE')
-        return None
+        candidates = [
+            ('VERT', snap.nearest_point(screen_co, vscr, thr)),
+            ('MID', snap.nearest_point(screen_co, to_screen(self._geo_mids), thr)),
+            ('EDGE', snap.nearest_on_segments(screen_co, segs, thr)),
+        ]
+        best = snap.resolve_snap(candidates)
+        if best is None:
+            return None
+        kind, hit = best
+        return (hit[1], kind)
 
     def _grid_screen_verts(self, context):
         """Convert the visible world grid into a screen-space LINES vertex list."""
@@ -407,7 +489,8 @@ class HARDFLOW_OT_draw(Operator):
 
         pts = self._shape_screen_points()
         closed = self.shape != 'POLY' or len(self.points) >= 2
-        hud.draw_shape(pts, tuple(prefs.line_color), closed=closed)
+        width = prefs.line_width * context.preferences.system.ui_scale
+        hud.draw_shape(pts, tuple(prefs.line_color), closed=closed, width=width)
         hud.draw_points(self.points, tuple(prefs.line_color))
 
         # if vertex/edge snap caught, mark the cursor colored by its kind
@@ -430,8 +513,8 @@ class HARDFLOW_OT_draw(Operator):
         # Hints split into short lines -> roomier than one long line.
         lines = [
             status,
-            ("Q/W/E/R shape    [ ] sides    1-5 mode    < > plane    Shift angle-lock",
-             dim),
+            ("Q/W/E/R shape    [ ] sides    1-5 mode    < > plane (VIEW/SURFACE/"
+             "EDGES/XYZ)    Shift+< > rotate grid    Z close", dim),
             ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
              "B bevel    G stamp", dim),
             ("Ctrl+Wheel grid    PgUp/Dn depth    X grid    V vertex    "
@@ -448,6 +531,8 @@ class HARDFLOW_OT_draw(Operator):
             bits.append("array x%d %s" % (self.array_count, self.array_axis))
         if self.mirror_axis:
             bits.append("mirror %s" % self.mirror_axis)
+        if abs(self.plane_spin) > 1e-9:
+            bits.append("grid spin %.0f°" % math.degrees(self.plane_spin))
         if self.bevel_cut:
             bits.append("bevel-on-cut")
         if self.depth > 1e-6:
@@ -760,13 +845,17 @@ class HARDFLOW_OT_draw(Operator):
 
     def _bevel_on_cut(self, targets):
         """Add a small angle-limited bevel to each cut target so the cut edge
-        reads as chamfered without a second operator (v1.4 bevel-on-cut)."""
+        reads as chamfered without a second operator (v1.4 bevel-on-cut). The
+        chamfer width scales to each target's size so it stays subtle on large
+        objects and visible on small ones."""
         from math import radians
+        from ..core import transform
         for t in targets:
             if "HF_CutBevel" in t.modifiers:
                 continue
             bev = t.modifiers.new("HF_CutBevel", 'BEVEL')
-            bev.width = 0.01
+            bev.width = transform.adaptive_dimension(
+                max(t.dimensions), fraction=0.01, min_value=0.0005, max_value=0.25)
             bev.segments = 2
             bev.limit_method = 'ANGLE'
             bev.angle_limit = radians(30.0)
@@ -798,25 +887,44 @@ class HARDFLOW_OT_draw(Operator):
 
     def _apply_destructive(self, context, targets, cutter, solver):
         """Add+apply modifier, delete the cutter. Clean up via finally even on
-        failure. CUT/MAKE support multiple targets; SLICE works on the first."""
+        failure. CUT/MAKE support multiple targets; SLICE works on the first.
+        Uses the robust boolean path (solver fallback + cutter normal repair +
+        diagnosis) and surfaces the outcome so a failed/degraded cut is never
+        silent."""
         cleanup = get_prefs(context).cleanup_after_cut
         op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION'}.get(self.mode)
+        failures, fallbacks = [], []
+
+        def cut(tgt, bop):
+            ok, used, msg = boolean.robust_boolean(context, tgt, cutter, bop, solver)
+            if not ok:
+                failures.append(msg)
+            else:
+                if used != solver:
+                    fallbacks.append(used)
+                if cleanup:
+                    geometry.cleanup_mesh(tgt)
+
         try:
             if self.mode == 'SLICE':
                 target = targets[0]
                 other = boolean.duplicate_object(context, target)
-                boolean.apply_boolean(context, target, cutter, 'DIFFERENCE', solver)
-                boolean.apply_boolean(context, other, cutter, 'INTERSECT', solver)
-                if cleanup:
-                    geometry.cleanup_mesh(target)
-                    geometry.cleanup_mesh(other)
+                cut(target, 'DIFFERENCE')
+                cut(other, 'INTERSECT')
             else:  # CUT / MAKE
                 for t in targets:
-                    boolean.apply_boolean(context, t, cutter, op, solver)
-                    if cleanup:
-                        geometry.cleanup_mesh(t)
+                    cut(t, op)
         finally:
             bpy.data.objects.remove(cutter, do_unlink=True)
+        self._report_boolean(failures, fallbacks)
+
+    def _report_boolean(self, failures, fallbacks):
+        """Tell the user what the boolean did: warn on failure (with the mesh
+        diagnosis), note a solver fallback, otherwise stay quiet."""
+        if failures:
+            self.report({'WARNING'}, failures[0])
+        elif fallbacks:
+            self.report({'INFO'}, "Cut done (%s solver fallback)" % fallbacks[0])
 
     def _apply_nondestructive(self, context, targets, cutter, solver):
         """Leave a live modifier, stash the cutter in the 'Hardflow Cutters'

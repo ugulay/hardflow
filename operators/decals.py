@@ -93,7 +93,11 @@ class HARDFLOW_OT_place_decal(Operator):
 
         if event.type == 'MOUSEMOVE':
             self._screen = (event.mouse_region_x, event.mouse_region_y)
-            self._hit = raycast.ray_cast_surface(context, region, rv3d, self._screen)
+            # Skip the live preview decal so the ray lands on the target surface,
+            # not on the preview that follows the cursor.
+            ignore = (self._preview,) if self._preview is not None else None
+            self._hit = raycast.ray_cast_surface(context, region, rv3d,
+                                                 self._screen, ignore=ignore)
 
         elif event.type in {'WHEELUPMOUSE'} and event.value == 'PRESS':
             if event.ctrl:
@@ -208,14 +212,16 @@ class HARDFLOW_OT_place_decal(Operator):
         prefs = get_prefs(context)
         tangent = self._tangent(normal)
         w, h = self._wh()
+        # 0 in the preference means "auto" -> let the build pick a size-scaled gap.
+        offset = prefs.decal_offset or None
         if self._image is not None:
             return decal.make_image_decal(
                 context, obj, location, normal, tangent, self._image,
-                width=w, height=h, offset=prefs.decal_offset,
+                width=w, height=h, offset=offset,
                 uv_rect=self._uv_rect())
         return decal.make_decal(
             context, obj, location, normal, tangent, width=w, height=h,
-            decal_type=self.decal_type, offset=prefs.decal_offset)
+            decal_type=self.decal_type, offset=offset)
 
     def _delete_preview(self):
         if self._preview is not None and self._preview.name in bpy.data.objects:

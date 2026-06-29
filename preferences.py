@@ -140,8 +140,9 @@ class HARDFLOW_Preferences(AddonPreferences):
     decal_offset: FloatProperty(
         name="Decal Offset (m)",
         description="How far the decal hovers above the surface (avoids "
-                    "z-fighting); shrinkwrap ABOVE_SURFACE distance",
-        default=0.001, min=0.0, soft_max=0.1,
+                    "z-fighting); shrinkwrap ABOVE_SURFACE distance. "
+                    "0 = auto (scaled to the target's size)",
+        default=0.0, min=0.0, soft_max=0.1,
     )
     bake_size: IntProperty(
         name="Bake Resolution",
@@ -254,6 +255,12 @@ class HARDFLOW_Preferences(AddonPreferences):
         name="Grid Color", subtype='COLOR', size=4,
         default=(1.0, 1.0, 1.0, 0.06), min=0.0, max=1.0,
     )
+    line_width: FloatProperty(
+        name="Line Width (px)",
+        description="Thickness of the drawn shape outline (scaled by the UI "
+                    "scale, like Grid Modeler)",
+        default=2.0, min=1.0, soft_max=8.0,
+    )
 
     def draw(self, context):
         col = self.layout.column()
@@ -296,6 +303,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         row.prop(self, "line_color")
         row.prop(self, "fill_color")
         row.prop(self, "grid_color")
+        col.prop(self, "line_width")
         col.separator()
         box = col.box()
         box.label(text="Shortcuts", icon='KEYINGSET')

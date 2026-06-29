@@ -112,12 +112,54 @@ def build_faces(corner_sets, name="hf_face"):
     return mesh
 
 
+def _footprint_basis(view_dir):
+    """A 2D (right, up) basis perpendicular to `view_dir`, for projecting the
+    knife polygon and face centers into the same plane to test overlap."""
+    from mathutils import Vector
+    vd = Vector(view_dir).normalized()
+    up = Vector((0.0, 0.0, 1.0))
+    if abs(vd.dot(up)) > 0.999:
+        up = Vector((0.0, 1.0, 0.0))
+    right = vd.cross(up).normalized()
+    up = vd.cross(right).normalized()
+    return right, up
+
+
+def _knife_footprint_faces(faces, local_corners, view_dir):
+    """Subset of `faces` that actually sit under the drawn polygon, looking along
+    `view_dir`: a face qualifies if its center projects inside the polygon, or any
+    polygon corner projects inside the face. Restricting the bisect to these keeps
+    a knife score local instead of slicing infinite planes across the whole mesh.
+    Returns the matching faces, or all of them as a fallback when none match."""
+    from mathutils import Vector
+    from . import grid as gridmod
+    right, up = _footprint_basis(view_dir)
+
+    def proj(p):
+        v = Vector(p)
+        return (v.dot(right), v.dot(up))
+
+    poly2 = [proj(c) for c in local_corners]
+    if len(poly2) < 3:
+        return faces
+    out = []
+    for f in faces:
+        if gridmod.point_in_polygon(proj(f.calc_center_median()), poly2):
+            out.append(f)
+            continue
+        face2 = [proj(v.co) for v in f.verts]
+        if any(gridmod.point_in_polygon(p, face2) for p in poly2):
+            out.append(f)
+    return out or list(faces)
+
+
 def knife_polygon(obj, local_corners, view_dir):
     """Object Mode knife / zero-depth cut: score the closed polygon
     (`local_corners`, object-local) onto obj's mesh via bmesh on the object data
     (no Edit Mode needed). Each loop edge becomes a cutting plane swept along
-    `view_dir`; the mesh is bisected along it. Returns the number of edges scored.
-    The object-data counterpart of edit_knife_polygon."""
+    `view_dir`; only the faces under the drawn footprint are bisected, so a small
+    score doesn't slice planes across the whole object. Returns the number of
+    edges scored. The object-data counterpart of edit_knife_polygon."""
     from mathutils import Vector
     vd = Vector(view_dir).normalized()
     n = len(local_corners)
@@ -137,9 +179,15 @@ def knife_polygon(obj, local_corners, view_dir):
         if plane_no.length < 1e-9:
             continue
         plane_no.normalize()
-        bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:],
-                               dist=1e-6, plane_co=a, plane_no=plane_no,
-                               clear_inner=False, clear_outer=False)
+        # Limit each pass to the faces under the footprint (re-gathered every
+        # pass: a prior bisect changes the face set).
+        faces = _knife_footprint_faces(bm.faces[:], local_corners, vd)
+        verts = {v for f in faces for v in f.verts}
+        edges = {e for f in faces for e in f.edges}
+        geom = list(verts) + list(edges) + list(faces)
+        bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-6, plane_co=a,
+                               plane_no=plane_no, clear_inner=False,
+                               clear_outer=False)
         scored += 1
     bm.to_mesh(obj.data)
     obj.data.update()
@@ -165,6 +213,47 @@ def build_face(corners, name="hf_face"):
         bm.free()
         return None
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def build_box(size=1.0, name="Hardflow_Cube"):
+    """A unit cube of edge length `size`, centred on the origin -- a starting
+    primitive for the SketchUp-style tools (the caller positions it at the 3D
+    cursor). Returns mesh data."""
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=max(1e-6, size))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def build_plane(size=1.0, name="Hardflow_Plane"):
+    """A flat square of edge length `size` on the local XY plane, centred on the
+    origin -- a starting surface for Push/Pull / Offset. Returns mesh data."""
+    h = max(1e-6, size) * 0.5
+    return build_face([(-h, -h, 0.0), (h, -h, 0.0), (h, h, 0.0), (-h, h, 0.0)],
+                      name=name)
+
+
+def build_line(length=2.0, axis='X', name="Hardflow_Guide"):
+    """A single wire edge of `length`, centred on the origin along the chosen
+    local axis -- a construction guide line to snap against (SketchUp guides).
+    The geometry snap picks up its two endpoints and the edge. Returns mesh data."""
+    h = max(1e-6, length) * 0.5
+    i = {'X': 0, 'Y': 1, 'Z': 2}.get(axis, 0)
+    a = [0.0, 0.0, 0.0]
+    b = [0.0, 0.0, 0.0]
+    a[i] = -h
+    b[i] = h
+    bm = bmesh.new()
+    va = bm.verts.new(a)
+    vb = bm.verts.new(b)
+    bm.edges.new((va, vb))
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
@@ -498,19 +587,24 @@ def edit_inset_faces(obj, thickness, depth=0.0):
     return True
 
 
-def edit_add_face(obj, local_corners, select=True):
+def edit_add_face(obj, local_corners, select=True, weld=True, weld_dist=1e-4):
     """Edit Mode draw: add the polygon `local_corners` (object-local points) as a
     new face into obj's edit-mesh -- the drawn shape becomes geometry inside the
     active mesh rather than a separate object. New geometry can be deselected by
-    `select=False`. Returns True on success, False on a degenerate polygon."""
+    `select=False`. Returns True on success, False on a degenerate polygon.
+
+    With `weld` (the default), the new face's vertices that land on existing mesh
+    vertices (within `weld_dist`) are merged onto them, so the drawn face connects
+    to the surrounding geometry instead of floating as a detached island -- the
+    Grid Modeler 'create connected faces' behaviour."""
     if len(local_corners) < 3:
         return False
     bm = bmesh.from_edit_mesh(obj.data)
-    verts = [bm.verts.new(co) for co in local_corners]
+    new_verts = [bm.verts.new(co) for co in local_corners]
     try:
-        face = bm.faces.new(verts)
+        face = bm.faces.new(new_verts)
     except ValueError:               # repeated vertex / duplicate face
-        for v in verts:
+        for v in new_verts:
             if v.is_valid and not v.link_edges:
                 bm.verts.remove(v)
         return False
@@ -519,8 +613,34 @@ def edit_add_face(obj, local_corners, select=True):
             f.select_set(False)
         face.select_set(True)
     bmesh.ops.recalc_face_normals(bm, faces=[face])
-    bmesh.update_edit_mesh(obj.data)
+    if weld:
+        # Merge the new face's verts onto coincident existing ones so the face
+        # shares edges with the mesh it was drawn against (connected geometry).
+        bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=weld_dist)
+    bmesh.update_edit_mesh(obj.data, destructive=weld)
     return True
+
+
+def edit_bevel_edges(obj, width, segments=2, profile=0.5):
+    """Edit Mode real edge bevel: bevel obj's selected edit-mesh edges
+    (bmesh.ops.bevel, affecting EDGES) into actual chamfer geometry. Returns the
+    number of selected edges beveled, 0 when none are selected or the width is
+    non-positive. The destructive on-selection counterpart of the whole-object
+    Bevel *modifier* -- this is the Hard Ops / SketchUp edge bevel users expect in
+    Edit Mode."""
+    if width <= 0.0:
+        return 0
+    bm = bmesh.from_edit_mesh(obj.data)
+    edges = [e for e in bm.edges if e.select]
+    if not edges:
+        return 0
+    n = len(edges)
+    bmesh.ops.bevel(bm, geom=edges, offset=width, offset_type='OFFSET',
+                    segments=max(1, int(segments)), profile=profile,
+                    affect='EDGES', clamp_overlap=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bmesh.update_edit_mesh(obj.data, destructive=True)
+    return n
 
 
 def edit_knife_polygon(obj, local_corners, view_dir):
@@ -556,7 +676,10 @@ def edit_knife_polygon(obj, local_corners, view_dir):
             continue
         plane_no.normalize()
         # Re-gather the target geometry each pass: a prior bisect changes it.
-        faces = [f for f in bm.faces if f.select] if sel_faces else bm.faces[:]
+        # Restrict to selected faces (if any) AND to the drawn footprint so the
+        # score stays local instead of slicing the whole selection.
+        base = [f for f in bm.faces if f.select] if sel_faces else bm.faces[:]
+        faces = _knife_footprint_faces(base, local_corners, vd)
         verts = {v for f in faces for v in f.verts}
         edges = {e for f in faces for e in f.edges}
         geom = list(verts) + list(edges) + list(faces)

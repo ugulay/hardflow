@@ -75,6 +75,83 @@ class HARDFLOW_OT_loft(Operator):
         return {'FINISHED'}
 
 
+class HARDFLOW_OT_add_primitive(Operator):
+    bl_idname = "object.hardflow_add_primitive"
+    bl_label = "Add Primitive"
+    bl_description = ("Create a starter cube or plane at the 3D cursor to model on "
+                      "with the SketchUp-style tools (Push/Pull, Offset, draw)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    kind: EnumProperty(
+        name="Type",
+        items=[('CUBE', "Cube", "A solid cube"),
+               ('PLANE', "Plane", "A flat square face")],
+        default='CUBE',
+    )
+    size: FloatProperty(name="Size (m)", default=1.0, min=1e-4, soft_max=50.0)
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+
+    def execute(self, context):
+        if self.kind == 'CUBE':
+            mesh = geometry.build_box(self.size, name="Hardflow_Cube")
+            name = "Hardflow_Cube"
+        else:
+            mesh = geometry.build_plane(self.size, name="Hardflow_Plane")
+            name = "Hardflow_Plane"
+        if mesh is None:
+            self.report({'WARNING'}, "Could not build primitive")
+            return {'CANCELLED'}
+        obj = bpy.data.objects.new(name, mesh)
+        context.collection.objects.link(obj)
+        # Position after linking (cursor location; matrix on an unlinked object
+        # is unreliable).
+        obj.matrix_world = Matrix.Translation(context.scene.cursor.location)
+        for o in list(context.selected_objects):
+            o.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_add_guide(Operator):
+    bl_idname = "object.hardflow_add_guide"
+    bl_label = "Add Guide Line"
+    bl_description = ("Add a construction guide line at the 3D cursor to snap "
+                      "against (SketchUp construction lines)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    axis: EnumProperty(
+        name="Axis",
+        items=[('X', "X", ""), ('Y', "Y", ""), ('Z', "Z", "")],
+        default='X',
+    )
+    length: FloatProperty(name="Length (m)", default=4.0, min=0.01, soft_max=100.0)
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+
+    def execute(self, context):
+        mesh = geometry.build_line(self.length, self.axis)
+        if mesh is None:
+            self.report({'WARNING'}, "Could not build guide")
+            return {'CANCELLED'}
+        obj = bpy.data.objects.new("Hardflow_Guide", mesh)
+        obj.show_in_front = True
+        obj.hide_render = True
+        obj.display_type = 'WIRE'
+        context.collection.objects.link(obj)
+        obj.matrix_world = Matrix.Translation(context.scene.cursor.location)
+        for o in list(context.selected_objects):
+            o.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        return {'FINISHED'}
+
+
 class HARDFLOW_OT_add_grid(Operator):
     bl_idname = "object.hardflow_add_grid"
     bl_label = "Add Construction Grid"

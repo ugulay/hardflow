@@ -94,8 +94,11 @@ def test_bevel_and_mirror_operators():
     try:
         ob = _add_cube("Obj")
         _activate(ob)
-        # EXEC_DEFAULT -> execute() (redo path); modal invoke is skipped
-        bpy.ops.object.hardflow_bevel(width=0.03, segments=3, weighted_normal=True)
+        # EXEC_DEFAULT -> execute() (redo path); modal invoke is skipped.
+        # adaptive=False so the explicit width is honoured (adaptive would scale
+        # the width to the object's size instead).
+        bpy.ops.object.hardflow_bevel(width=0.03, segments=3, weighted_normal=True,
+                                      adaptive=False)
         assert any(m.type == 'BEVEL' for m in ob.modifiers), "bevel not added"
         assert any(m.type == 'WEIGHTED_NORMAL' for m in ob.modifiers), \
             "weighted normal not added"
@@ -103,6 +106,21 @@ def test_bevel_and_mirror_operators():
         assert bev.segments == 3 and abs(bev.width - 0.03) < 1e-6
         bpy.ops.object.hardflow_mirror(axis='X')
         assert any(m.type == 'MIRROR' for m in ob.modifiers), "mirror not added"
+    finally:
+        hardflow.unregister()
+
+
+def test_adaptive_bevel_scales_to_object():
+    # with adaptive on (default), the bevel width is derived from the object's
+    # size: a 2 m cube -> 2% of 2.0 = 0.04, not the fixed 0.02 default.
+    _reset()
+    hardflow.register()
+    try:
+        ob = _add_cube("Big", size=2.0)            # 2 m across
+        _activate(ob)
+        bpy.ops.object.hardflow_bevel(adaptive=True)
+        bev = next(m for m in ob.modifiers if m.type == 'BEVEL')
+        assert abs(bev.width - 0.04) < 1e-6, bev.width
     finally:
         hardflow.unregister()
 
@@ -208,6 +226,21 @@ def test_decal_mesh_and_material():
     assert decal._decal_node_group() is decal._decal_node_group()
     # materials are cached/shared, not recreated
     assert decal.decal_material('INFO') is decal.decal_material('INFO')
+
+
+def test_adaptive_decal_offset_scales():
+    _reset()
+    big = _add_cube("Big", size=10.0)
+    small = _add_cube("Small", size=0.2)
+    ob = decal.adaptive_decal_offset(big)
+    os = decal.adaptive_decal_offset(small)
+    assert ob > os, (ob, os)          # larger target -> larger hover gap
+    assert os >= 1e-4                 # never below the 0.1 mm floor
+    # offset=None on make_decal -> the shrinkwrap uses the adaptive gap
+    d = decal.make_decal(bpy.context, big, Vector((0, 0, 5)),
+                         Vector((0, 0, 1)), Vector((1, 0, 0)), offset=None)
+    sw = next(m for m in d.modifiers if m.type == 'SHRINKWRAP')
+    assert abs(sw.offset - decal.adaptive_decal_offset(big)) < 1e-9
 
 
 def test_make_decal_sticks_to_surface():
@@ -638,6 +671,79 @@ def test_drape_path_rests_on_surface():
     assert len(snapping.drape_path(bpy.context, [Vector((0, 0, 0))])) == 1
 
 
+def test_build_box_and_plane():
+    _reset()
+    box = geometry.build_box(2.0)
+    assert box is not None and len(box.vertices) == 8 and len(box.polygons) == 6
+    plane = geometry.build_plane(2.0)
+    assert plane is not None and len(plane.vertices) == 4 and len(plane.polygons) == 1
+    # plane spans +/- size/2 on XY, flat in Z
+    xs = [v.co.x for v in plane.vertices]
+    assert abs(min(xs) + 1.0) < 1e-6 and abs(max(xs) - 1.0) < 1e-6
+    assert all(abs(v.co.z) < 1e-9 for v in plane.vertices)
+
+
+def test_edit_bevel_edges():
+    _reset()
+    cube = _add_cube("BevelEdit", size=2.0)
+    _edit_select_faces(cube, [0])            # selects that face's 4 edges too
+    import bmesh
+    bm = bmesh.from_edit_mesh(cube.data)
+    bm.edges.ensure_lookup_table()
+    sel_edges = sum(1 for e in bm.edges if e.select)
+    assert sel_edges >= 1
+    before = len(cube.data.polygons)
+    n = geometry.edit_bevel_edges(cube, width=0.1, segments=2)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert n == sel_edges
+    assert len(cube.data.polygons) > before, "edge bevel added no geometry"
+    # nothing selected -> no-op
+    _edit_select_faces(cube, [])
+    assert geometry.edit_bevel_edges(cube, width=0.1) == 0
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def test_build_line_guide():
+    _reset()
+    me = geometry.build_line(4.0, 'X')
+    assert me is not None
+    assert len(me.vertices) == 2 and len(me.edges) == 1 and len(me.polygons) == 0
+    xs = sorted(v.co.x for v in me.vertices)
+    assert abs(xs[0] + 2.0) < 1e-6 and abs(xs[1] - 2.0) < 1e-6
+    # Y axis variant runs along Y
+    mey = geometry.build_line(2.0, 'Y')
+    assert max(abs(v.co.y) for v in mey.vertices) == 1.0
+
+
+def test_add_guide_operator():
+    _reset()
+    hardflow.register()
+    try:
+        res = bpy.ops.object.hardflow_add_guide(axis='X', length=4.0)
+        assert res == {'FINISHED'}, res
+        g = bpy.data.objects.get("Hardflow_Guide")
+        assert g is not None and g.display_type == 'WIRE' and g.show_in_front
+        assert len(g.data.edges) == 1 and len(g.data.polygons) == 0
+    finally:
+        hardflow.unregister()
+
+
+def test_add_primitive_operator():
+    _reset()
+    hardflow.register()
+    try:
+        res = bpy.ops.object.hardflow_add_primitive(kind='CUBE', size=2.0)
+        assert res == {'FINISHED'}, res
+        cube = bpy.data.objects.get("Hardflow_Cube")
+        assert cube is not None and len(cube.data.polygons) == 6
+        assert cube.select_get() and bpy.context.view_layer.objects.active is cube
+        res = bpy.ops.object.hardflow_add_primitive(kind='PLANE', size=1.0)
+        assert res == {'FINISHED'}, res
+        assert bpy.data.objects.get("Hardflow_Plane") is not None
+    finally:
+        hardflow.unregister()
+
+
 def test_build_grid_mesh_is_wire():
     _reset()
     segs = grid.centered_grid_segments(1.0, 0.5)
@@ -764,6 +870,32 @@ def test_edit_inset_and_add_face_and_knife():
     assert n >= 1 and len(cube.data.edges) >= ef
 
 
+def test_edit_add_face_welds_to_existing():
+    # Grid Modeler "connected faces": a drawn face that shares corners with the
+    # existing mesh welds onto them instead of leaving a detached island.
+    _reset()
+    plane = bpy.data.meshes.new("P")
+    import bmesh as _bm
+    bm = _bm.new()
+    vs = [bm.verts.new(c) for c in
+          ((0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0))]
+    bm.faces.new(vs)
+    bm.to_mesh(plane)
+    bm.free()
+    pobj = bpy.data.objects.new("P", plane)
+    bpy.context.collection.objects.link(pobj)
+    _activate(pobj)
+    bpy.ops.object.mode_set(mode='EDIT')
+    before = len(plane.vertices)            # 4
+    # a triangle sharing the quad's (1,0,0) and (1,1,0) corners + one new apex
+    ok = geometry.edit_add_face(pobj, [Vector((1, 0, 0)), Vector((2, 0.5, 0)),
+                                       Vector((1, 1, 0))], weld=True)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert ok
+    # only the apex is genuinely new; the two shared corners welded onto the quad
+    assert len(plane.vertices) == before + 1, len(plane.vertices)
+
+
 def test_restore_edit_mesh():
     _reset()
     cube = _add_cube("EditSnap", size=2.0)
@@ -786,6 +918,37 @@ def test_object_knife_polygon():
                Vector((0.5, 0.5, 1)), Vector((-0.5, 0.5, 1))],
         Vector((0, 0, 1)))
     assert n == 4 and len(cube.data.edges) > ef
+
+
+def test_knife_polygon_is_local_not_whole_mesh():
+    # Regression: a knife score over ONE region must not slice a distant region.
+    # Build a single mesh with two separated cube blocks; knife only over the
+    # near block and confirm the far block's geometry is untouched.
+    _reset()
+    import bmesh
+    me = bpy.data.meshes.new("TwoBlocks")
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=2.0)                       # near block @ origin
+    far = bmesh.ops.create_cube(bm, size=2.0)
+    bmesh.ops.translate(bm, verts=far['verts'], vec=(10.0, 0.0, 0.0))  # far block
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new("TwoBlocks", me)
+    bpy.context.collection.objects.link(obj)
+
+    def far_verts():
+        return [tuple(round(c, 4) for c in v.co)
+                for v in obj.data.vertices if v.co.x > 5.0]
+
+    before = sorted(far_verts())
+    assert len(before) == 8, before        # far block starts as a clean cube
+    # knife a small square on the near block's top face
+    geometry.knife_polygon(
+        obj, [Vector((-0.5, -0.5, 1)), Vector((0.5, -0.5, 1)),
+              Vector((0.5, 0.5, 1)), Vector((-0.5, 0.5, 1))],
+        Vector((0, 0, 1)))
+    after = sorted(far_verts())
+    assert after == before, "knife sliced the distant block: %r" % after
 
 
 # --- v1.4 multi-copy cutter builders -----------------------------------------
@@ -936,6 +1099,121 @@ def test_boolean_fallback():
                                           'DIFFERENCE', 'EXACT')
     assert used in {'EXACT', 'FAST'}
     assert len(target.data.polygons) != before
+
+
+def test_mesh_health_detects_open_mesh():
+    # a closed cube is clean; deleting a face opens 4 edges (non-manifold) and
+    # leaves the diagnosis non-empty so a failed boolean can explain itself.
+    _reset()
+    cube = _add_cube("Healthy", size=2.0)
+    h = boolean.mesh_health(cube)
+    assert h['non_manifold'] == 0 and h['degenerate'] == 0 and h['loose'] == 0
+    assert boolean._health_summary(cube) == ""
+
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(cube.data)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[0]], context='FACES_ONLY')
+    bm.to_mesh(cube.data)
+    bm.free()
+    h2 = boolean.mesh_health(cube)
+    assert h2['non_manifold'] == 4, h2          # the hole's 4 border edges
+    assert "non-manifold" in boolean._health_summary(cube)
+
+
+def test_recalc_normals_outward():
+    # flip every normal inward, recalc, and confirm the +Z face points out again.
+    _reset()
+    cube = _add_cube("Flip", size=2.0)
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(cube.data)
+    bmesh.ops.reverse_faces(bm, faces=bm.faces)
+    bm.to_mesh(cube.data)
+    bm.free()
+    boolean.recalc_normals(cube)
+    top = max(cube.data.polygons, key=lambda p: p.center.z)
+    assert top.normal.z > 0.9, "recalc did not point the top face outward: %r" % (
+        tuple(top.normal),)
+
+
+def test_choose_solver_from_health():
+    # a clean cube keeps the accurate EXACT solver
+    _reset()
+    cube = _add_cube("Clean", size=2.0)
+    assert boolean.choose_solver(cube, 'EXACT') == 'EXACT'
+    # a non-EXACT preference is passed through untouched
+    assert boolean.choose_solver(cube, 'FAST') == 'FAST'
+
+    # delete several faces -> many non-manifold edges -> start with FAST instead
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(cube.data)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[0], bm.faces[1], bm.faces[2]],
+                     context='FACES_ONLY')
+    bm.to_mesh(cube.data)
+    bm.free()
+    assert boolean.mesh_health(cube)['non_manifold'] >= 6
+    assert boolean.choose_solver(cube, 'EXACT') == 'FAST'
+    # but a heavy mesh is not scanned (cost guard) -> keeps preferred
+    assert boolean.choose_solver(cube, 'EXACT', max_verts=0) == 'EXACT'
+
+
+def test_robust_boolean_succeeds_and_reports():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    cutter = _add_cube("Cutter", size=1.0, location=(1, 0, 0))
+    _activate(target)
+    before = len(target.data.polygons)
+    ok, used, msg = boolean.robust_boolean(bpy.context, target, cutter,
+                                           'DIFFERENCE', 'EXACT')
+    assert ok and used in {'EXACT', 'FAST'}
+    assert len(target.data.polygons) != before
+    assert isinstance(msg, str) and msg
+
+    # robust path is wired into the draw-cut's standalone boolean operator too
+    hardflow.register()
+    try:
+        t = _add_cube("T", size=2.0, location=(5, 0, 0))
+        c = _add_cube("C", size=1.0, location=(5.5, 0, 0))
+        t.select_set(True)
+        c.select_set(True)
+        bpy.context.view_layer.objects.active = c
+        b = len(t.data.polygons)
+        res = bpy.ops.object.hardflow_boolean(operation='DIFFERENCE')
+        assert res == {'FINISHED'} and len(t.data.polygons) != b
+    finally:
+        hardflow.unregister()
+
+
+def test_recalc_normals_operator():
+    _reset()
+    hardflow.register()
+    try:
+        ob = _add_cube("Obj", size=2.0)
+        _activate(ob)
+        res = bpy.ops.object.hardflow_recalc_normals()
+        assert res == {'FINISHED'}, res
+        top = max(ob.data.polygons, key=lambda p: p.center.z)
+        assert top.normal.z > 0.9
+    finally:
+        hardflow.unregister()
+
+
+def test_bind_cutters_collects_failures():
+    # destructive bind on a clean target succeeds -> no failure messages collected
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    part = _add_cube("Part", size=1.0, location=(0.5, 0, 0))
+    fails = []
+    before = len(target.data.polygons)
+    asset.bind_cutters(bpy.context, [part], target, operation='DIFFERENCE',
+                       non_destructive=False, failures=fails)
+    assert fails == [], fails
+    assert len(target.data.polygons) != before
+    assert bpy.data.objects.get("Part") is None      # cutter deleted after apply
 
 
 def test_snap_insert_point():

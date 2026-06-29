@@ -40,13 +40,14 @@ class HARDFLOW_OT_apply_cutters(Operator):
     def execute(self, context):
         obj = context.active_object
         used = []
+        failed = 0
         for mod in list(obj.modifiers):
             if not mod.name.startswith("HF_Bool"):
                 continue
             if mod.type == 'BOOLEAN' and mod.object is not None:
                 used.append(mod.object)
-            with context.temp_override(active_object=obj, object=obj):
-                bpy.ops.object.modifier_apply(modifier=mod.name)
+            if not self._apply_with_fallback(context, obj, mod):
+                failed += 1
 
         removed = 0
         if self.delete_cutters:
@@ -54,8 +55,32 @@ class HARDFLOW_OT_apply_cutters(Operator):
                 if not _still_used(cutter):
                     bpy.data.objects.remove(cutter, do_unlink=True)
                     removed += 1
-        self.report({'INFO'}, "Cutters applied (%d deleted)" % removed)
+        if failed:
+            self.report({'WARNING'},
+                        "%d cutter(s) failed to apply (left as live modifiers). "
+                        "Fix the target's normals/non-manifold geometry." % failed)
+        else:
+            self.report({'INFO'}, "Cutters applied (%d deleted)" % removed)
         return {'FINISHED'}
+
+    def _apply_with_fallback(self, context, obj, mod):
+        """Apply one HF_Bool modifier, retrying with the FAST solver and a cutter
+        normal repair when the preferred solver chokes. Returns True on success;
+        on total failure the modifier is left live (non-destructive) so nothing is
+        silently lost."""
+        cutter = getattr(mod, "object", None)
+        for repair in (False, True):
+            if repair and mod.type == 'BOOLEAN':
+                mod.solver = 'FAST'
+                if cutter is not None:
+                    boolean.recalc_normals(cutter)
+            try:
+                with context.temp_override(active_object=obj, object=obj):
+                    bpy.ops.object.modifier_apply(modifier=mod.name)
+                return True
+            except RuntimeError:
+                continue
+        return False
 
 
 class HARDFLOW_OT_select_cutter(Operator):

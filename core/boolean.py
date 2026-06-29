@@ -47,6 +47,110 @@ def apply_boolean_fallback(context, target, cutter, operation='DIFFERENCE',
     return None
 
 
+def recalc_normals(obj):
+    """Recalculate outward-facing normals on a mesh object (bmesh, no bpy.ops).
+    The inverted/inconsistent-normal cutter is the single most common reason the
+    EXACT solver fails; flipping the cutter consistent before a retry recovers
+    most of those cases. Safe on generated/disposable cutter meshes."""
+    import bmesh
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+
+
+def mesh_health(obj):
+    """Cheap diagnostic of the mesh problems that break booleans. Returns a dict:
+    `non_manifold` (open / non-manifold edges -- not exactly two faces),
+    `degenerate` (near-zero-area faces), `loose` (vertices with no edge). Pure
+    bmesh, no scene side effects -- used to explain *why* a cut failed."""
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    non_manifold = sum(1 for e in bm.edges if not e.is_manifold)
+    degenerate = sum(1 for f in bm.faces if f.calc_area() < 1e-9)
+    loose = sum(1 for v in bm.verts if not v.link_edges)
+    bm.free()
+    return {'non_manifold': non_manifold, 'degenerate': degenerate,
+            'loose': loose}
+
+
+def _health_summary(obj):
+    """One-line description of an object's boolean-breaking problems, or ''."""
+    h = mesh_health(obj)
+    bits = []
+    if h['non_manifold']:
+        bits.append("%d non-manifold/open edges" % h['non_manifold'])
+    if h['degenerate']:
+        bits.append("%d zero-area faces" % h['degenerate'])
+    if h['loose']:
+        bits.append("%d loose vertices" % h['loose'])
+    return "; ".join(bits)
+
+
+# Heuristic thresholds for the auto-solver choice. EXACT tolerates a few open
+# edges (e.g. an intentional shell), so only divert badly-broken targets to FAST.
+# Tune once live-Blender timings exist.
+_SOLVER_NONMANIFOLD_LIMIT = 6
+_SOLVER_HEALTH_MAX_VERTS = 200000
+
+
+def choose_solver(target, preferred='EXACT', max_verts=_SOLVER_HEALTH_MAX_VERTS):
+    """Pick the solver to *try first* from the target's health. EXACT is accurate
+    but slow and brittle; on a badly non-manifold / degenerate target it will
+    almost always fail after a slow pass, so start with FAST instead and skip the
+    doomed attempt. Clean meshes keep the preferred (accurate) solver. Only acts
+    when `preferred` is EXACT and the mesh is light enough to scan cheaply;
+    `robust_boolean` still falls back, so this only changes the *order*."""
+    if preferred != 'EXACT' or len(target.data.vertices) > max_verts:
+        return preferred
+    h = mesh_health(target)
+    if h['non_manifold'] >= _SOLVER_NONMANIFOLD_LIMIT or h['degenerate'] >= 1:
+        return 'FAST'
+    return 'EXACT'
+
+
+def robust_boolean(context, target, cutter, operation='DIFFERENCE',
+                   solver='EXACT'):
+    """Destructive boolean that tries hard to succeed and explains itself when it
+    can't. Returns (ok, solver_used, message):
+
+      * pick the starting solver from the target's health (`choose_solver`) --
+        skip a doomed EXACT pass on visibly-broken geometry;
+      * try that solver, then FAST (`apply_boolean_fallback`);
+      * if both fail, recalculate the cutter's normals and retry once -- the
+        usual fix for the EXACT solver choking on an inverted cutter;
+      * if it still fails, diagnose the *target* (non-manifold / degenerate /
+        loose geometry) so the message tells the user what to repair.
+
+    The target is never modified beyond the boolean itself; only the cutter's
+    normals (it is disposable) may be rewritten."""
+    start = choose_solver(target, solver)
+    used = apply_boolean_fallback(context, target, cutter, operation, start)
+    if used is not None:
+        if used == solver:
+            msg = "Cut done"
+        elif start != solver and used == start:
+            msg = ("Cut done (%s solver: target geometry is too broken for %s)"
+                   % (used, solver))
+        else:
+            msg = "Cut done (%s solver fallback)" % used
+        return True, used, msg
+
+    recalc_normals(cutter)
+    used = apply_boolean_fallback(context, target, cutter, operation, start)
+    if used is not None:
+        return True, used, "Cut done (after cutter normal repair, %s solver)" % used
+
+    detail = _health_summary(target) or "geometry the solver can't resolve"
+    return (False, None,
+            "Boolean failed on '%s' (%s). Try Mesh > Normals > Recalculate "
+            "Outside, or remove doubles, on the target." % (target.name, detail))
+
+
 def duplicate_object(context, obj, name_suffix="_slice"):
     """Create an independent clone of an object, copying the mesh data too."""
     new = obj.copy()

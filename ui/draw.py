@@ -37,14 +37,14 @@ def draw_grid(grid_verts, color):
     _draw_lines(grid_verts, color, primitive='LINES', width=1.0)
 
 
-def draw_shape(points, line_color, closed=True):
+def draw_shape(points, line_color, closed=True, width=2.0):
     if len(points) < 2:
         # if there is a single point, no need to draw a small marker
         return
     pts = list(points)
     if closed and len(pts) >= 3:
         pts = pts + [pts[0]]
-    _draw_lines(pts, line_color, primitive='LINE_STRIP', width=2.0)
+    _draw_lines(pts, line_color, primitive='LINE_STRIP', width=width)
 
 
 def draw_points(points, color, size=6.0):

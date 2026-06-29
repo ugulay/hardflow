@@ -76,18 +76,25 @@ def place_asset(context, objects, location, normal, tangent, scale=1.0,
 
 
 def bind_cutters(context, meshes, target, operation='DIFFERENCE', solver='EXACT',
-                 non_destructive=True):
+                 non_destructive=True, failures=None):
     """Make each (already surface-placed) mesh a boolean cutter on the target. In
     non-destructive mode the live modifier stays and the cutter is stashed (the
     Boxcutter flow); otherwise the boolean is applied and the cutter deleted.
-    Shared by make_asset_cutter and the live-preview commit. Returns `meshes`."""
+    Shared by make_asset_cutter and the live-preview commit. Returns `meshes`.
+
+    In destructive mode each cut goes through `robust_boolean` (solver fallback +
+    cutter normal repair + diagnosis); if a `failures` list is given, the
+    human-readable message for any cut that still fails is appended to it (the
+    caller -- an operator -- reports it; core stays free of bpy.ops/report)."""
     for m in meshes:
         if non_destructive:
             boolean.add_boolean(target, m, operation, solver)
             boolean.stash_cutter(context, m, target)
         else:
-            # Robust apply: fall back to the FAST solver on messy targets.
-            boolean.apply_boolean_fallback(context, target, m, operation, solver)
+            ok, _used, msg = boolean.robust_boolean(context, target, m,
+                                                    operation, solver)
+            if not ok and failures is not None:
+                failures.append(msg)
     if not non_destructive:
         for m in meshes:
             if m.name in bpy.data.objects:
@@ -107,10 +114,11 @@ def flatten_objects(objects):
 
 def make_asset_cutter(context, objects, target, location, normal, tangent,
                       scale=1.0, operation='DIFFERENCE', solver='EXACT',
-                      non_destructive=True):
+                      non_destructive=True, failures=None):
     """Bind a kit part to the target as a boolean: orient every mesh object of the
     INSERT to the surface and make each a cutter (CUT/MAKE/INTERSECT) via
-    bind_cutters. Returns the list of mesh cutters acted on."""
+    bind_cutters. Returns the list of mesh cutters acted on. A `failures` list, if
+    given, collects diagnosis messages for cuts that fail (see bind_cutters)."""
     mat = asset_matrix(location, normal, tangent, scale)
     coll = asset_collection(context)
     meshes = [o for o in objects if o.type == 'MESH']
@@ -118,7 +126,8 @@ def make_asset_cutter(context, objects, target, location, normal, tangent,
         coll.objects.link(o)
         o.matrix_world = mat @ o.matrix_world      # authored pose -> placed pose
 
-    bind_cutters(context, meshes, target, operation, solver, non_destructive)
+    bind_cutters(context, meshes, target, operation, solver, non_destructive,
+                 failures)
     # non-mesh helpers (empties/curves) of a cutter kit are dropped destructively
     if not non_destructive:
         for o in objects:

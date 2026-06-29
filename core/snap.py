@@ -51,3 +51,25 @@ def nearest_on_segments(cursor, segments, threshold):
         if d <= threshold and (best is None or d < best[2]):
             best = (i, c, d)
     return best
+
+
+# Lower number = more precise / preferred snap target when distances tie.
+_SNAP_PRIORITY = {'VERT': 0, 'MID': 1, 'EDGE': 2}
+
+
+def resolve_snap(candidates, tie_px=4.0):
+    """Disambiguate competing geometry-snap hits. `candidates` is a list of
+    (kind, hit) where hit is (index, (x, y), dist) or None. Returns the chosen
+    (kind, hit), or None when nothing snapped.
+
+    Picks the geometrically *nearest* hit, but when several land within `tie_px`
+    of the closest one, the most precise kind wins (VERT > MID > EDGE). So a
+    cursor sitting on an edge right next to a vertex snaps to the vertex, while a
+    clearly-closer edge still beats a far vertex -- instead of the old strict
+    VERT-then-MID-then-EDGE order that let a far vertex hijack a near edge."""
+    real = [(k, h) for (k, h) in candidates if h is not None]
+    if not real:
+        return None
+    nearest = min(d for _k, (_i, _p, d) in real)
+    close = [kh for kh in real if kh[1][2] - nearest <= tie_px]
+    return min(close, key=lambda kh: _SNAP_PRIORITY.get(kh[0], 99))

@@ -65,6 +65,7 @@ class HARDFLOW_OT_place_asset(Operator):
             return {'CANCELLED'}
         self.roll = 0.0
         self._hit = None          # (location, normal, object)
+        self._edge_tangent = None  # face-edge-aligned base tangent (smart orient)
         self._screen = None
         self._root = None         # oriented Empty the previewed INSERT hangs under
         self._finalized = False
@@ -89,7 +90,23 @@ class HARDFLOW_OT_place_asset(Operator):
 
         if event.type == 'MOUSEMOVE':
             self._screen = (event.mouse_region_x, event.mouse_region_y)
-            self._hit = raycast.ray_cast_surface(context, region, rv3d, self._screen)
+            # Skip the previewed INSERT parts (and their root) so the ray finds
+            # the target surface, not the preview hovering under the cursor.
+            ignore = list(self._objects)
+            if self._root is not None:
+                ignore.append(self._root)
+            ex = raycast.ray_cast_surface_ex(context, region, rv3d,
+                                             self._screen, ignore=ignore)
+            if ex is None:
+                self._hit = None
+                self._edge_tangent = None
+            else:
+                location, normal, obj, index, matrix = ex
+                self._hit = (location, normal, obj)
+                # Align the INSERT to the hit face's dominant edge (smart orient),
+                # so greeble snaps to panel lines; the user still rolls from there.
+                self._edge_tangent = raycast.face_edge_tangent(
+                    obj, index, matrix, normal)
             self._apply_smart_placement(context)
 
         elif event.type == 'WHEELUPMOUSE' and event.value == 'PRESS':
@@ -149,7 +166,12 @@ class HARDFLOW_OT_place_asset(Operator):
             self._auto_scaled = True
 
     def _tangent(self, normal):
-        base = decal_math.base_tangent(tuple(normal))
+        # Prefer the face-edge-aligned tangent (smart orient) over the generic
+        # world-derived one; the user's roll is applied on top of whichever.
+        if self._edge_tangent is not None:
+            base = tuple(self._edge_tangent)
+        else:
+            base = decal_math.base_tangent(tuple(normal))
         return decal_math.rotate_about_axis(base, tuple(normal), self.roll)
 
     def _draw_px(self, context):
@@ -216,13 +238,17 @@ class HARDFLOW_OT_place_asset(Operator):
                     self._root = None
                 meshes = [o for o in self._objects if o.type == 'MESH']
                 op = 'DIFFERENCE' if prefs.asset_boolean == 'CUT' else 'UNION'
+                failures = []
                 asset.bind_cutters(context, meshes, obj, operation=op,
                                    solver=prefs.default_solver,
-                                   non_destructive=prefs.non_destructive)
+                                   non_destructive=prefs.non_destructive,
+                                   failures=failures)
                 if not prefs.non_destructive:
                     for o in self._objects:
                         if o.type != 'MESH' and o.name in bpy.data.objects:
                             bpy.data.objects.remove(o, do_unlink=True)
+                if failures:
+                    self.report({'WARNING'}, failures[0])
                 self._select(context, meshes[0] if meshes else obj)
             else:
                 if prefs.asset_conform and obj is not None and obj.type == 'MESH':

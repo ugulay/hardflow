@@ -59,6 +59,55 @@ def base_tangent(normal, world_up=(0.0, 0.0, 1.0)):
     return _normalize(proj)
 
 
+def dominant_tangent(edge_vectors, normal):
+    """The direction of the longest edge in `edge_vectors`, projected onto the
+    surface plane (perpendicular to `normal`) and normalized. Used to align a
+    drawn shape / placed insert to a face's dominant edge, so cuts and details
+    line up with the existing geometry instead of an arbitrary world/view axis.
+    Returns None when there is no usable edge (all too short or edge-on)."""
+    z = _normalize(normal)
+    best = None
+    best_len = 0.0
+    for e in edge_vectors:
+        proj = _sub(e, _scale(z, _dot(e, z)))   # drop the out-of-plane part
+        length = _length(proj)
+        if length > best_len:
+            best_len = length
+            best = proj
+    if best is None or best_len < 1e-9:
+        return None
+    return _normalize(best)
+
+
+def basis_from_edge(edge_dir, normal):
+    """Construction basis aligned to a single edge (Grid Modeler 'grid plane on a
+    selected edge'): right = the edge direction projected onto the plane
+    perpendicular to `normal`, up completes the right-handed frame. Returns
+    (right, up, z) unit 3-tuples. Falls back to a stable tangent when the edge is
+    (near) parallel to the normal."""
+    z = _normalize(normal)
+    r = _sub(edge_dir, _scale(z, _dot(edge_dir, z)))
+    if _length(r) < 1e-9:
+        r = base_tangent(z)
+    r = _normalize(r)
+    u = _cross(z, r)
+    return r, _normalize(u), z
+
+
+def basis_from_two_edges(edge1, edge2):
+    """Construction basis spanning two edges (Grid Modeler 'grid plane on 2
+    edges'): the plane is the one the two edges define (normal = edge1 x edge2),
+    right = edge1, up completes it. Returns (right, up, z). Falls back to a
+    single-edge basis when the edges are (near) parallel (no unique plane)."""
+    n = _cross(edge1, edge2)
+    if _length(n) < 1e-9:                      # parallel -> no unique plane
+        return basis_from_edge(edge1, (0.0, 0.0, 1.0))
+    z = _normalize(n)
+    r = _normalize(edge1)                      # edge1 already lies in the plane
+    u = _cross(z, r)
+    return r, _normalize(u), z
+
+
 def rotate_about_axis(vec, axis, angle):
     """Rotate vec around the unit-ish axis by angle radians (Rodrigues'
     rotation). axis is normalized internally."""
@@ -78,6 +127,14 @@ def orientation_basis(normal, tangent):
     surface plane; x completes the frame. All three are returned as unit
     3-tuples. Degenerate inputs fall back to the world axes."""
     z = _normalize(normal)
+    # If the tangent is nearly parallel to the normal, Gram-Schmidt leaves a tiny,
+    # numerically unstable residual that normalizes to a near-random direction --
+    # the source of the decal "popping" to a new orientation on curved surfaces.
+    # Swap in the stable surface tangent up front instead of waiting for the
+    # near-zero fallback below.
+    t = _normalize(tangent)
+    if abs(_dot(t, z)) > 0.99:
+        tangent = base_tangent(z)
     # re-orthogonalize the tangent against z (Gram-Schmidt)
     y = _sub(tangent, _scale(z, _dot(tangent, z)))
     if _length(y) < 1e-6:

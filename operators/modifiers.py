@@ -5,7 +5,7 @@ import bpy
 from bpy.types import Operator
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty
 
-from ..core import geometry
+from ..core import geometry, boolean
 
 
 class HARDFLOW_OT_bevel(Operator):
@@ -29,11 +29,33 @@ class HARDFLOW_OT_bevel(Operator):
     weighted_normal: BoolProperty(
         name="Weighted Normal", default=True,
         description="Weighted Normal modifier for clean shading after bevel")
+    adaptive: BoolProperty(
+        name="Adaptive Width", default=True,
+        description="Scale the bevel width to the object's size, so it reads the "
+                    "same on small and large objects (off once you drag)")
 
     @classmethod
     def poll(cls, context):
         obj = context.active_object
         return obj is not None and obj.type == 'MESH'
+
+    def _adaptive_width(self, context):
+        """Bevel width scaled to the active object's largest dimension."""
+        from ..core import transform
+        return transform.adaptive_dimension(
+            max(context.active_object.dimensions), fraction=0.02,
+            min_value=0.0005, max_value=0.5)
+
+    def _apply_adaptive(self, context):
+        """When adaptive, derive both the width and the segment count from the
+        object's size, so the bevel reads the same and stays smooth (not faceted)
+        at any scale. No-op once the user has overridden manually."""
+        if not self.adaptive:
+            return
+        from ..core import transform
+        self.width = self._adaptive_width(context)
+        self.segments = transform.bevel_segments(
+            self.width, max(context.active_object.dimensions))
 
     # --- modifier setup (execute = redo path; invoke sets up modal) ---------
 
@@ -70,14 +92,38 @@ class HARDFLOW_OT_bevel(Operator):
                 obj.modifiers.remove(mod)
 
     def execute(self, context):
+        # Edit Mode with edges selected -> a real on-selection edge bevel (actual
+        # geometry), not a whole-object modifier.
+        if context.mode == 'EDIT_MESH':
+            return self._bevel_edit_edges(context)
+        self._apply_adaptive(context)
         self._create(context)
+        return {'FINISHED'}
+
+    def _bevel_edit_edges(self, context):
+        self._apply_adaptive(context)
+        n = geometry.edit_bevel_edges(context.active_object, self.width,
+                                      self.segments, self.profile)
+        if n == 0:
+            self.report({'WARNING'}, "Select edge(s) to bevel in Edit Mode")
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Beveled %d edge(s)" % n)
         return {'FINISHED'}
 
     # --- interactive modal (HardOps style live adjustment) ------------------
 
     def invoke(self, context, event):
+        # In Edit Mode the bevel acts on the selected edges (no modal modifier
+        # drag); the redo panel adjusts width/segments/profile.
+        if context.mode == 'EDIT_MESH':
+            return self.execute(context)
+        self._apply_adaptive(context)
         self._start_x = event.mouse_x
         self._start_width = self.width
+        # Drag metres-per-pixel scaled to the object's size: ~0.0015 on a 1 m
+        # object (the old fixed value), faster on large objects and finer on
+        # small ones, so the drag feels the same regardless of scale.
+        self._sens = 0.0015 * max(1e-3, max(context.active_object.dimensions))
         self._bevel = self._create(context)
         self._status(context)
         context.window_manager.modal_handler_add(self)
@@ -90,18 +136,21 @@ class HARDFLOW_OT_bevel(Operator):
 
     def modal(self, context, event):
         if event.type == 'MOUSEMOVE':
-            delta = (event.mouse_x - self._start_x) * 0.0015
+            delta = (event.mouse_x - self._start_x) * self._sens
             self.width = max(0.0, self._start_width + delta)
             self._bevel.width = self.width
+            self.adaptive = False   # manual drag overrides the size-derived width
             self._status(context)
 
         elif event.type == 'WHEELUPMOUSE':
             self.segments = min(24, self.segments + 1)
             self._bevel.segments = self.segments
+            self.adaptive = False   # manual segment change overrides auto-count
             self._status(context)
         elif event.type == 'WHEELDOWNMOUSE':
             self.segments = max(1, self.segments - 1)
             self._bevel.segments = self.segments
+            self.adaptive = False   # manual segment change overrides auto-count
             self._status(context)
 
         elif event.type in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER'} and \
@@ -176,6 +225,31 @@ class HARDFLOW_OT_clean(Operator):
         )
         after = len(context.active_object.data.vertices)
         self.report({'INFO'}, "Clean: %d -> %d vertex" % (before, after))
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_recalc_normals(Operator):
+    bl_idname = "object.hardflow_recalc_normals"
+    bl_label = "Recalculate Normals"
+    bl_description = ("Make the active mesh's normals point consistently outward "
+                      "(the common fix for booleans that won't cut)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and obj.type == 'MESH'
+
+    def execute(self, context):
+        obj = context.active_object
+        boolean.recalc_normals(obj)
+        h = boolean.mesh_health(obj)
+        if h['non_manifold'] or h['degenerate']:
+            self.report({'WARNING'},
+                        "Normals recalculated, but %s remain"
+                        % (boolean._health_summary(obj),))
+        else:
+            self.report({'INFO'}, "Normals recalculated; mesh looks boolean-ready")
         return {'FINISHED'}
 
 

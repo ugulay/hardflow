@@ -354,11 +354,64 @@ The INSERT system covers placement; authoring and smart-scale are missing.
       EXACT solver, retry FAST / nudge / report, so boolean INSERTs are robust on
       messy targets (`core/boolean.py`).
 
+## v1.9 — Tool smartness + Grid Modeler / SketchUp surface modeling
+Make the tools *reason* about the geometry, and bring the on-surface drawing /
+editing workflow closer to Grid Modeler and SketchUp. Pure math is unit-tested
+(`tests/test_core.py`); bpy paths have headless coverage; the modal/interactive
+behaviour still awaits a live-Blender pass.
+
+### Tool smartness
+- [x] **Robust, self-diagnosing booleans** — every destructive cut (draw,
+      selected-boolean, cutter-bake, INSERT) runs through `core/boolean.robust_boolean`
+      (auto-solver → FAST → cutter normal repair) and reports *why* it failed via
+      `mesh_health` instead of failing silently.
+- [x] **Health-driven solver choice** — `core/boolean.choose_solver` starts a cut
+      with FAST on visibly-broken targets, skipping a doomed EXACT pass.
+- [x] **Pre-cut health warning** — the N-panel flags boolean-breaking geometry
+      before you draw, with a one-click `HARDFLOW_OT_recalc_normals` fix.
+- [x] **Adaptive sizing** — bevel width + segment count, cut chamfer, decal hover
+      offset, and bevel drag speed all scale to the object's size
+      (`core/transform.adaptive_dimension`/`bevel_segments`, `decal.adaptive_decal_offset`).
+- [x] **Smart snapping** — nearest-wins vertex/edge/midpoint disambiguation
+      (`core/snap.resolve_snap`); the placement raycast skips the live preview
+      (`raycast.ray_cast_surface` `ignore`); stable decal orientation on curves.
+- [x] **Edge-aligned orientation** — drawing on a surface / placing an INSERT
+      aligns to the hit face's dominant edge (`raycast.face_edge_tangent`,
+      `decal_math.dominant_tangent`).
+
+### Grid Modeler / SketchUp surface modeling
+- [x] **Grid plane on selected edges** — Edit-Mode draw with 1–2 edges selected
+      lays the construction grid on them (`decal_math.basis_from_edge`/
+      `basis_from_two_edges`, draw tool `EDGES` plane).
+- [x] **Rotate the grid plane** — `Shift + ←/→` spins the grid in place.
+- [x] **Connected faces** — drawn faces weld onto coincident existing vertices
+      (`geometry.edit_add_face`).
+- [x] **Edit-Mode edge bevel** — real on-selection bevel (`geometry.edit_bevel_edges`),
+      not only a whole-object modifier.
+- [x] **Starter primitives + guide lines** — Add Cube/Plane and a snappable guide
+      line at the cursor (`geometry.build_box`/`build_plane`/`build_line`).
+- [x] **Local knife** — the knife score is restricted to the drawn footprint
+      (`geometry.knife_polygon`), not infinite planes across the whole mesh.
+- [x] **`Z` quick-close** + **line-width preference** (UI-scaled).
+- [ ] **`X` start-from-edge-vertex** — deferred: `X` is the snap toggle; vertex
+      snap (`V`) already starts a draw from an existing vertex.
+- [ ] **`Ctrl+Click` set main edge** for the 2-edge grid plane — needs the modal
+      edge-pick UX; pending a live-Blender pass.
+- [ ] **Pixel-accurate knife** (`knife_project`) — the footprint restriction stops
+      whole-mesh slicing, but a single large face still scores a full-width line;
+      a true cut needs the view-dependent `knife_project` operator.
+
 ## Known limitations
-- The grid plane is perpendicular to the view direction (passing through the
-  object origin); it is not yet aligned to the object surface/world axes (see
-  v0.2 "rotating the grid plane").
-- Object Mode only. There is no Edit Mode flow (`bmesh.from_edit_mesh`) yet.
 - Concave polygons work; self-intersecting ones produce a broken cutter.
-- The EXACT solver can fail on overlapping/inverted-normal geometry — if a cut
-  doesn't happen, fix the target's normals or nudge the cutter slightly.
+- The EXACT solver can still fail on badly broken targets. The draw tool and the
+  selected-boolean operator now retry automatically (EXACT → FAST → recalculate
+  the cutter's normals → FAST) via `core/boolean.robust_boolean`, and on a
+  hard failure report *why* (`mesh_health`: non-manifold / zero-area / loose
+  geometry) so you know what to repair. For target-side normal problems, run
+  Mesh > Normals > Recalculate Outside.
+
+## Resolved (previously listed as limitations)
+- ~~Grid plane perpendicular to view only~~ — the draw tool has VIEW / **SURFACE**
+  (aligned to the face under the cursor) / world X / Y / Z planes, cycled with
+  `←/→` (`operators/draw_cut.py` `_plane_basis`, `core/raycast.basis_from_normal`).
+- ~~Object Mode only~~ — Edit Mode draw / Push-Pull / Offset / snap landed in v1.3.

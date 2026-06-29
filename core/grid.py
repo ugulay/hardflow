@@ -223,3 +223,26 @@ def is_self_intersecting(points):
             if segments_intersect(a, b, c, d):
                 return True
     return False
+
+
+def point_in_polygon(point, polygon):
+    """Is the 2D `point` (x, y) inside the closed `polygon` (list of (x, y))?
+    Ray-casting (even-odd) test, pure 2D. Used to limit the knife score to the
+    faces actually under the drawn footprint instead of slicing the whole mesh.
+    Points exactly on an edge may read either way -- callers use a margin."""
+    n = len(polygon)
+    if n < 3:
+        return False
+    x, y = point
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        # does the horizontal ray from (x, y) cross edge (i, j)?
+        if (yi > y) != (yj > y):
+            x_cross = xi + (y - yi) * (xj - xi) / (yj - yi)
+            if x < x_cross:
+                inside = not inside
+        j = i
+    return inside

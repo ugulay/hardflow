@@ -48,6 +48,7 @@ class HARDFLOW_OT_boolean(Operator):
             return {'CANCELLED'}
 
         op = (self.operation if self.operation != 'SLICE' else None)
+        self._failures = []
         try:
             if self.operation == 'SLICE':
                 self._slice(context, targets, cutter, solver, nd, cleanup)
@@ -57,17 +58,27 @@ class HARDFLOW_OT_boolean(Operator):
                 boolean.stash_cutter(context, cutter, targets[0])
             else:
                 for t in targets:
-                    boolean.apply_boolean(context, t, cutter, op, solver)
-                    if cleanup:
-                        geometry.cleanup_mesh(t)
+                    self._cut(context, t, cutter, op, solver, cleanup)
                 bpy.data.objects.remove(cutter, do_unlink=True)
         except Exception as ex:  # noqa: BLE001
             self.report({'ERROR'}, "Hardflow Boolean: %s" % ex)
             return {'CANCELLED'}
 
-        self.report({'INFO'}, "Boolean %s on %d target(s)"
-                    % (self.operation.capitalize(), len(targets)))
+        if self._failures:
+            self.report({'WARNING'}, self._failures[0])
+        else:
+            self.report({'INFO'}, "Boolean %s on %d target(s)"
+                        % (self.operation.capitalize(), len(targets)))
         return {'FINISHED'}
+
+    def _cut(self, context, target, cutter, op, solver, cleanup):
+        """Destructive cut with solver fallback + diagnosis. The cutter is deleted
+        right after, so the normal-repair retry inside robust_boolean is safe."""
+        ok, _used, msg = boolean.robust_boolean(context, target, cutter, op, solver)
+        if not ok:
+            self._failures.append(msg)
+        elif cleanup:
+            geometry.cleanup_mesh(target)
 
     def _slice(self, context, targets, cutter, solver, nd, cleanup):
         """Split each target in two: a DIFFERENCE half and an INTERSECT half (the
@@ -78,11 +89,8 @@ class HARDFLOW_OT_boolean(Operator):
                 boolean.add_boolean(t, cutter, 'DIFFERENCE', solver)
                 boolean.add_boolean(other, cutter, 'INTERSECT', solver)
             else:
-                boolean.apply_boolean(context, t, cutter, 'DIFFERENCE', solver)
-                boolean.apply_boolean(context, other, cutter, 'INTERSECT', solver)
-                if cleanup:
-                    geometry.cleanup_mesh(t)
-                    geometry.cleanup_mesh(other)
+                self._cut(context, t, cutter, 'DIFFERENCE', solver, cleanup)
+                self._cut(context, other, cutter, 'INTERSECT', solver, cleanup)
         if nd:
             boolean.stash_cutter(context, cutter, targets[0])
         else:

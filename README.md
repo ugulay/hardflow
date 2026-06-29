@@ -97,8 +97,9 @@ brings to Blender for free. The right column points at the implementing module.
 |---------|--------------|-------|
 | Modal draw-to-cut | Box / Circle / Polygon / N-gon shapes, drawn directly in the viewport | `operators/draw_cut.py` |
 | Cut / Slice / Make / Face | DIFFERENCE · split-in-two · UNION · create an n-gon surface | `operators/draw_cut.py` |
-| Knife / zero-depth cut (v1.4) | Score the surface without extruding — project + split edges only | `core/geometry.py knife_polygon` |
-| World-scale grid snap | Camera-independent grid in meters; plane cycles VIEW / X / Y / Z | `core/grid.py`, `core/raycast.py` |
+| Knife / zero-depth cut (v1.4) | Score the surface without extruding; restricted to the drawn footprint, not the whole mesh (v1.9) | `core/geometry.py knife_polygon` |
+| World-scale grid snap | Camera-independent grid in meters; plane cycles VIEW / SURFACE / EDGES / X / Y / Z; `Shift+←/→` rotates the grid (v1.9) | `core/grid.py`, `core/raycast.py` |
+| Grid on selected edges (v1.9) | Edit-Mode draw lays the grid on 1–2 selected edges (Grid Modeler) | `core/decal_math.py basis_from_edge` |
 | Live grid density (v1.6) | Adjust grid spacing mid-draw with Ctrl+Wheel + on-screen grid widget | `operators/draw_cut.py`, `ui/draw.py` |
 | Live thickness / depth (v1.6) | Drag cutter/extrude depth during the draw with a readout (PgUp/Dn) | `operators/draw_cut.py` |
 | Vertex / edge snap | Lock to corner / edge / midpoint of existing geometry; colored cursor | `core/snap.py`, `core/snapping.py` |
@@ -124,13 +125,14 @@ brings to Blender for free. The right column points at the implementing module.
 | Live modifier cut | Leave a boolean modifier instead of applying (`N`) | `core/boolean.py` |
 | Cutter collection | Cutters kept in "Hardflow Cutters" (wire, parented, render off) | `core/boolean.py stash_cutter` |
 | Cutter manager | Select / show-hide / remove cutters; "Apply Cutters (Bake)" | `operators/cutters.py`, `ui/panel.py` |
-| Solver fallbacks (v1.8) | Retry EXACT → FAST when a boolean fails on messy geometry | `core/boolean.py apply_boolean_fallback` |
+| Robust booleans (v1.9) | Every cut auto-picks the solver, retries (EXACT→FAST→normal-repair), and reports *why* it failed | `core/boolean.py robust_boolean/choose_solver/mesh_health` |
 
 ### Hard Ops tools (Hard Ops — v1.0 / v1.5)
 
 | Feature | What it does | Where |
 |---------|--------------|-------|
-| Advanced bevel | Interactive (drag = width, wheel = segments) + Weighted Normal | `operators/modifiers.py` |
+| Advanced bevel | Interactive (drag = width, wheel = segments) + Weighted Normal; adaptive width + segment count scale to the object (v1.9) | `operators/modifiers.py` |
+| Edit-Mode edge bevel (v1.9) | A real on-selection edge bevel when run in Edit Mode, not just a modifier | `core/geometry.py edit_bevel_edges` |
 | Mirror | Bisect + clip across an axis | `operators/modifiers.py` |
 | Array / Radial array | Linear array on an axis; N copies around the 3D cursor | `operators/array.py`, `core/transform.py` |
 | Symmetrize | Mirror one half of the mesh onto the other | `core/geometry.py symmetrize_mesh` |
@@ -180,7 +182,9 @@ brings to Blender for free. The right column points at the implementing module.
 |---------|--------------|-------|
 | Push/Pull | Raycast a face, drag along its normal to extrude; grid-snap + numeric | `operators/push_pull.py` |
 | Offset | Raycast a face, drag to inset its border by a measured distance | `operators/offset.py`, `core/offset.py` |
+| Starter primitives (v1.9) | Add a Cube / Plane at the 3D cursor to model on | `operators/construction.py`, `core/geometry.py build_box/build_plane` |
 | Construction grid | Drop a wire reference grid at the 3D cursor on XY / XZ / YZ | `operators/construction.py` |
+| Guide line (v1.9) | Drop a snappable wire guide line at the cursor (SketchUp guides) | `operators/construction.py`, `core/geometry.py build_line` |
 | Loft / bridge (v1.6) | Bridge two drawn profiles into a solid | `core/geometry.py build_loft` |
 | Pipe + profiles (v1.6) | Surface-draping pipe; round / square / rect cross-section (`P`) | `operators/pipe.py`, `core/geometry.py build_pipe` |
 | Sagging cable / rope | A cable that drapes between its points (catenary sag) | `core/transform.py cable_points` |
@@ -193,6 +197,17 @@ brings to Blender for free. The right column points at the implementing module.
 | Draw cut into edit mesh | The drawn shape is knifed/inset into the active mesh, no cutter object | `operators/draw_cut.py` |
 | Push/Pull & Offset in Edit | Operate on the selected face(s) of the edit-mesh directly | `operators/push_pull.py`, `operators/offset.py` |
 | Edit-aware snapping | Vertex/edge snap reads the live, unapplied edit-mesh | `core/snapping.py collect_geo` |
+
+### Tool smartness (v1.9)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Self-diagnosing booleans | Auto-solver + retries; on failure says which geometry is broken | `core/boolean.py robust_boolean/mesh_health` |
+| Pre-cut health warning | N-panel flags broken geometry before you draw + one-click normal fix | `ui/panel.py`, `operators/modifiers.py recalc_normals` |
+| Adaptive sizing | Bevel width + segments, cut chamfer, decal offset, drag speed scale to the object | `core/transform.py adaptive_dimension/bevel_segments`, `core/decal.py adaptive_decal_offset` |
+| Smart snapping | Nearest-wins vertex/edge disambiguation; raycast skips the live preview | `core/snap.py resolve_snap`, `core/raycast.py` |
+| Edge-aligned orientation | Drawing / INSERTs align to the hit face's dominant edge | `core/raycast.py face_edge_tangent`, `core/decal_math.py dominant_tangent` |
+| Connected faces | Drawn faces weld onto coincident existing vertices | `core/geometry.py edit_add_face` |
 
 ### UX & shared
 

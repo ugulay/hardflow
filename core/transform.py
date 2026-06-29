@@ -49,6 +49,30 @@ def fit_scale(insert_size, target_feature, fraction=0.25, default=1.0):
     return (target_feature * fraction) / insert_size
 
 
+def adaptive_dimension(max_dimension, fraction=0.02, min_value=0.001,
+                       max_value=1.0):
+    """A length that scales with an object's size: `fraction` of its largest
+    dimension, clamped to [min_value, max_value]. Lets a bevel width / cut
+    chamfer read the same on a 5 cm bracket and a 50 m hull instead of a fixed
+    value that's invisible on one and huge on the other. Returns `min_value` when
+    the dimension is unknown (<= 0). Pure arithmetic, unit-tested."""
+    if max_dimension <= 0.0:
+        return min_value
+    return max(min_value, min(max_value, max_dimension * fraction))
+
+
+def bevel_segments(width, object_size, min_seg=2, max_seg=12):
+    """Segment count for a bevel scaled to how big the chamfer is relative to the
+    object: a small chamfer reads fine with 2 segments, a wide one needs more to
+    stay smooth instead of faceted. Clamped to [min_seg, max_seg]. Pure
+    arithmetic, unit-tested."""
+    if object_size <= 0.0 or width <= 0.0:
+        return min_seg
+    ratio = width / object_size
+    seg = int(round(2 + ratio * 80))
+    return max(min_seg, min(max_seg, seg))
+
+
 def dice_coordinates(lo, hi, count):
     """Interior cut positions that slice the span [lo, hi] into `count` equal
     pieces -- the Hard Ops dice/panel cut planes along one axis. Returns the

@@ -7,6 +7,118 @@ logic; since the project is pre-1.0, minor versions add features.
 
 _Nothing yet._
 
+## [1.9.0] — 2026-06-30
+
+Tool smartness + Grid Modeler / SketchUp surface-modeling parity. The tools now
+reason about the geometry (self-healing booleans, adaptive sizing, smart snapping
+and orientation), and the on-surface drawing workflow gains a grid you can lay on
+selected edges, rotate freely, and draw connected geometry on. Pure logic is
+unit-tested (`56/56`); bpy paths have headless coverage; the modal/interactive
+behaviour still awaits a live-Blender pass.
+
+### Added (Grid Modeler parity)
+- **Rotate the grid plane** — `Shift + ←/→` spins the construction grid's axes
+  around its normal in `angle_step` increments while drawing (the plane normal and
+  origin stay put), so you can align the grid freely on any plane. Plain `←/→`
+  still cycles the plane type.
+- **Grid plane on selected edges** — entering the draw tool in Edit Mode with
+  edge(s) selected lays the construction grid on that selection (one edge → plane
+  along the edge + its face normal; two edges → the plane they span), cycled via
+  the new `EDGES` plane in `< >` (`core/decal_math.basis_from_edge`/
+  `basis_from_two_edges`, `operators/draw_cut._capture_edges_basis`). This is Grid
+  Modeler's "orient your grid by any direction / select 2 edges".
+- **Connected faces** — `core/geometry.edit_add_face` now welds the drawn face's
+  vertices onto coincident existing ones, so created faces connect to the
+  surrounding mesh instead of floating as a detached island.
+- **`Z` quick-close** — `Z` closes and commits the in-progress polygon (Grid
+  Modeler quick-close), alongside Enter.
+- **Construction guide lines** — `HARDFLOW_OT_add_guide` drops a snappable wire
+  guide line at the 3D cursor along X/Y/Z (`core/geometry.build_line`), the
+  SketchUp/Grid Modeler "construction lines" reference. N-panel Build row.
+- **Line-width preference** — the drawn shape outline thickness is now a
+  preference (`line_width`), scaled by Blender's UI scale (Grid Modeler 1.39 /
+  1.37.2 parity).
+
+### Added (surface-tool review)
+- **Smart edge-aligned orientation** — drawing on a surface and placing an INSERT
+  now align to the hit face's dominant (longest) edge, so cuts and greeble line up
+  with existing panel lines instead of an arbitrary world/view axis
+  (`core/decal_math.dominant_tangent`, `core/raycast.face_edge_tangent`,
+  `ray_cast_surface_ex`). Falls back to the view-up tangent when no edge is found.
+- **Starter primitives** — `HARDFLOW_OT_add_primitive` drops a Cube or Plane at
+  the 3D cursor (`core/geometry.build_box`/`build_plane`), so the SketchUp-style
+  tools have a mesh to act on without leaving Hardflow. N-panel Build row.
+- **Edit-Mode edge bevel** — the Bevel tool now does a real on-selection edge
+  bevel when run in Edit Mode with edges selected (`core/geometry.edit_bevel_edges`,
+  `bmesh.ops.bevel`), instead of only adding a whole-object Bevel modifier.
+- **Auto bevel segment count** — an adaptive bevel now scales its segment count to
+  the chamfer width (`core/transform.bevel_segments`), so a wide bevel stays smooth
+  instead of faceted; manual width-drag or segment-wheel turns the auto off.
+- **Polygon draw button** — the Build row exposes the freeform Polygon (POLY +
+  FACE) draw tool alongside Rectangle.
+
+### Fixed (surface-tool review)
+- **Knife no longer slices the whole object** — `core/geometry.knife_polygon` /
+  `edit_knife_polygon` bisected the entire mesh along each loop edge's *infinite*
+  plane, so a small score on one face cut lines clear across the model. The score
+  is now restricted to the faces under the drawn footprint
+  (`core/grid.point_in_polygon` + `_knife_footprint_faces`).
+- **Decals/assets no longer stick to their own preview** — `ray_cast_surface`
+  gained an `ignore` set; the place modals exclude the live preview object that
+  hovers under the cursor, so the ray lands on the real target surface.
+- **Decal orientation no longer pops on curved surfaces** — `decal_math.
+  orientation_basis` now swaps in a stable surface tangent when the roll tangent
+  is near-parallel to the normal, instead of normalizing a tiny unstable residual.
+- **On-surface draw grid aligns to the view** — the SURFACE construction plane
+  derives its tangent from the view up, so the snap lattice/measure axes match
+  how you look at an angled face instead of reading as world-tilted.
+
+### Changed (surface-tool review)
+- **Bevel drag scales to object size** — the modal width drag was a fixed
+  metres-per-pixel constant (unusable on very large/small objects); it now scales
+  to the object's dimensions.
+- **Adaptive decal hover offset** — the decal surface gap scales to the target's
+  size (`core/decal.adaptive_decal_offset`); the Decal Offset preference now
+  defaults to `0` meaning "auto", preventing z-fighting on large meshes and
+  visible gaps on small ones.
+
+### Added
+- **Auto-solver selection** — `core/boolean.choose_solver` reads the target's
+  health and starts a cut with the FAST solver when the target is too broken for
+  EXACT to ever succeed, skipping the slow doomed EXACT pass (clean targets keep
+  EXACT; guarded by a vertex cap so the scan stays cheap). `robust_boolean` still
+  falls back, so this only reorders attempts.
+- **Robust, self-diagnosing booleans** — a new `core/boolean.robust_boolean`
+  escalation path (auto-solver → FAST → recalculate the cutter's normals → FAST)
+  backs every destructive cut: the draw tool (`operators/draw_cut.py`), the
+  selected-objects boolean (`operators/boolean_ops.py`), the cutter bake
+  (`operators/cutters.py`), and boolean INSERTs (`core/asset.bind_cutters`). When
+  a cut still fails it reports *why* via `mesh_health` (non-manifold / zero-area /
+  loose geometry) instead of failing silently or with a bare error.
+- **Pre-cut health warning** — the Hardflow N-panel flags an active mesh with
+  boolean-breaking geometry before you draw and offers a one-click fix
+  (`HARDFLOW_OT_recalc_normals`, `ui/panel.py`); capped to light meshes to keep
+  the sidebar responsive.
+- **Adaptive bevel / chamfer width** — the smart bevel and the in-draw
+  bevel-on-cut now scale their width to the active object's size by default
+  (`core/transform.adaptive_dimension`), so a chamfer reads the same on a 5 cm
+  bracket and a 50 m hull instead of being invisible or enormous. The bevel's
+  "Adaptive Width" toggle turns off automatically once you drag to set a width
+  manually.
+
+### Fixed
+- **Snap disambiguation** — geometry snap (vertex / edge-midpoint / on-edge) now
+  locks to the target *closest to the cursor*, with vertex precedence only
+  breaking near-ties (`core/snap.resolve_snap`). Previously a vertex anywhere
+  within the pixel threshold hijacked the snap even when an edge was far closer;
+  fixed in both the draw tool and the shared 3D snap path used by pipe /
+  Push-Pull / Offset (`core/snapping.geo_snap_3d`).
+- The main draw-cut and selected-boolean paths previously called the bare
+  EXACT-only `apply_boolean` with no fallback — the solver fallback added in v1.8
+  only covered INSERTs. They now share the robust path.
+- Stale docs: `ROADMAP.md` listed surface-aligned grid plane and Edit Mode as
+  open limitations though both already shipped (SURFACE plane / v1.3).
+
 ## [1.8.0] — 2026-06-29
 
 KitOps parity for the asset/kitbash system: smart placement and author-side

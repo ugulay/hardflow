@@ -111,36 +111,38 @@ def _segment_t(point, a, b):
 def geo_snap_3d(region, rv3d, coord, geo, threshold_px):
     """Nearest vertex / edge-midpoint / on-edge point to the cursor, returned as
     (point3d, kind) with kind in {'VERT', 'MID', 'EDGE'}, or None if nothing is
-    within threshold_px. Priority: exact vertex, then midpoint, then on-edge."""
+    within threshold_px. Picks the geometrically nearest target (snap.resolve_snap
+    disambiguates), with vertex precedence only breaking near-ties -- so a close
+    edge isn't hijacked by a far vertex."""
     if geo is None or not geo.enabled:
         return None
 
     vscr = _to_screen(region, rv3d, geo.verts)
-    hit = snap.nearest_point(coord, vscr, threshold_px)
-    if hit is not None:
-        return (geo.verts[hit[0]], 'VERT')
-
     mscr = _to_screen(region, rv3d, geo.mids)
-    hit = snap.nearest_point(coord, mscr, threshold_px)
-    if hit is not None:
-        return (geo.mids[hit[0]], 'MID')
-
     segs = []
-    ends = []
     for (a3, b3) in geo.edges:
         a2 = raycast.world_to_screen(region, rv3d, a3)
         b2 = raycast.world_to_screen(region, rv3d, b3)
         segs.append((None if a2 is None else (a2[0], a2[1]),
                      None if b2 is None else (b2[0], b2[1])))
-        ends.append((a3, b3))
-    hit = snap.nearest_on_segments(coord, segs, threshold_px)
-    if hit is not None:
-        idx = hit[0]
-        a2, b2 = segs[idx]
-        a3, b3 = ends[idx]
-        t = _segment_t(hit[1], a2, b2)
-        return (a3.lerp(b3, t), 'EDGE')
-    return None
+
+    best = snap.resolve_snap([
+        ('VERT', snap.nearest_point(coord, vscr, threshold_px)),
+        ('MID', snap.nearest_point(coord, mscr, threshold_px)),
+        ('EDGE', snap.nearest_on_segments(coord, segs, threshold_px)),
+    ])
+    if best is None:
+        return None
+    kind, hit = best
+    if kind == 'VERT':
+        return (geo.verts[hit[0]], 'VERT')
+    if kind == 'MID':
+        return (geo.mids[hit[0]], 'MID')
+    idx = hit[0]
+    a2, b2 = segs[idx]
+    a3, b3 = geo.edges[idx]
+    t = _segment_t(hit[1], a2, b2)
+    return (a3.lerp(b3, t), 'EDGE')
 
 
 def snap_insert_point(point, spacing, anchors=(), threshold=0.0):

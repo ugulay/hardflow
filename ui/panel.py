@@ -28,6 +28,7 @@ class HARDFLOW_PT_tools(Panel):
         circle.mode = 'CUT'
         col.operator("object.hardflow_boolean", text="Boolean (Selected)",
                      icon='MOD_BOOLEAN')
+        self._draw_health(context, col)
 
         col = layout.column(align=True)
         col.label(text="Modifier", icon='MODIFIER')
@@ -74,23 +75,51 @@ class HARDFLOW_PT_tools(Panel):
 
         col = layout.column(align=True)
         col.label(text="Build (SketchUp)", icon='MESH_GRID')
-        # Sketch with the draw tool in FACE mode: a rectangle or freeform line
+        # Starter primitives to model on (Push/Pull / Offset need a mesh to act on).
+        row = col.row(align=True)
+        row.operator("object.hardflow_add_primitive", text="Cube",
+                     icon='MESH_CUBE').kind = 'CUBE'
+        row.operator("object.hardflow_add_primitive", text="Plane",
+                     icon='MESH_PLANE').kind = 'PLANE'
+        # Sketch with the draw tool in FACE mode: a rectangle or freeform polygon
         # that becomes real geometry, ready to Push/Pull.
         row = col.row(align=True)
         rect = row.operator("mesh.hardflow_draw", text="Rectangle",
                             icon='MESH_PLANE')
         rect.shape = 'BOX'
         rect.mode = 'FACE'
-        line = row.operator("mesh.hardflow_draw", text="Line", icon='IPO_LINEAR')
-        line.shape = 'POLY'
-        line.mode = 'FACE'
+        poly = row.operator("mesh.hardflow_draw", text="Polygon",
+                            icon='MESH_DATA')
+        poly.shape = 'POLY'
+        poly.mode = 'FACE'
         row = col.row(align=True)
         row.operator("mesh.hardflow_push_pull", text="Push/Pull",
                      icon='EMPTY_SINGLE_ARROW')
         row.operator("mesh.hardflow_offset", text="Offset", icon='MOD_SOLIDIFY')
         row = col.row(align=True)
         row.operator("object.hardflow_add_grid", text="Grid", icon='MESH_GRID')
+        row.operator("object.hardflow_add_guide", text="Guide", icon='IPO_LINEAR')
         row.operator("object.hardflow_loft", text="Loft", icon='MOD_SIMPLEDEFORM')
+
+    # Recomputing mesh health rebuilds a bmesh on every panel redraw; skip it on
+    # heavy meshes so the sidebar stays responsive (mirrors the geo-snap cap).
+    _HEALTH_MAX_VERTS = 20000
+
+    def _draw_health(self, context, col):
+        """Passive pre-cut warning: if the active mesh has boolean-breaking
+        problems (non-manifold / zero-area geometry), flag it and offer the
+        one-click normal-recalc fix, so failures are caught before drawing."""
+        obj = context.active_object
+        if (obj is None or obj.type != 'MESH'
+                or len(obj.data.vertices) > self._HEALTH_MAX_VERTS):
+            return
+        summary = boolean._health_summary(obj)
+        if not summary:
+            return
+        box = col.box().column(align=True)
+        box.label(text="Cut may fail: " + summary, icon='ERROR')
+        box.operator("object.hardflow_recalc_normals",
+                     text="Recalculate Normals", icon='NORMALS_FACE')
 
 
 class HARDFLOW_PT_snap(Panel):

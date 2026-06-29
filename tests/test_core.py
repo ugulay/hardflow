@@ -139,6 +139,32 @@ def test_fit_scale():
     assert transform.fit_scale(2.0, 0.0, default=3.0) == 3.0
 
 
+def test_adaptive_dimension():
+    # 2% of the largest dimension, within the clamp band
+    assert abs(transform.adaptive_dimension(1.0, 0.02) - 0.02) < 1e-9
+    assert abs(transform.adaptive_dimension(10.0, 0.02) - 0.2) < 1e-9
+    # clamps: huge object capped at max, tiny object floored at min
+    assert transform.adaptive_dimension(1000.0, 0.02, max_value=0.5) == 0.5
+    assert transform.adaptive_dimension(0.01, 0.02, min_value=0.001) == 0.001
+    # unknown size -> min_value
+    assert transform.adaptive_dimension(0.0, min_value=0.002) == 0.002
+
+
+def test_bevel_segments():
+    # a tiny chamfer relative to the object -> minimum segments
+    assert transform.bevel_segments(0.005, 2.0) == 2
+    # a wide chamfer -> more segments, but clamped
+    assert transform.bevel_segments(0.2, 2.0) > 2
+    assert transform.bevel_segments(10.0, 2.0) == 12       # clamp to max
+    # degenerate inputs -> minimum
+    assert transform.bevel_segments(0.1, 0.0) == 2
+    assert transform.bevel_segments(0.0, 2.0) == 2
+    # bigger relative width -> at least as many segments (monotonic)
+    a = transform.bevel_segments(0.05, 2.0)
+    b = transform.bevel_segments(0.1, 2.0)
+    assert b >= a
+
+
 # --- offset: 2D polygon inset (SketchUp Offset) ------------------------------
 
 def test_signed_area_winding():
@@ -224,6 +250,19 @@ def test_is_self_intersecting():
     assert not grid.is_self_intersecting(arrow)
 
 
+def test_point_in_polygon():
+    square = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    assert grid.point_in_polygon((5, 5), square)
+    assert not grid.point_in_polygon((15, 5), square)      # right of the square
+    assert not grid.point_in_polygon((-1, 5), square)      # left of the square
+    assert not grid.point_in_polygon((5, 20), square)      # above
+    # concave L: a point in the notch is outside
+    el = [(0, 0), (10, 0), (10, 4), (4, 4), (4, 10), (0, 10)]
+    assert grid.point_in_polygon((2, 8), el)               # in the tall arm
+    assert not grid.point_in_polygon((8, 8), el)           # in the cut-out notch
+    assert not grid.point_in_polygon((0, 0), [(0, 0), (1, 1)])  # degenerate
+
+
 # --- snap: vertex / edge -----------------------------------------------------
 
 def test_nearest_point():
@@ -249,6 +288,26 @@ def test_nearest_on_segments():
     # an edge with a None endpoint is skipped
     segs2 = [(None, (1, 1)), ((0, 0), (10, 0))]
     assert snap.nearest_on_segments((5, 3), segs2, 5)[0] == 1
+
+
+def test_resolve_snap_disambiguates():
+    # hit tuples: (index, point, dist)
+    vert = (0, (0, 0), 3.0)
+    mid = (1, (1, 0), 3.0)
+    edge = (2, (2, 0), 1.0)
+    # nothing -> None
+    assert snap.resolve_snap([('VERT', None), ('EDGE', None)]) is None
+    # only an edge available -> that edge
+    assert snap.resolve_snap([('VERT', None), ('EDGE', edge)]) == ('EDGE', edge)
+    # a clearly-closer edge (dist 1) beats a far vertex (dist 3) when the gap
+    # exceeds tie_px -- the old strict-priority order got this wrong
+    assert snap.resolve_snap([('VERT', vert), ('EDGE', edge)],
+                             tie_px=1.0) == ('EDGE', edge)
+    # within tie_px, the more precise kind wins (vertex over equal-distance mid)
+    assert snap.resolve_snap([('MID', mid), ('VERT', vert)]) == ('VERT', vert)
+    # a near-tie (vertex 3.0 vs edge 1.0) inside a generous tie_px -> vertex wins
+    assert snap.resolve_snap([('VERT', vert), ('EDGE', edge)],
+                             tie_px=5.0) == ('VERT', vert)
 
 
 # --- decal_math: orientation basis -------------------------------------------
@@ -286,6 +345,57 @@ def test_orientation_basis_degenerate_tangent():
     x, y, z = decal_math.orientation_basis((0, 0, 1), (0, 0, 1))
     assert _is_unit(x) and _is_unit(y) and _is_unit(z)
     assert math.isclose(_dot(x, z), 0.0, abs_tol=1e-9)
+
+
+def test_orientation_basis_near_parallel_is_stable():
+    # a tangent *almost* parallel to the normal must resolve to the SAME stable
+    # frame as an exactly-parallel one -- no "pop" on curved surfaces. Previously
+    # the near-parallel case slipped past the zero-length guard and produced a
+    # near-random tangent.
+    n = (0.0, 0.0, 1.0)
+    exact = decal_math.orientation_basis(n, (0.0, 0.0, 1.0))
+    near = decal_math.orientation_basis(n, (0.02, 0.0, 1.0))   # ~1.1 deg off
+    for a, b in zip(near[1], exact[1]):          # y axes should match
+        assert math.isclose(a, b, abs_tol=1e-6), (near, exact)
+
+
+def test_dominant_tangent_picks_longest_edge():
+    # a 4x1 rectangle on the XY plane: the long edges run along X -> tangent ~ +X
+    rect_edges = [(4, 0, 0), (0, 1, 0), (-4, 0, 0), (0, -1, 0)]
+    t = decal_math.dominant_tangent(rect_edges, (0, 0, 1))
+    assert t is not None
+    assert math.isclose(abs(t[0]), 1.0, abs_tol=1e-9)        # aligned to X
+    assert math.isclose(t[2], 0.0, abs_tol=1e-9)             # in the surface plane
+    # the out-of-plane part of an edge is dropped before measuring length
+    tilted = [(0, 0.5, 5), (3, 0, 0)]   # first is mostly along normal -> short in-plane
+    t2 = decal_math.dominant_tangent(tilted, (0, 0, 1))
+    assert math.isclose(abs(t2[0]), 1.0, abs_tol=1e-9)       # the 3-along-X edge wins
+    # no usable edge -> None
+    assert decal_math.dominant_tangent([(0, 0, 2)], (0, 0, 1)) is None
+
+
+def test_basis_from_edge():
+    # an edge along X on a Z-up surface -> right = X, up = Y, z = Z
+    r, u, z = decal_math.basis_from_edge((3, 0, 0), (0, 0, 1))
+    assert _is_unit(r) and _is_unit(u) and _is_unit(z)
+    assert math.isclose(abs(r[0]), 1.0, abs_tol=1e-9)
+    assert math.isclose(z[2], 1.0, abs_tol=1e-9)
+    assert math.isclose(_dot(r, z), 0.0, abs_tol=1e-9)
+    # edge parallel to the normal -> still a valid (non-zero) frame
+    r2, u2, z2 = decal_math.basis_from_edge((0, 0, 5), (0, 0, 1))
+    assert _is_unit(r2) and _is_unit(u2) and _is_unit(z2)
+
+
+def test_basis_from_two_edges():
+    # X edge + Y edge -> the XY plane, normal +Z
+    r, u, z = decal_math.basis_from_two_edges((2, 0, 0), (0, 3, 0))
+    assert _is_unit(r) and _is_unit(u) and _is_unit(z)
+    assert math.isclose(abs(z[2]), 1.0, abs_tol=1e-9)
+    assert math.isclose(_dot(r, u), 0.0, abs_tol=1e-9)
+    assert math.isclose(_dot(r, z), 0.0, abs_tol=1e-9)
+    # parallel edges -> no unique plane -> falls back to a valid single-edge frame
+    r2, u2, z2 = decal_math.basis_from_two_edges((1, 0, 0), (2, 0, 0))
+    assert _is_unit(r2) and _is_unit(u2) and _is_unit(z2)
 
 
 def test_base_tangent_on_floor_falls_back():
