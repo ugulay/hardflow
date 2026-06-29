@@ -6,7 +6,8 @@
 # Zero exit code = passed. The modal drawing operator (HARDFLOW_OT_draw) requires
 # a window/region, so it is NOT tested here; instead the building blocks it uses
 # (build_prism, apply/add_boolean) and the non-modal bevel/mirror operators are
-# verified. For pure math: python tests/test_core.py.
+# verified. For pure math: python tests/test_core.py. For the modal tools that
+# can't run headless (draw, Push/Pull, Offset, the menus): tests/manual_checklist.md.
 import os
 import sys
 
@@ -22,7 +23,7 @@ if _PARENT not in sys.path:
 _PKG = os.path.basename(_REPO)            # usually "hardflow"
 hardflow = __import__(_PKG)
 from hardflow.core import (geometry, boolean, decal, decal_image, atlas,  # noqa: E402
-                           asset)
+                           asset, grid, raycast)
 
 
 def _reset():
@@ -563,6 +564,100 @@ def test_asset_operators_registered():
         assert ob.asset_data is not None, "object not marked as asset"
     finally:
         hardflow.unregister()
+
+
+# --- SketchUp Build tools: Push/Pull, Offset, Construction Grid --------------
+
+def test_extrude_faces_pushpull():
+    # geometry behind Push/Pull: extruding one face must add side walls and move
+    # the cap by the requested local vector.
+    _reset()
+    cube = _add_cube("PP", size=2.0)
+    before = len(cube.data.polygons)
+    ok = geometry.extrude_faces(cube, [0], Vector((0, 0, 1.0)))
+    assert ok and len(cube.data.polygons) > before, "extrude added no geometry"
+    top = max(v.co.z for v in cube.data.vertices)
+    assert abs(top - 2.0) < 1e-5, "cap not raised to expected height: %f" % top
+    # guards: empty list and out-of-range index are rejected, not crashes
+    assert geometry.extrude_faces(cube, [], Vector((0, 0, 1))) is False
+    assert geometry.extrude_faces(cube, [9999], Vector((0, 0, 1))) is False
+
+
+def test_inset_faces_offset():
+    # geometry behind Offset: inset adds a ring of faces around the picked face.
+    _reset()
+    cube = _add_cube("OFF", size=2.0)
+    before = len(cube.data.polygons)
+    assert geometry.inset_faces(cube, [0], 0.3) is True
+    assert len(cube.data.polygons) > before, "inset added no geometry"
+    assert geometry.inset_faces(cube, [0], 0.0) is False      # zero thickness
+    assert geometry.inset_faces(cube, [9999], 0.3) is False   # bad index
+
+
+def test_build_grid_mesh_is_wire():
+    _reset()
+    segs = grid.centered_grid_segments(1.0, 0.5)
+    me = geometry.build_grid_mesh(segs)
+    assert me is not None
+    assert len(me.edges) > 0, "grid mesh has no edges"
+    assert len(me.polygons) == 0, "construction grid must be wire-only"
+    assert geometry.build_grid_mesh([]) is None               # empty guard
+
+
+def test_basis_from_normal_orthonormal():
+    right, up, normal = raycast.basis_from_normal(Vector((0.3, 0.4, 0.866)))
+    for v in (right, up, normal):
+        assert abs(v.length - 1.0) < 1e-6, "basis vector not unit length"
+    assert abs(right.dot(up)) < 1e-6 and abs(right.dot(normal)) < 1e-6
+    assert abs(up.dot(normal)) < 1e-6
+    # a vertical normal must still yield a valid (non-degenerate) tangent
+    r, u, _n = raycast.basis_from_normal(Vector((0, 0, 1)))
+    assert abs(r.length - 1.0) < 1e-6 and abs(u.length - 1.0) < 1e-6
+
+
+def test_add_grid_operator():
+    _reset()
+    hardflow.register()
+    try:
+        assert hasattr(bpy.ops.object, "hardflow_add_grid")
+        res = bpy.ops.object.hardflow_add_grid(plane='XY', extent=2.0, spacing=0.5)
+        assert res == {'FINISHED'}, res
+        gridobj = bpy.data.objects.get("Hardflow_Grid")
+        assert gridobj is not None, "construction grid object not created"
+        assert len(gridobj.data.edges) > 0 and len(gridobj.data.polygons) == 0
+        assert gridobj.display_type == 'WIRE' and gridobj.show_in_front
+    finally:
+        hardflow.unregister()
+
+
+def test_build_tool_operators_registered():
+    # the modal operators can't run headless (no region), but they must register.
+    _reset()
+    hardflow.register()
+    try:
+        assert hasattr(bpy.ops.mesh, "hardflow_push_pull")
+        assert hasattr(bpy.ops.mesh, "hardflow_offset")
+        assert hasattr(bpy.ops.object, "hardflow_add_grid")
+    finally:
+        hardflow.unregister()
+
+
+def test_menu_classes_registered():
+    # the categorized pie + header dropdown menu system must register cleanly and
+    # tear down without leaking the header hook.
+    _reset()
+    hardflow.register()
+    try:
+        for name in ("HARDFLOW_MT_pie", "HARDFLOW_MT_pie_build",
+                     "HARDFLOW_MT_menu", "HARDFLOW_MT_menu_build",
+                     "HARDFLOW_MT_menu_decals", "HARDFLOW_MT_menu_assets"):
+            assert hasattr(bpy.types, name), "menu not registered: %s" % name
+    finally:
+        hardflow.unregister()
+        # a full unregister (incl. menu.unregister removing the header hook) must
+        # tear the classes back down -- no leak after disable/re-enable.
+        assert not hasattr(bpy.types, "HARDFLOW_MT_menu"), \
+            "menu class leaked after unregister"
 
 
 def _run():

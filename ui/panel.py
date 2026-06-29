@@ -43,7 +43,28 @@ class HARDFLOW_PT_tools(Panel):
                      icon='MOD_MIRROR')
         row.operator("object.hardflow_sharpen", text="Sharpen", icon='MOD_BEVEL')
         col.operator("object.hardflow_clean", text="Clean", icon='BRUSH_DATA')
-        col.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
+        row = col.row(align=True)
+        row.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
+        row.operator("mesh.hardflow_cable", text="Cable", icon='FORCE_CURVE')
+
+        col = layout.column(align=True)
+        col.label(text="Build (SketchUp)", icon='MESH_GRID')
+        # Sketch with the draw tool in FACE mode: a rectangle or freeform line
+        # that becomes real geometry, ready to Push/Pull.
+        row = col.row(align=True)
+        rect = row.operator("mesh.hardflow_draw", text="Rectangle",
+                            icon='MESH_PLANE')
+        rect.shape = 'BOX'
+        rect.mode = 'FACE'
+        line = row.operator("mesh.hardflow_draw", text="Line", icon='IPO_LINEAR')
+        line.shape = 'POLY'
+        line.mode = 'FACE'
+        row = col.row(align=True)
+        row.operator("mesh.hardflow_push_pull", text="Push/Pull",
+                     icon='EMPTY_SINGLE_ARROW')
+        row.operator("mesh.hardflow_offset", text="Offset", icon='MOD_SOLIDIFY')
+        col.operator("object.hardflow_add_grid", text="Construction Grid",
+                     icon='MESH_GRID')
 
 
 class HARDFLOW_PT_snap(Panel):
@@ -59,10 +80,14 @@ class HARDFLOW_PT_snap(Panel):
         layout = self.layout
         prefs = get_prefs(context)
         col = layout.column()
-        col.prop(prefs, "snap_enabled")
-        col.prop(prefs, "grid_world")
+        col.label(text="Snap (shared by all draw tools)")
+        col.prop(prefs, "snap_enabled", text="Grid")
+        col.prop(prefs, "geo_snap", text="Vertex/Edge")
+        col.prop(prefs, "surface_snap", text="Surface/Face")
+        col.prop(prefs, "snap_target")
         col.separator()
-        col.prop(prefs, "geo_snap")
+        col.prop(prefs, "grid_world")
+        col.prop(prefs, "build_grid_extent")
         col.prop(prefs, "snap_pixels")
         col.prop(prefs, "angle_step")
         col.separator()
@@ -72,6 +97,10 @@ class HARDFLOW_PT_snap(Panel):
         col.prop(prefs, "default_solver")
         col.separator()
         col.prop(prefs, "pipe_radius")
+        col.prop(prefs, "pipe_offset")
+        col.prop(prefs, "cable_radius")
+        col.prop(prefs, "cable_sag")
+        col.prop(prefs, "cable_segments")
         col.separator()
         col.label(text="Colors (live preview)")
         row = col.row(align=True)

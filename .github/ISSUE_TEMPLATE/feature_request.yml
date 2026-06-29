@@ -1,0 +1,40 @@
+name: ✨ Feature request
+description: Suggest a tool, workflow, or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Hardflow aims to deliver the core workflows of
+        Grid Modeler, Boxcutter, Hard Ops, DECALmachine, and KitOps for free —
+        if your request maps to one of those, mention how it works there.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the workflow pain or the missing capability.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work? Keys, panel placement, defaults, etc.
+    validations:
+      required: true
+  - type: input
+    id: prior-art
+    attributes:
+      label: Prior art (optional)
+      description: Is there an equivalent in another tool? e.g. "Hard Ops Mirror Gizmo"
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you be willing to contribute this?
+      options:
+        - "Maybe, with guidance"
+        - "Yes"
+        - "No"
+    validations:
+      required: true

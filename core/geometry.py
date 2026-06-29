@@ -81,6 +81,83 @@ def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
     return curve
 
 
+def build_grid_mesh(segments, name="Hardflow_Grid"):
+    """Build a wire reference grid (edges only, no faces) from a list of 2D line
+    segments ((x1, y1), (x2, y2)) laid on the local XY plane -- the SketchUp
+    construction grid. The caller positions/orients the object. Vertices are
+    de-duplicated so shared crossings weld. Returns mesh data, or None when the
+    segment list is empty."""
+    if not segments:
+        return None
+    bm = bmesh.new()
+    cache = {}
+
+    def vert(x, y):
+        key = (round(x, 6), round(y, 6))
+        v = cache.get(key)
+        if v is None:
+            v = bm.verts.new((x, y, 0.0))
+            cache[key] = v
+        return v
+
+    for (x1, y1), (x2, y2) in segments:
+        a, b = vert(x1, y1), vert(x2, y2)
+        if a is not b:
+            try:
+                bm.edges.new((a, b))
+            except ValueError:
+                pass            # duplicate edge -> skip
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def extrude_faces(obj, face_indices, local_vec):
+    """Push/Pull: extrude the given faces (indices into obj.data.polygons) and
+    move the new region by `local_vec` (an object-local Vector). Edits obj.data
+    via bmesh in Object Mode. Returns True on success. Face indices must be valid
+    on the base mesh -- generative modifiers that change the face count are not
+    accounted for."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.faces.ensure_lookup_table()
+    faces = [bm.faces[i] for i in face_indices if 0 <= i < len(bm.faces)]
+    if not faces:
+        bm.free()
+        return False
+    res = bmesh.ops.extrude_face_region(bm, geom=faces)
+    moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, vec=local_vec, verts=moved)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return True
+
+
+def inset_faces(obj, face_indices, thickness, depth=0.0):
+    """Offset/inset the given faces (indices into obj.data.polygons) inward by
+    `thickness`, optionally raising/lowering the inner face by `depth`. Edits
+    obj.data via bmesh in Object Mode. Returns True on success."""
+    if thickness <= 0.0:
+        return False
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.faces.ensure_lookup_table()
+    faces = [bm.faces[i] for i in face_indices if 0 <= i < len(bm.faces)]
+    if not faces:
+        bm.free()
+        return False
+    bmesh.ops.inset_region(bm, faces=faces, thickness=thickness, depth=depth,
+                           use_even_offset=True, use_boundary=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return True
+
+
 def symmetrize_mesh(obj, direction='+X'):
     """Symmetrize the mesh in place: keep one side and mirror it onto the other
     across the object-local axis plane (Hard Ops symmetrize). `direction` is a

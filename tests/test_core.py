@@ -25,6 +25,7 @@ def _load(name):
 
 
 grid = _load("grid")
+offset = _load("offset")
 snap = _load("snap")
 decal_math = _load("decal_math")
 decal_image = _load("decal_image")
@@ -45,6 +46,17 @@ def test_snap_world_disabled_or_zero_is_noop():
     assert grid.snap_world(5.0, 5.0, 0.0, True) == (5.0, 5.0)
 
 
+def test_snap_world_3d_rounds_each_axis():
+    # every axis is rounded independently to the nearest grid line
+    assert grid.snap_world_3d(0.123, -0.077, 0.249, 0.1, True) == (0.1, -0.1, 0.2)
+    assert grid.snap_world_3d(0.04, 0.06, -0.04, 0.1, True) == (0.0, 0.1, 0.0)
+
+
+def test_snap_world_3d_disabled_or_zero_is_noop():
+    assert grid.snap_world_3d(0.123, -0.077, 0.5, 0.1, False) == (0.123, -0.077, 0.5)
+    assert grid.snap_world_3d(5.0, 5.0, 5.0, 0.0, True) == (5.0, 5.0, 5.0)
+
+
 def test_world_grid_segments_basic_and_expand():
     segs = grid.world_grid_segments(0.0, 1.0, 0.0, 1.0, 0.5)
     assert len(segs) == 6
@@ -59,6 +71,66 @@ def test_world_grid_segments_basic_and_expand():
 def test_world_grid_segments_guards():
     assert grid.world_grid_segments(0, 1000, 0, 1000, 0.001) == []  # blow-up guard
     assert grid.world_grid_segments(1, 0, 0, 1, 0.1) == []          # degenerate bound
+
+
+# --- grid: scalar snap + construction grid (SketchUp Build tools) ------------
+
+def test_snap_scalar():
+    assert grid.snap_scalar(0.123, 0.1, True) == 0.1
+    assert grid.snap_scalar(0.16, 0.1, True) == 0.2
+    assert grid.snap_scalar(-0.04, 0.1, True) == 0.0  # rounds toward nearest
+    # disabled or non-positive size is a no-op
+    assert grid.snap_scalar(0.123, 0.1, False) == 0.123
+    assert grid.snap_scalar(0.123, 0.0, True) == 0.123
+
+
+def test_centered_grid_segments():
+    segs = grid.centered_grid_segments(1.0, 0.5)
+    # lines at -1, -0.5, 0, 0.5, 1 on each axis -> 5 verticals + 5 horizontals
+    assert len(segs) == 10
+    assert ((0.0, -1.0), (0.0, 1.0)) in segs       # center vertical
+    assert ((-1.0, 0.0), (1.0, 0.0)) in segs       # center horizontal
+    # symmetric extent: every line spans the full [-1, 1]
+    for (x1, y1), (x2, y2) in segs:
+        span = {abs(x1), abs(x2), abs(y1), abs(y2)}
+        assert max(span) == 1.0
+    # degenerate / blow-up guards
+    assert grid.centered_grid_segments(0.0, 0.5) == []
+    assert grid.centered_grid_segments(1.0, 0.0) == []
+    assert grid.centered_grid_segments(100.0, 0.001) == []  # too dense
+
+
+# --- offset: 2D polygon inset (SketchUp Offset) ------------------------------
+
+def test_signed_area_winding():
+    ccw = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    assert offset.signed_area(ccw) > 0
+    assert offset.signed_area(list(reversed(ccw))) < 0
+    assert offset.signed_area([(0, 0), (1, 1)]) == 0.0  # too few points
+
+
+def test_offset_polygon_inward_square():
+    sq = [(0, 0), (10, 0), (10, 10), (0, 10)]          # CCW
+    out = offset.offset_polygon(sq, 2.0)               # inward by 2
+    expect = [(2, 2), (8, 2), (8, 8), (2, 8)]
+    for (ox, oy), (ex, ey) in zip(out, expect):
+        assert math.isclose(ox, ex, abs_tol=1e-9)
+        assert math.isclose(oy, ey, abs_tol=1e-9)
+    # winding independence: a CW square insets to the same shrunk box
+    cw = list(reversed(sq))
+    out_cw = offset.offset_polygon(cw, 2.0)
+    assert set((round(x, 6), round(y, 6)) for x, y in out_cw) == \
+        set((round(x, 6), round(y, 6)) for x, y in expect)
+
+
+def test_offset_polygon_outward_and_guards():
+    sq = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    out = offset.offset_polygon(sq, -1.0)              # negative = outward
+    assert (-1.0, -1.0) in [(round(x, 6), round(y, 6)) for x, y in out]
+    assert offset.offset_polygon(sq, 0.0) == sq        # zero distance no-op
+    assert offset.offset_polygon([(0, 0), (1, 0)], 1.0) is None  # < 3 points
+    # a zero-length edge is degenerate
+    assert offset.offset_polygon([(0, 0), (0, 0), (1, 1)], 0.5) is None
 
 
 # --- grid: shape points ------------------------------------------------------
@@ -348,6 +420,38 @@ def test_mirror_axis_flags():
     assert transform.mirror_axis_flags('X') == (True, False, False)
     assert transform.mirror_axis_flags('Y') == (False, True, False)
     assert transform.mirror_axis_flags('Z') == (False, False, True)
+
+
+# --- transform: cable / rope sag math (v1.1) --------------------------------
+
+def test_cable_points_straight_and_sag():
+    # straight line: endpoints exact, midpoint interpolated, no droop
+    pts = transform.cable_points((0, 0, 0), (2, 0, 0), segments=2, sag=0.0)
+    assert pts[0] == (0.0, 0.0, 0.0)
+    assert pts[-1] == (2.0, 0.0, 0.0)
+    assert pts[1] == (1.0, 0.0, 0.0)
+    # with sag the mid-span droops by `sag` along -Z; endpoints unchanged
+    pts = transform.cable_points((0, 0, 0), (2, 0, 0), segments=2, sag=0.5)
+    assert pts[0] == (0.0, 0.0, 0.0) and pts[-1] == (2.0, 0.0, 0.0)
+    assert math.isclose(pts[1][2], -0.5, abs_tol=1e-9)
+    # sag pulls along an arbitrary axis index
+    pts = transform.cable_points((0, 0, 0), (0, 2, 0), segments=2, sag=0.3, axis=0)
+    assert math.isclose(pts[1][0], -0.3, abs_tol=1e-9)
+    # segments clamps to at least 1 (just the two endpoints)
+    assert len(transform.cable_points((0, 0, 0), (1, 0, 0), segments=0)) == 2
+
+
+def test_cable_chain_joins_without_duplicates():
+    anchors = [(0, 0, 0), (2, 0, 0), (4, 0, 0)]
+    chain = transform.cable_chain(anchors, segments=2, sag=0.0)
+    # 2 spans * 2 segments + 1 = 5 points, the shared anchor is not duplicated
+    assert len(chain) == 5
+    assert chain[0] == (0.0, 0.0, 0.0)
+    assert chain[-1] == (4.0, 0.0, 0.0)
+    assert chain[2] == (2.0, 0.0, 0.0)   # join anchor appears exactly once
+    # fewer than two anchors returned unchanged
+    assert transform.cable_chain([(1, 2, 3)]) == [(1, 2, 3)]
+    assert transform.cable_chain([]) == []
 
 
 # --- asset_lib: kit (.blend) library scan (v1.0) -----------------------------

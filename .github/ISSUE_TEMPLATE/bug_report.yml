@@ -1,0 +1,76 @@
+name: 🐛 Bug report
+description: Report something that is broken or behaving unexpectedly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill out the sections
+        below so we can reproduce and fix it quickly.
+
+        Before submitting, please **open the System Console**
+        (Window → Toggle System Console) and copy any error/traceback into the
+        log field below — that is usually what tells us exactly what went wrong.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I am on Blender 4.2 or newer
+          required: true
+        - label: I am on the latest release of Hardflow
+          required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Blender & Hardflow versions
+      description: e.g. "Blender 4.2.1 LTS, Hardflow 1.2.0"
+      placeholder: Blender 4.2.x, Hardflow 1.2.x
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: tool
+    attributes:
+      label: Which tool / feature?
+      description: e.g. Draw → Cut, Bevel, Push/Pull, Decals, Asset placement…
+      placeholder: e.g. Push/Pull
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A numbered list. A small `.blend` or screen recording helps a lot.
+      placeholder: |
+        1. Select a cube in Object Mode
+        2. Ctrl+Shift+D, draw a Box
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: System Console output / traceback
+      description: Paste any Python error from the System Console. This will be formatted as code automatically.
+      render: shell

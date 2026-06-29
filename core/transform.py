@@ -37,3 +37,33 @@ def mirror_axis_flags(axis):
     """(x, y, z) booleans selecting a single world axis from 'X'/'Y'/'Z'. Shared
     by the mirror and symmetrize tools so the axis mapping lives in one place."""
     return (axis == 'X', axis == 'Y', axis == 'Z')
+
+
+def cable_points(p0, p1, segments=12, sag=0.0, axis=2):
+    """Points along one hanging-cable span from p0 to p1 (both endpoints
+    included). The span is linearly interpolated, then drooped with a parabolic
+    sag: 0 at the ends, `sag` metres at mid-span, pulling along -`axis` (gravity;
+    axis 2 = world Z). sag=0 yields a straight segment. `segments` >= 1
+    sub-divisions. Pure arithmetic -- no bpy/mathutils -- so the cable shape is
+    unit-tested without Blender (the curve build lives in operators/pipe.py)."""
+    segments = max(1, int(segments))
+    out = []
+    for i in range(segments + 1):
+        t = i / segments
+        p = [p0[k] + (p1[k] - p0[k]) * t for k in range(3)]
+        p[axis] -= 4.0 * sag * t * (1.0 - t)
+        out.append((p[0], p[1], p[2]))
+    return out
+
+
+def cable_chain(points, segments=12, sag=0.0, axis=2):
+    """A sagging cable through a list of >=2 anchor points: each consecutive span
+    is drooped with `cable_points` and the spans are joined without duplicating
+    the shared anchors. Fewer than 2 points are returned unchanged. Pure
+    arithmetic, no bpy."""
+    if len(points) < 2:
+        return [tuple(p) for p in points]
+    out = [tuple(points[0])]
+    for a, b in zip(points[:-1], points[1:]):
+        out.extend(cable_points(a, b, segments, sag, axis)[1:])
+    return out

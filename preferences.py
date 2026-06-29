@@ -38,6 +38,25 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "vertex/edge/midpoint (overrides the grid)",
         default=True,
     )
+    surface_snap: BoolProperty(
+        name="Surface/Face Snap",
+        description="Stick drawing/anchor points to the face under the cursor; "
+                    "the ADD tool can also align its whole cut plane to that "
+                    "face (Surface plane mode)",
+        default=True,
+    )
+    snap_target: EnumProperty(
+        name="Snap Target",
+        description="Which geometry vertex/edge/surface snapping considers",
+        items=[
+            ('ACTIVE', "Active Object",
+             "Snap to the active object's geometry only (faster, predictable)"),
+            ('VISIBLE', "Visible Meshes",
+             "Snap to any visible mesh under the cursor (vertex count is capped "
+             "for performance)"),
+        ],
+        default='ACTIVE',
+    )
     snap_pixels: IntProperty(
         name="Snap Distance (px)",
         description="Screen-space capture radius for geometry snap",
@@ -53,11 +72,41 @@ class HARDFLOW_Preferences(AddonPreferences):
         description="Round cross-section radius of the pipe tool",
         default=0.05, min=0.001, soft_max=1.0,
     )
+    pipe_offset: FloatProperty(
+        name="Pipe/Cable Offset (m)",
+        description="How far each drawn point is lifted along the surface "
+                    "normal; raise it so the tube rests on top of the surface "
+                    "instead of sinking in. Live-adjust with Ctrl+Wheel",
+        default=0.0, min=0.0, soft_max=1.0,
+    )
+    cable_radius: FloatProperty(
+        name="Cable Radius (m)",
+        description="Round cross-section radius of the cable/rope tool",
+        default=0.02, min=0.001, soft_max=1.0,
+    )
+    cable_sag: FloatProperty(
+        name="Cable Sag (m)",
+        description="How far the cable droops at mid-span under gravity; 0 is a "
+                    "straight line. Live-adjust with Shift+Wheel",
+        default=0.2, min=0.0, soft_max=5.0,
+    )
+    cable_segments: IntProperty(
+        name="Cable Segments",
+        description="Sub-divisions per cable span; more = smoother sag",
+        default=12, min=1, max=128,
+    )
     ngon_sides: IntProperty(
         name="N-gon Sides",
         description="Default side count for the N-gon draw shape; adjust live "
                     "with [ and ] while drawing",
         default=6, min=3, max=64,
+    )
+    build_grid_extent: FloatProperty(
+        name="Construction Grid Extent (m)",
+        description="Half-size of the construction grid object added by the "
+                    "Build tools; the grid spans +/- this on both axes "
+                    "(spacing follows Grid Size)",
+        default=2.0, min=0.01, soft_max=50.0,
     )
     decal_size: FloatProperty(
         name="Decal Size (m)",
@@ -164,10 +213,17 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "snap_enabled")
         col.prop(self, "grid_world")
         col.prop(self, "geo_snap")
+        col.prop(self, "surface_snap")
+        col.prop(self, "snap_target")
         col.prop(self, "snap_pixels")
         col.prop(self, "angle_step")
         col.prop(self, "ngon_sides")
+        col.prop(self, "build_grid_extent")
         col.prop(self, "pipe_radius")
+        col.prop(self, "pipe_offset")
+        col.prop(self, "cable_radius")
+        col.prop(self, "cable_sag")
+        col.prop(self, "cable_segments")
         col.prop(self, "decal_size")
         col.prop(self, "decal_offset")
         col.prop(self, "bake_size")

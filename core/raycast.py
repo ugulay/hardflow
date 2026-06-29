@@ -54,6 +54,41 @@ def world_to_screen(region, rv3d, point):
     return view3d_utils.location_3d_to_region_2d(region, rv3d, point)
 
 
+def basis_from_normal(normal, up_hint=Vector((0.0, 0.0, 1.0))):
+    """Orthonormal (right, up, normal) basis for a construction plane facing
+    `normal` -- the SketchUp construction plane derived from a picked face.
+    Picks a stable tangent: world up, unless the normal is (near) vertical, in
+    which case world +Y is used instead. Right-handed."""
+    n = Vector(normal).normalized()
+    up = Vector(up_hint).normalized()
+    if abs(n.dot(up)) > 0.999:
+        up = Vector((0.0, 1.0, 0.0))
+    right = up.cross(n).normalized()
+    up2 = n.cross(right).normalized()
+    return right, up2, n
+
+
+def closest_axis_distance(region, rv3d, coord, axis_co, axis_dir):
+    """Signed distance along the axis line (axis_co + t*axis_dir) of the point
+    on that axis nearest to the mouse ray through `coord`. Drives the Push/Pull
+    drag: how far along the face normal the cursor reaches. Returns 0.0 when the
+    ray is parallel to the axis."""
+    co = Vector((coord[0], coord[1]))
+    ray_d = view3d_utils.region_2d_to_vector_3d(region, rv3d, co)
+    ray_o = view3d_utils.region_2d_to_origin_3d(region, rv3d, co)
+    d = Vector(axis_dir).normalized()
+    w0 = Vector(axis_co) - ray_o
+    a = d.dot(d)                 # = 1 (d is unit)
+    b = d.dot(ray_d)
+    c = ray_d.dot(ray_d)
+    e = d.dot(w0)
+    f = ray_d.dot(w0)
+    denom = a * c - b * b
+    if abs(denom) < 1e-9:
+        return 0.0               # ray parallel to the axis
+    return (b * f - c * e) / denom
+
+
 def ray_cast_surface(context, region, rv3d, coord):
     """Shoot the mouse ray into the scene and return the first surface hit as
     (location, normal, object) in world space, or None if nothing is hit. Used

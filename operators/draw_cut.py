@@ -33,12 +33,8 @@ _MODES = [
     ('FACE', "Face", "Create a new face (create face, not boolean)"),
 ]
 
-# Vertex/edge snap cursor colors (kind -> RGBA)
-_SNAP_COLORS = {
-    'VERT': (1.0, 0.9, 0.2, 1.0),   # yellow = vertex
-    'MID':  (0.3, 1.0, 0.4, 1.0),   # green  = edge midpoint
-    'EDGE': (0.3, 0.9, 1.0, 1.0),   # blue   = on edge
-}
+# Vertex/edge snap cursor colors live in ui.draw so every tool shares them.
+_SNAP_COLORS = hud.SNAP_COLORS
 
 
 class HARDFLOW_OT_draw(Operator):
@@ -69,6 +65,8 @@ class HARDFLOW_OT_draw(Operator):
         self.points = []          # confirmed screen points
         self.cursor = (0, 0)      # current (snapped) mouse point
         self._snap_hit = None     # (screen_point, kind) -- for visual marker
+        self._surface_basis = None  # locked (origin,right,up,normal) in SURFACE
+        self._surface_miss = False  # SURFACE ray missed -> fell back to VIEW
         self.committing = False
         self._collect_snap_geometry(context)
 
@@ -95,6 +93,11 @@ class HARDFLOW_OT_draw(Operator):
 
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             p = self.cursor
+            # SURFACE mode: lock the construction plane to the face under the
+            # first click so the whole shape stays on one stable plane.
+            if (self.plane == 'SURFACE' and not self.points
+                    and self._surface_basis is None):
+                self._lock_surface_basis(context, p)
             if self.shape == 'POLY':
                 self.points.append(p)
             else:  # BOX / CIRCLE: two clicks
@@ -140,6 +143,7 @@ class HARDFLOW_OT_draw(Operator):
             step = 1 if event.type == 'RIGHT_ARROW' else -1
             self.plane = order[(order.index(self.plane) + step) % len(order)]
             self.points = []  # plane changed -> reset the half-drawn shape
+            self._surface_basis = None  # re-pick the surface on the next click
 
         elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
             self._cleanup(context)
@@ -154,7 +158,7 @@ class HARDFLOW_OT_draw(Operator):
 
     # --- world-scale snap (v0.2) ----------------------------------------
 
-    _PLANE_ORDER = ['VIEW', 'X', 'Y', 'Z']
+    _PLANE_ORDER = ['VIEW', 'SURFACE', 'X', 'Y', 'Z']
 
     # World bases (right, up, normal) for axis-aligned planes.
     _AXIS_BASIS = {
@@ -163,17 +167,46 @@ class HARDFLOW_OT_draw(Operator):
         'Z': (Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))),
     }
 
-    def _plane_basis(self, context):
-        """Origin, local axes and normal of the projection plane.
-        VIEW = perpendicular to view; X/Y/Z = world-axis aligned (Grid Modeler
-        grid)."""
+    def _view_basis(self, context):
         rv3d = context.region_data
         origin = context.active_object.matrix_world.translation
+        right, up = raycast.view_right_up(rv3d)
+        return origin, right, up, raycast.view_direction(rv3d)
+
+    def _surface_basis_at(self, context, screen_co):
+        """Construction basis aligned to the face under screen_co:
+        (origin, right, up, normal) from the surface hit, or None if the ray
+        misses geometry."""
+        region, rv3d = context.region, context.region_data
+        hit = raycast.ray_cast_surface(context, region, rv3d, screen_co)
+        if hit is None:
+            return None
+        location, normal, _obj = hit
+        right, up, n = raycast.basis_from_normal(normal)
+        return location.copy(), right, up, n
+
+    def _lock_surface_basis(self, context, screen_co):
+        """Capture and cache the surface basis at the first click so the whole
+        shape stays on one plane. Falls back silently to VIEW if no surface."""
+        self._surface_basis = self._surface_basis_at(context, screen_co)
+
+    def _plane_basis(self, context):
+        """Origin, local axes and normal of the projection plane.
+        VIEW = perpendicular to view; SURFACE = aligned to the picked face;
+        X/Y/Z = world-axis aligned (Grid Modeler grid)."""
         if self.plane == 'VIEW':
-            right, up = raycast.view_right_up(rv3d)
-            normal = raycast.view_direction(rv3d)
-        else:
-            right, up, normal = self._AXIS_BASIS[self.plane]
+            self._surface_miss = False
+            return self._view_basis(context)
+        if self.plane == 'SURFACE':
+            basis = self._surface_basis
+            if basis is None:
+                # Before the first click, preview-track the face under the cursor.
+                basis = self._surface_basis_at(context, self.cursor)
+            self._surface_miss = basis is None
+            return basis if basis is not None else self._view_basis(context)
+        self._surface_miss = False
+        right, up, normal = self._AXIS_BASIS[self.plane]
+        origin = context.active_object.matrix_world.translation
         return origin, right, up, normal
 
     def _snap_screen(self, context, screen_co):
@@ -328,8 +361,11 @@ class HARDFLOW_OT_draw(Operator):
 
         accent = tuple(prefs.line_color)[:3] + (1.0,)
         dim = (0.72, 0.72, 0.72, 1.0)
+        plane_label = self.plane
+        if self.plane == 'SURFACE' and self._surface_miss:
+            plane_label = "SURFACE (no face -> VIEW)"
         status = (
-            f"Shape {self.shape}    Mode {self.mode}    Plane {self.plane}"
+            f"Shape {self.shape}    Mode {self.mode}    Plane {plane_label}"
             f"        Snap {'ON' if self.snap else 'OFF'}"
             f"    Geo {'ON' if self.geo else 'OFF'}"
             f"    ND {'ON' if self.nd else 'OFF'}"

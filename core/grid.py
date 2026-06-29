@@ -36,6 +36,45 @@ def snap_world(u, v, size, enabled):
     return (round(u / size) * size, round(v / size) * size)
 
 
+def snap_world_3d(x, y, z, size, enabled):
+    """Round a 3D world point to the world grid, each axis independently.
+    3-axis analogue of snap_world; used by the surface/curve tools (pipe, cable)
+    to lock free 3D anchor points onto the grid. Pure: stdlib floats only."""
+    if not enabled or size <= 0:
+        return (x, y, z)
+    return (round(x / size) * size,
+            round(y / size) * size,
+            round(z / size) * size)
+
+
+def snap_scalar(value, size, enabled):
+    """Round a single distance (push/pull amount, offset thickness) to the grid.
+    1D analogue of snap_world; used by the SketchUp-style Build tools."""
+    if not enabled or size <= 0:
+        return value
+    return round(value / size) * size
+
+
+def centered_grid_segments(half_extent, spacing, max_lines=400):
+    """Grid line segments for a square reference grid centered on the origin,
+    spanning [-half_extent, +half_extent] on both axes with `spacing` between
+    lines (the construction-grid object). Each element is ((x1, y1), (x2, y2)).
+    Returns empty if the parameters are degenerate or the line count would blow
+    up. Pure 2D -- the operator lifts these onto the chosen plane."""
+    if spacing <= 0 or half_extent <= 0:
+        return []
+    n = int(half_extent / spacing)          # lines on each side of the center
+    if (2 * n + 1) * 2 > max_lines:
+        return []
+    lo, hi = -n * spacing, n * spacing
+    segs = []
+    for i in range(-n, n + 1):
+        x = i * spacing
+        segs.append(((x, lo), (x, hi)))     # vertical line
+        segs.append(((lo, x), (hi, x)))     # horizontal line
+    return segs
+
+
 def world_grid_segments(umin, umax, vmin, vmax, size, max_lines=240):
     """Generate grid line segments within the visible (u, v) bounds; each
     element is ((u1, v1), (u2, v2)). Returns empty if the line count exceeds

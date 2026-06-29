@@ -7,14 +7,16 @@ context in every session.
 
 Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
 Blender 4.2+. The goal: deliver the core workflows of Grid Modeler, Boxcutter,
-Hard Ops, DECALmachine, and KitOps for free. Currently at **v1.1** — the core
+Hard Ops, DECALmachine, and KitOps for free. Currently at **v1.2** — the core
 boolean/snap/cutter workflows, the full decal subsystem (placement, PBR material,
 bake, image library, trim sheets, atlasing), the asset/kitbash system (INSERT
 placement, boolean INSERTs, .blend library, conform, asset-browser mark), the
 Hard Ops modeling tools (boolean-from-selection, array, radial array, symmetrize,
-sharpen), and a live placement preview for decals + assets (the real object
-follows the cursor before commit) are all implemented; live Blender verification
-is still ongoing. The full roadmap is in `ROADMAP.md`.
+sharpen), a live placement preview for decals + assets (the real object follows
+the cursor before commit), and the SketchUp-style direct-modeling tools
+(Push/Pull, Offset, a construction-grid reference object, plus a sagging
+cable/rope) are all implemented; live Blender verification is still ongoing. The
+full roadmap is in `ROADMAP.md`.
 
 ## FIRST TASK: smoke test inside Blender
 
@@ -54,12 +56,14 @@ ops ─┘
 | `__init__.py` | Registration orchestration, the `_classes` tuple |
 | `keymaps.py` | Shortcut registration + preferences rebind UI (`register_keymaps`, `draw_keymap_prefs`); defaults Alt+Q / Ctrl+Shift+D |
 | `preferences.py` | Settings + the `get_prefs(context)` accessor |
-| `core/raycast.py` | Screen↔3D projection + plane (u,v) + surface ray (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`, `ray_cast_surface`) |
-| `core/grid.py` | World-scale + angle snap, shape points (`snap_world`, `world_grid_segments`, `snap_angle`, `box_points`, `circle_points`, `ngon_points`) |
+| `core/raycast.py` | Screen↔3D projection + plane (u,v) + surface ray (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`, `ray_cast_surface`, `basis_from_normal`, `closest_axis_distance`) |
+| `core/grid.py` | World-scale + angle + scalar snap, shape points, construction grid (`snap_world`, `snap_scalar`, `world_grid_segments`, `centered_grid_segments`, `snap_angle`, `box_points`, `circle_points`, `ngon_points`) |
 | `core/snap.py` | Vertex/edge geometry snap, pure 2D (`nearest_point`, `closest_point_on_segment`, `nearest_on_segments`) |
-| `core/geometry.py` | bmesh generation (`build_prism`, `build_face`, `build_pipe`, `estimate_thickness`, `symmetrize_mesh`, `mark_sharp_by_angle`, `cleanup_mesh`) |
+| `core/snapping.py` | Unified 3D snapping shared by every draw tool (vertex/edge → surface → grid → free); bpy-data + mathutils, no `bpy.ops`/`gpu`/`blf`; delegates picking to `core/snap.py` (`Geo`, `collect_geo`, `geo_snap_3d`, `grid_snap_3d`) |
+| `core/offset.py` | Pure 2D polygon inset/offset math, stdlib only — SketchUp Offset (`signed_area`, `offset_polygon`) |
+| `core/geometry.py` | bmesh generation (`build_prism`, `build_face`, `build_pipe`, `build_grid_mesh`, `extrude_faces`, `inset_faces`, `estimate_thickness`, `symmetrize_mesh`, `mark_sharp_by_angle`, `cleanup_mesh`) |
 | `core/boolean.py` | boolean + cutter management (`apply_boolean`, `add_boolean`, `duplicate_object`, `stash_cutter`, `cutter_collection`) |
-| `core/transform.py` | Pure array/radial math, stdlib only (`radial_step_radians`, `radial_angles_deg`, `array_offset_vector`, `mirror_axis_flags`) |
+| `core/transform.py` | Pure array/radial + cable-sag math, stdlib only (`radial_step_radians`, `radial_angles_deg`, `array_offset_vector`, `mirror_axis_flags`, `cable_points`, `cable_chain`) |
 | `core/decal_math.py` | Pure decal orientation math, no bpy/mathutils (`orientation_basis`, `base_tangent`, `rotate_about_axis`) |
 | `core/decal_image.py` | Pure decal-library helpers, stdlib only (`scan_library`, `is_image_file`, `aspect_size`) |
 | `core/atlas.py` | Pure UV-rect + pixel math for trim sheets + atlasing (`slice_grid`, `cell_rect`, `rect_pixels`, `pack_shelves`, `remap_uv`, `blit_pixels`, `rect_to_uv`, `next_pow2`) |
@@ -71,16 +75,22 @@ ops ─┘
 | `operators/boolean_ops.py` | Boolean from selected objects, active = cutter (`HARDFLOW_OT_boolean`) |
 | `operators/array.py` | Linear + radial array (`HARDFLOW_OT_array/radial_array`) |
 | `operators/cutters.py` | Non-destructive cutter management (`HARDFLOW_OT_apply_cutters/select_cutter/remove_cutter`) |
-| `operators/pipe.py` | Pipe from a line (`HARDFLOW_OT_pipe`) |
+| `operators/pipe.py` | Surface-snapping curve draw: pipe + sagging cable/rope, shared `_CurveDraw` modal (`HARDFLOW_OT_pipe/cable`) |
+| `operators/push_pull.py` | SketchUp Push/Pull: raycast a face, drag along its normal (grid snap + numeric entry), bmesh extrude (`HARDFLOW_OT_push_pull`) |
+| `operators/offset.py` | SketchUp Offset: raycast a face, drag to inset its border, bmesh inset (`HARDFLOW_OT_offset`) |
+| `operators/construction.py` | Add a wire construction-grid reference object at the 3D cursor (`HARDFLOW_OT_add_grid`) |
 | `operators/decals.py` | Decal placement + management + bake + image library + trim sheets + atlasing (`HARDFLOW_OT_place_decal/select_decal/remove_decal/bake_decal/load_decal_image/library_place/load_trim_sheet/atlas_decals`) |
 | `operators/assets.py` | INSERT placement + library + mark-as-asset (`HARDFLOW_OT_place_asset/load_asset/asset_library_place/mark_asset`) |
 | `ui/draw.py` | GPU + blf helpers |
-| `ui/pie.py` | Pie menu (`HARDFLOW_MT_pie`) |
+| `ui/pie.py` | Categorized pie system: main pie + Build/Boolean/Modify/Curves sub-pies (`HARDFLOW_MT_pie`, `HARDFLOW_MT_pie_build/boolean/modify/curves`); `_draw`/`_open` helpers |
+| `ui/menu.py` | 3D-View header dropdown covering every tool incl. Decals/Assets; data-driven `*_ITEMS` tables + submenus (`HARDFLOW_MT_menu`, `HARDFLOW_MT_menu_*`); `register`/`unregister` add the header hook |
 | `ui/panel.py` | N-panel: tools, snap settings, cutter list (`HARDFLOW_PT_*`) |
 | `ui/decal_panel.py` | N-panel "Decals" section: place by type + decal list (`HARDFLOW_PT_decals`) |
 | `ui/decal_library.py` | N-panel "Decal Library" section: image icon grid (`HARDFLOW_PT_decal_library`, `bpy.utils.previews`) |
 | `ui/asset_panel.py` | N-panel "Assets" + "Asset Library" sections (`HARDFLOW_PT_assets/asset_library`) |
 | `tests/test_core.py` | Pure core tests without Blender (`python tests/test_core.py`) |
+| `tests/test_blender.py` | Headless runtime tests for bpy-dependent core + non-modal operators (`blender --background --python tests/test_blender.py`) |
+| `tests/manual_checklist.md` | Click-through checklist for the modal tools the headless suite can't reach (draw, Push/Pull, Offset, pie + header menu) |
 
 ## Registration rule
 

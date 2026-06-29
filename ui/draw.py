@@ -5,6 +5,17 @@ from gpu_extras.batch import batch_for_shader
 
 _shader = gpu.shader.from_builtin('UNIFORM_COLOR')
 
+# Snap-marker colors shared by every draw tool (kind -> RGBA) so the cursor hint
+# means the same thing everywhere: yellow vertex, green midpoint, blue edge,
+# orange surface/face, grey grid.
+SNAP_COLORS = {
+    'VERT':    (1.0, 0.9, 0.2, 1.0),   # vertex
+    'MID':     (0.3, 1.0, 0.4, 1.0),   # edge midpoint
+    'EDGE':    (0.3, 0.9, 1.0, 1.0),   # on edge
+    'FACE':    (1.0, 0.6, 0.2, 1.0),   # surface / face
+    'GRID':    (0.7, 0.7, 0.7, 1.0),   # grid
+}
+
 
 def _draw_lines(points, color, primitive='LINE_STRIP', width=2.0):
     if len(points) < 2:
@@ -47,6 +58,30 @@ def draw_points(points, color, size=6.0):
     _shader.uniform_float("color", color)
     batch.draw(_shader)
     gpu.state.point_size_set(1.0)
+    gpu.state.blend_set('NONE')
+
+
+def draw_face_fill(points, color):
+    """Filled convex/star polygon from screen points, as a triangle fan built
+    around the centroid (TRIS -- LINE_LOOP/TRI_FAN are deprecated). Used to
+    highlight the face under the cursor in Push/Pull and Offset."""
+    if len(points) < 3:
+        return
+    cx = sum(p[0] for p in points) / len(points)
+    cy = sum(p[1] for p in points) / len(points)
+    verts = []
+    n = len(points)
+    for i in range(n):
+        a = points[i]
+        b = points[(i + 1) % n]
+        verts.append((cx, cy, 0.0))
+        verts.append((a[0], a[1], 0.0))
+        verts.append((b[0], b[1], 0.0))
+    gpu.state.blend_set('ALPHA')
+    batch = batch_for_shader(_shader, 'TRIS', {"pos": verts})
+    _shader.bind()
+    _shader.uniform_float("color", color)
+    batch.draw(_shader)
     gpu.state.blend_set('NONE')
 
 

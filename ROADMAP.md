@@ -186,6 +186,33 @@ Round out the Hard Ops feature parity beyond bevel/mirror/clean.
       mark edges sharp by angle and clean shading with a Weighted Normal modifier
       (+ optional angle-limited bevel).
 
+## v1.1 — Live placement preview
+- [x] **Live decal/asset preview** — the decal and asset placement tools show the
+      **real** object under the cursor (not a wireframe outline) before commit, so
+      you see exactly what you'll get; the preview *is* the final object on click,
+      and Esc discards it. New `core/asset.py` helpers `bind_cutters` /
+      `flatten_objects` support the reuse.
+
+## v1.2 — SketchUp-style direct modeling
+Direct push/pull/offset on existing faces plus a construction reference plane —
+the SketchUp spirit, fitting the existing architecture (pure math in `core`, a
+thin modal operator on top).
+- [x] **Push/Pull** — `HARDFLOW_OT_push_pull` (`operators/push_pull.py`): raycast a
+      face, lock it, then drag along its normal to extrude in or out with
+      world-grid snap and numeric entry; bmesh extrude, no `bpy.ops`. Reuses
+      `core/raycast.py`, `core/grid.py`, `core/geometry.py`.
+- [x] **Offset** — `HARDFLOW_OT_offset` (`operators/offset.py`): raycast a face and
+      drag to inset its border inward by a measured distance (grid-snapped,
+      numeric entry), committing a bmesh inset. Pure 2D inset/offset math in
+      `core/offset.py` (`signed_area`, `offset_polygon`), stdlib only + tested.
+- [x] **Construction grid** — `HARDFLOW_OT_add_grid` (`operators/construction.py`):
+      drops a wire reference grid at the 3D cursor on the XY / XZ / YZ plane to
+      model against; built from `core/grid.py centered_grid_segments` +
+      `core/geometry.py build_grid_mesh`.
+- [x] **Sagging cable / rope** — `HARDFLOW_OT_cable` (`operators/pipe.py`): a
+      cable that drapes between its points; pure catenary-style sag math in
+      `core/transform.py` (`cable_points`, `cable_chain`, tested).
+
 ## Known limitations
 - The grid plane is perpendicular to the view direction (passing through the
   object origin); it is not yet aligned to the object surface/world axes (see

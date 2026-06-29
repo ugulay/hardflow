@@ -3,6 +3,33 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic; since the project is pre-1.0, minor versions add features.
 
+## [Unreleased]
+
+_Nothing yet._
+
+## [1.2.0] — 2026-06-29
+
+The SketchUp-style direct-modeling milestone: drag faces in/out (Push/Pull),
+inset face borders (Offset), and drop a construction-grid reference object to
+model against. Pure logic is unit-tested without Blender (`44/44` passing); the
+bpy-dependent paths have headless coverage and still await a live-Blender smoke
+test.
+
+### Added
+- **Push/Pull (SketchUp)** — `HARDFLOW_OT_push_pull` (`operators/push_pull.py`):
+  raycast a face, lock it, then drag along its normal to extrude in or out with
+  world-grid snap and numeric entry; bmesh extrude, no `bpy.ops`. Reuses
+  `core/raycast.py`, `core/grid.py`, and `core/geometry.py`.
+- **Offset (SketchUp)** — `HARDFLOW_OT_offset` (`operators/offset.py`): raycast a
+  face and drag to inset its border inward by a measured distance (grid-snapped,
+  numeric entry), committing a bmesh inset. Pure 2D inset/offset math in
+  `core/offset.py` (`signed_area`, `offset_polygon`), stdlib only.
+- **Construction grid** — `HARDFLOW_OT_add_grid` (`operators/construction.py`):
+  a non-modal operator that drops a wire reference grid at the 3D cursor on the
+  XY / XZ / YZ plane to model against; built from `core/grid.py
+  centered_grid_segments` + `core/geometry.py build_grid_mesh`.
+- All three tools are surfaced in the N-panel tools section.
+
 ## [1.1.0] — 2026-06-29
 
 ### Added

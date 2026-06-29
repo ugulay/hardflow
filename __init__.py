@@ -4,8 +4,9 @@ import bpy
 
 from . import preferences, keymaps
 from .operators import (draw_cut, modifiers, cutters, pipe, decals,
-                        boolean_ops, array, assets)
-from .ui import pie, panel, decal_panel, decal_library, asset_panel
+                        boolean_ops, array, assets, push_pull, offset,
+                        construction)
+from .ui import pie, menu, panel, decal_panel, decal_library, asset_panel
 
 # Registration order doesn't matter, but keep it tidy:
 _classes = (
@@ -20,6 +21,10 @@ _classes = (
     array.HARDFLOW_OT_array,
     array.HARDFLOW_OT_radial_array,
     pipe.HARDFLOW_OT_pipe,
+    pipe.HARDFLOW_OT_cable,
+    push_pull.HARDFLOW_OT_push_pull,
+    offset.HARDFLOW_OT_offset,
+    construction.HARDFLOW_OT_add_grid,
     cutters.HARDFLOW_OT_apply_cutters,
     cutters.HARDFLOW_OT_select_cutter,
     cutters.HARDFLOW_OT_remove_cutter,
@@ -36,6 +41,17 @@ _classes = (
     assets.HARDFLOW_OT_asset_library_place,
     assets.HARDFLOW_OT_mark_asset,
     pie.HARDFLOW_MT_pie,
+    pie.HARDFLOW_MT_pie_build,
+    pie.HARDFLOW_MT_pie_boolean,
+    pie.HARDFLOW_MT_pie_modify,
+    pie.HARDFLOW_MT_pie_curves,
+    menu.HARDFLOW_MT_menu,
+    menu.HARDFLOW_MT_menu_build,
+    menu.HARDFLOW_MT_menu_boolean,
+    menu.HARDFLOW_MT_menu_modify,
+    menu.HARDFLOW_MT_menu_curves,
+    menu.HARDFLOW_MT_menu_decals,
+    menu.HARDFLOW_MT_menu_assets,
     panel.HARDFLOW_PT_tools,
     panel.HARDFLOW_PT_snap,
     panel.HARDFLOW_PT_cutters,
@@ -49,11 +65,13 @@ def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
     decal_library.register()
+    menu.register()        # header dropdown (after the menu classes exist)
     keymaps.register_keymaps()
 
 
 def unregister():
     keymaps.unregister_keymaps()
+    menu.unregister()
     decal_library.unregister()
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
