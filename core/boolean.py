@@ -183,4 +183,4 @@ def stash_cutter(context, cutter, target):
     cutter.hide_render = True
     # When the target moves/rotates, the cutter follows; keep its world pose fixed.
     cutter.parent = target
-    cutter.matrix_parent_inverse = target.matrix_world.inverted()
+    cutter.matrix_parent_inverse = target.matrix_world.inverted_safe()

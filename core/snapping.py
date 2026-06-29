@@ -183,7 +183,7 @@ def nearest_surface_point(context, world_co, target='VISIBLE'):
     for obj in _mesh_objects(context, target):
         eval_obj = obj.evaluated_get(depsgraph)
         mw = eval_obj.matrix_world
-        local = mw.inverted() @ Vector(world_co)
+        local = mw.inverted_safe() @ Vector(world_co)
         ok, loc, nrm, _idx = eval_obj.closest_point_on_mesh(local)
         if not ok:
             continue

@@ -55,7 +55,11 @@ class HARDFLOW_OT_push_pull(Operator):
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
-        context.window_manager.modal_handler_add(self)
+        try:
+            context.window_manager.modal_handler_add(self)
+        except Exception:  # never orphan the draw handler if the modal won't start
+            self._cleanup(context)
+            raise
         return {'RUNNING_MODAL'}
 
     def _lock_edit(self, context):
@@ -125,7 +129,7 @@ class HARDFLOW_OT_push_pull(Operator):
         v = Vector((co[0], co[1]))
         ray_dir = view3d_utils.region_2d_to_vector_3d(region, rv3d, v)
         ray_o = view3d_utils.region_2d_to_origin_3d(region, rv3d, v)
-        mw_inv = self.obj.matrix_world.inverted()
+        mw_inv = self.obj.matrix_world.inverted_safe()
         local_o = mw_inv @ ray_o
         local_d = mw_inv.to_3x3() @ ray_dir
         ok, _loc, _nrm, index = self.obj.ray_cast(local_o, local_d)
@@ -165,7 +169,7 @@ class HARDFLOW_OT_push_pull(Operator):
 
     def _local_disp(self):
         world_disp = self.axis_dir * self.distance
-        return self.obj.matrix_world.inverted().to_3x3() @ world_disp
+        return self.obj.matrix_world.inverted_safe().to_3x3() @ world_disp
 
     def _update_distance(self, context, co):
         region, rv3d = context.region, context.region_data

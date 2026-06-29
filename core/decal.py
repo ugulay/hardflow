@@ -336,7 +336,7 @@ def _assemble_decal(context, target, mesh, location, normal, tangent,
 
     # follow the target when it moves, keeping the placed world pose
     decal.parent = target
-    decal.matrix_parent_inverse = target.matrix_world.inverted()
+    decal.matrix_parent_inverse = target.matrix_world.inverted_safe()
 
     decal.show_wire = False
     decal.hide_render = False
@@ -461,7 +461,7 @@ def conform_trim_decal(context, decal_obj, target, subdivisions=8, max_gap=0.05)
     mw = decal_obj.matrix_world
     depsgraph = context.evaluated_depsgraph_get()
     eval_t = target.evaluated_get(depsgraph)
-    t_inv = eval_t.matrix_world.inverted()
+    t_inv = eval_t.matrix_world.inverted_safe()
     t_mw = eval_t.matrix_world
     doomed = []
     for f in bm.faces:

@@ -74,7 +74,11 @@ class _CurveDraw:
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
-        context.window_manager.modal_handler_add(self)
+        try:
+            context.window_manager.modal_handler_add(self)
+        except Exception:  # never orphan the draw handler if the modal won't start
+            self._cleanup(context)
+            raise
         return {'RUNNING_MODAL'}
 
     def _init_params(self, prefs):

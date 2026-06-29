@@ -86,7 +86,7 @@ class HARDFLOW_OT_radial_array(Operator):
         context.collection.objects.link(empty)
         # the pivot follows the object so the array stays put if the object moves
         empty.parent = obj
-        empty.matrix_parent_inverse = obj.matrix_world.inverted()
+        empty.matrix_parent_inverse = obj.matrix_world.inverted_safe()
 
         mod = obj.modifiers.new("HF_RadialArray", 'ARRAY')
         mod.count = self.count

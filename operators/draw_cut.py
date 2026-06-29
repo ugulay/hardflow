@@ -93,7 +93,11 @@ class HARDFLOW_OT_draw(Operator):
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
-        context.window_manager.modal_handler_add(self)
+        try:
+            context.window_manager.modal_handler_add(self)
+        except Exception:  # never orphan the draw handler if the modal won't start
+            self._cleanup(context)
+            raise
         return {'RUNNING_MODAL'}
 
     # --- event loop ------------------------------------------------------
@@ -834,7 +838,7 @@ class HARDFLOW_OT_draw(Operator):
         """KNIFE in Object Mode: score every drawn loop onto the active mesh
         (zero-depth, no boolean) via the object-data knife."""
         obj = context.active_object
-        mw_inv = obj.matrix_world.inverted()
+        mw_inv = obj.matrix_world.inverted_safe()
         rot = mw_inv.to_3x3()
         scored = 0
         for corners, vd in sets:
@@ -867,7 +871,7 @@ class HARDFLOW_OT_draw(Operator):
         MAKE/FACE add n-gon faces; CUT/SLICE/KNIFE score the loops onto the
         surface. Honours the same snap/grid/plane + in-draw pipeline."""
         obj = context.active_object
-        mw_inv = obj.matrix_world.inverted()
+        mw_inv = obj.matrix_world.inverted_safe()
         rot = mw_inv.to_3x3()
         if self.mode in {'MAKE', 'FACE'}:
             ok = False
