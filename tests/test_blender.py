@@ -874,6 +874,52 @@ def test_edit_extrude_and_basis():
     assert len(cube.data.polygons) >= 6      # extrude added side walls
 
 
+def test_capture_edges_basis_uses_longest_edge():
+    # The EDGES construction plane must orient its main (right) axis to the
+    # LONGEST selected edge regardless of selection order (decal_math.best_edge_pair
+    # wired through HARDFLOW_OT_draw._capture_edges_basis, which only reads the
+    # edit-mesh -- no modal/region state -- so it runs headless).
+    from hardflow.operators import draw_cut
+    import bmesh
+    _reset()
+    # a 4 x 1 rectangle in the XY plane: the long side runs along world X
+    me = bpy.data.meshes.new("Rect")
+    bm = bmesh.new()
+    vs = [bm.verts.new(c) for c in ((0, 0, 0), (4, 0, 0), (4, 1, 0), (0, 1, 0))]
+    bm.faces.new(vs)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("Rect", me)
+    bpy.context.collection.objects.link(ob)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.context.tool_settings.mesh_select_mode = (False, True, False)
+    bm = bmesh.from_edit_mesh(ob.data)
+    # select one long (X-aligned) edge and one short (Y-aligned) edge
+    for e in bm.edges:
+        e.select_set(False)
+    for e in bm.edges:
+        v = e.verts[1].co - e.verts[0].co
+        if v.length > 1e-6 and abs(v.x) > abs(v.y):   # the long X edge
+            e.select_set(True)
+            break
+    for e in bm.edges:
+        v = e.verts[1].co - e.verts[0].co
+        if v.length > 1e-6 and abs(v.y) > abs(v.x):   # a short Y edge
+            e.select_set(True)
+            break
+    bmesh.update_edit_mesh(ob.data)
+
+    basis = draw_cut.HARDFLOW_OT_draw._capture_edges_basis(None, bpy.context)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert basis is not None
+    _origin, right, _up, normal = basis
+    # main axis follows the longest (X) edge; the plane normal is world Z
+    assert abs(abs(right.x) - 1.0) < 1e-5, right
+    assert abs(abs(normal.z) - 1.0) < 1e-5, normal
+
+
 def test_edit_inset_and_add_face_and_knife():
     _reset()
     cube = _add_cube("EditOff", size=2.0)
