@@ -1,4 +1,4 @@
-# Push/Pull: SketchUp's signature tool. Hover a face, click to lock it, then
+# Push/Pull: a direct-modeling tool. Hover a face, click to lock it, then
 # drag along its normal (grid-snapped + vertex inference, with numeric entry) to
 # extrude in or out; click again or Enter to apply. C keeps the starting face
 # (copy/stack), R repeats the last distance.
@@ -18,7 +18,7 @@ from ..core import raycast, geometry
 class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
     bl_idname = "mesh.hardflow_push_pull"
     bl_label = "Hardflow Push/Pull"
-    bl_description = "Extrude a face along its normal by dragging (SketchUp Push/Pull)"
+    bl_description = "Extrude a face along its normal by dragging (Push/Pull)"
     bl_options = {'REGISTER', 'UNDO'}
 
     _HOVER_FILL = (0.15, 0.8, 1.0, 0.18)   # hovered (loose) face tint
@@ -33,7 +33,7 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
 
     def _init_tool(self, context, event):
         self.distance = 0.0       # signed extrude amount, meters
-        self.copy = False         # keep the starting face (SketchUp Ctrl/Copy)
+        self.copy = False         # keep the starting face (Ctrl push/pull copy)
 
     # --- locking ---------------------------------------------------------
 
@@ -110,7 +110,7 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
 
     def _handle_key(self, context, event):
         # C: toggle "Copy" -- keep the starting face so the extrude stacks a new
-        # volume on it (SketchUp's Ctrl push/pull, bound to C to stay clear of the
+        # volume on it (Ctrl push/pull copy, bound to C to stay clear of the
         # navigation modifiers).
         if event.type == 'C':
             self.copy = not self.copy

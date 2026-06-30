@@ -147,7 +147,7 @@ def geo_snap_3d(region, rv3d, coord, geo, threshold_px):
 
 def snap_insert_point(point, spacing, anchors=(), threshold=0.0):
     """Snap an INSERT placement point to existing insert anchors or a regular
-    world grid (KitOps insert grid / factory snapping, v1.8). Priority: the
+    world grid (grid/anchor snapping, v1.8). Priority: the
     nearest anchor within `threshold`, else the world grid of `spacing`, else the
     raw point. `anchors` are world Vectors. Returns a Vector."""
     p = Vector(point)

@@ -101,7 +101,7 @@ def _render(layout, items):
 
 
 class HARDFLOW_MT_menu_build(Menu):
-    bl_label = "Build (SketchUp)"
+    bl_label = "Build"
 
     def draw(self, context):
         _render(self.layout, _BUILD_ITEMS)

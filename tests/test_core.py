@@ -73,7 +73,7 @@ def test_world_grid_segments_guards():
     assert grid.world_grid_segments(1, 0, 0, 1, 0.1) == []          # degenerate bound
 
 
-# --- grid: scalar snap + construction grid (SketchUp Build tools) ------------
+# --- grid: scalar snap + construction grid (Build tools) --------------------
 
 def test_snap_scalar():
     assert grid.snap_scalar(0.123, 0.1, True) == 0.1
@@ -159,7 +159,7 @@ def test_adaptive_dimension():
     assert transform.adaptive_dimension(0.0, min_value=0.002) == 0.002
 
 
-# --- offset: 2D polygon inset (SketchUp Offset) ------------------------------
+# --- offset: 2D polygon inset (Offset) --------------------------------------
 
 def test_signed_area_winding():
     ccw = [(0, 0), (10, 0), (10, 10), (0, 10)]

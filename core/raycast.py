@@ -56,7 +56,7 @@ def world_to_screen(region, rv3d, point):
 
 def basis_from_normal(normal, up_hint=Vector((0.0, 0.0, 1.0))):
     """Orthonormal (right, up, normal) basis for a construction plane facing
-    `normal` -- the SketchUp construction plane derived from a picked face.
+    `normal` -- a construction plane derived from a picked face.
     Picks a stable tangent: world up, unless the normal is (near) vertical, in
     which case world +Y is used instead. Right-handed."""
     n = Vector(normal).normalized()

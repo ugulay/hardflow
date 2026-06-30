@@ -1,4 +1,4 @@
-# Hard Ops style pie menu system.
+# Categorized pie menu system.
 #
 # The toolset outgrew a single 8-slot ring, so the pie is now categorized: a
 # MAIN pie (Alt+Q) whose slots either fire the most-common operator directly or
@@ -43,7 +43,7 @@ class HARDFLOW_MT_pie(Menu):
 
 
 class HARDFLOW_MT_pie_build(Menu):
-    bl_label = "Build (SketchUp)"
+    bl_label = "Build"
 
     def draw(self, context):
         pie = self.layout.menu_pie()

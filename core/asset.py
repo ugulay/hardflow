@@ -1,4 +1,4 @@
-# Asset / kitbash logic (KitOps spirit): append a ready-made part (an "INSERT")
+# Asset / kitbash logic: append a ready-made part (an "INSERT")
 # from a .blend library, orient it to a surface, optionally bind it as a boolean
 # cutter or conform it to the surface, and gather it in a "Hardflow Assets"
 # collection.
@@ -78,8 +78,8 @@ def place_asset(context, objects, location, normal, tangent, scale=1.0,
 def bind_cutters(context, meshes, target, operation='DIFFERENCE', solver='EXACT',
                  non_destructive=True, failures=None):
     """Make each (already surface-placed) mesh a boolean cutter on the target. In
-    non-destructive mode the live modifier stays and the cutter is stashed (the
-    Boxcutter flow); otherwise the boolean is applied and the cutter deleted.
+    non-destructive mode the live modifier stays and the cutter is stashed
+    (non-destructive); otherwise the boolean is applied and the cutter deleted.
     Shared by make_asset_cutter and the live-preview commit. Returns `meshes`.
 
     In destructive mode each cut goes through `robust_boolean` (solver fallback +
@@ -139,7 +139,7 @@ def make_asset_cutter(context, objects, target, location, normal, tangent,
 def conform_asset(objects, target, offset=0.0):
     """Wrap/Conform an INSERT onto a curved surface: add a SHRINKWRAP
     (NEAREST_SURFACEPOINT) modifier toward the target on each mesh object, so the
-    part hugs the surface (KitOps 'wrap'). Returns the modifiers added."""
+    part hugs the surface (wrap/conform). Returns the modifiers added."""
     mods = []
     for o in objects:
         if o.type != 'MESH':
@@ -152,7 +152,7 @@ def conform_asset(objects, target, offset=0.0):
     return mods
 
 
-# --- KitOps extras (v1.8) -----------------------------------------------
+# --- Asset/insert extras (v1.8) -----------------------------------------
 
 
 def bound_size(objects):
@@ -175,7 +175,7 @@ def surface_feature_size(obj):
 
 def load_blend_materials(filepath, link=False):
     """Append (or link) every material from a .blend library -- a material-only
-    INSERT (KitOps material kpack). Returns the new material data-blocks."""
+    INSERT (material insert). Returns the new material data-blocks."""
     with bpy.data.libraries.load(filepath, link=link) as (data_from, data_to):
         data_to.materials = list(data_from.materials)
     return [m for m in data_to.materials if m is not None]
@@ -193,7 +193,7 @@ def apply_material(obj, mat):
 
 def write_objects_blend(filepath, objects):
     """Write the given objects (and their mesh/curve data + materials) to a .blend
-    library -- KPACK-style INSERT export into the asset library. Returns the
+    library -- .blend pack INSERT export into the asset library. Returns the
     filepath, or None when there is nothing to write."""
     blocks = set()
     for o in objects:
@@ -211,7 +211,7 @@ def write_objects_blend(filepath, objects):
 
 def transfer_shading(target, objects):
     """Apply the target's active material and smooth-shading state to the placed
-    part (KitOps material/auto-smooth transfer). Does nothing for the material if
+    part (material/auto-smooth transfer). Does nothing for the material if
     the target has none."""
     if target is None or target.type != 'MESH':
         return

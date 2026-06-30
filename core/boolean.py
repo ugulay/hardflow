@@ -46,7 +46,7 @@ def _remove_bool_mods(target):
 def apply_boolean_fallback(context, target, cutter, operation='DIFFERENCE',
                            solver='EXACT'):
     """Destructive apply that retries with the FAST solver when the preferred one
-    raises -- boolean INSERTs / cutters on messy targets (KitOps robustness). Any
+    raises -- boolean INSERTs / cutters on messy targets (robustness). Any
     half-added modifier is cleaned up between attempts. Returns the solver string
     that succeeded, or None when both fail."""
     for attempt in (solver, 'FAST'):
@@ -201,7 +201,7 @@ def cutter_collection(context):
 def stash_cutter(context, cutter, target):
     """Move the cutter to a separate collection, show it as wire, parent it to
     the target. Since the boolean modifier stays live on the target, the cutter
-    is kept in the scene (BoxCutter-style non-destructive flow)."""
+    is kept in the scene (non-destructive flow)."""
     for c in list(cutter.users_collection):
         c.objects.unlink(cutter)
     cutter_collection(context).objects.link(cutter)

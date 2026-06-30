@@ -26,7 +26,7 @@ def nearest_point(cursor, points, threshold):
 def snap_to_candidates(value, candidates, tol):
     """Snap a scalar `value` to the nearest entry in `candidates` within `tol`;
     if none is close enough (or `candidates` is empty) return `value` unchanged.
-    Used for SketchUp-style inference: snapping a push/pull distance to a real
+    Used for direct-modeling inference: snapping a push/pull distance to a real
     vertex / feature height instead of the free-drag value."""
     best = value
     best_d = tol

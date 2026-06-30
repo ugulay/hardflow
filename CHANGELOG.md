@@ -77,7 +77,7 @@ Blender 5.1.2). Modal/interactive feel is in
 
 ## [1.11.0] — 2026-06-30
 
-Direct-modeling depth: the SketchUp-style tools were consolidated onto a shared
+Direct-modeling depth: the direct-modeling tools were consolidated onto a shared
 modal base and grown to parity (copy/repeat/inference, recess chaining), two new
 Object-Mode edge tools landed (Edge Bevel + Loop Cut), the face tools now pick
 through generative modifiers, and the draw tool gained Blender's **Polyline Trim**
@@ -95,7 +95,7 @@ bevel, loop cut, modifier-pick). The modal/interactive feel is checked via
   perspective (`core/geometry.build_prism(s)` `apex`). "Polyline Trim / Add / Join"
   entries in the Boolean menu + pie.
 - **Push/Pull — Copy & Repeat & inference** — `C` keeps the starting face and
-  stacks a new volume on it (SketchUp Ctrl push/pull); `R` repeats the last
+  stacks a new volume on it (Ctrl push/pull); `R` repeats the last
   distance; with snap on, the drag **infers** to a real vertex / edge-midpoint
   height before falling back to the grid (`core/snap.snap_to_candidates`).
 - **Offset — Repeat & recess/panel chain** — `R` repeats the last thickness; `E`
@@ -129,8 +129,8 @@ bevel, loop cut, modifier-pick). The modal/interactive feel is checked via
 
 ## [1.10.0] — 2026-06-30
 
-A code-review hardening pass over the decal/asset subsystems plus a reference-tool
-gap pass (Grid Modeler / Boxcutter / Hard Ops / DECALmachine / KitOps): numeric
+A code-review hardening pass over the decal/asset subsystems plus a feature
+gap pass over common hard-surface workflows: numeric
 exact-size drawing, an Intersect draw mode, a bevelled cutter, mirror across the
 3D cursor / active object, array-along-curve, and decal transfer between surfaces.
 Pure logic is unit-tested (`60/60`); every new bpy path is verified headless in
@@ -141,28 +141,28 @@ Blender 5.1.2 (`77/77`).
   exact dimension (radius / extent / segment length, in the plane's metres) to
   lock the shape's size along the cursor direction; the HUD shows
   `size … m (typing)`, `Backspace` edits, `.`/numpad-`.` is the decimal, and
-  moving the mouse rotates the fixed-size shape around the anchor (Grid Modeler /
-  Boxcutter precision entry, `core/grid.lock_distance`). The boolean mode now
+  moving the mouse rotates the fixed-size shape around the anchor (precision
+  entry, `core/grid.lock_distance`). The boolean mode now
   cycles with **`Tab` / `Shift+Tab`** (the number row types the size instead).
 - **Intersect draw mode** — the draw modal gains an INTERSECT mode (keep only the
   part of the object inside the drawn volume), reached via `Tab` mode-cycle or
-  the header Boolean menu (Boxcutter / Hard Ops parity).
+  the header Boolean menu.
 - **Bevelled cutter** — `C` in the draw modal chamfers the cutter itself, so a
   CUT leaves bevelled recess walls (`core/geometry.bevel_cutter`), distinct from
-  `B` bevel-on-cut which chamfers the target's cut edge (Boxcutter bevelled cut).
+  `B` bevel-on-cut which chamfers the target's cut edge (bevelled cut).
 - **Array along a curve** — `HARDFLOW_OT_curve_array` arrays the active mesh along
   a selected curve (Array fit-curve + Curve deform) so copies follow the path;
-  header Modify menu (Hard Ops parity).
+  header Modify menu.
 - **Transfer decal to another surface** — `HARDFLOW_OT_transfer_decal` moves the
   selected decal(s) onto the active mesh, re-pointing their shrinkwrap and
   re-parenting while preserving world pose (`core/decal.retarget_decal`); Decals
-  menu (DECALmachine transfer).
+  menu (decal transfer).
 
 ### Changed
 - **Mirror across the 3D cursor or active object** — `HARDFLOW_OT_mirror` gains a
   "Mirror Across" option (Self / 3D Cursor / Active Object): mirror the selected
   meshes across the active object, or across an empty at the 3D cursor, not only
-  the object's own origin (Hard Ops parity).
+  the object's own origin.
 - **Deterministic main edge for the 2-edge grid plane** — the `EDGES` construction
   plane picked edges by arbitrary bmesh order, so which selected edge became the
   grid's main axis was unpredictable. It now takes the longest selected edge as the
@@ -197,14 +197,14 @@ Blender 5.1.2 (`77/77`).
 
 ## [1.9.0] — 2026-06-30
 
-Tool smartness + Grid Modeler / SketchUp surface-modeling parity. The tools now
+Tool smartness + surface-modeling depth. The tools now
 reason about the geometry (self-healing booleans, adaptive sizing, smart snapping
 and orientation), and the on-surface drawing workflow gains a grid you can lay on
 selected edges, rotate freely, and draw connected geometry on. Pure logic is
 unit-tested (`56/56`); bpy paths have headless coverage; the modal/interactive
 behaviour still awaits a live-Blender pass.
 
-### Added (Grid Modeler parity)
+### Added (precision-draw)
 - **Rotate the grid plane** — `Shift + ←/→` spins the construction grid's axes
   around its normal in `angle_step` increments while drawing (the plane normal and
   origin stay put), so you can align the grid freely on any plane. Plain `←/→`
@@ -213,19 +213,18 @@ behaviour still awaits a live-Blender pass.
   edge(s) selected lays the construction grid on that selection (one edge → plane
   along the edge + its face normal; two edges → the plane they span), cycled via
   the new `EDGES` plane in `< >` (`core/decal_math.basis_from_edge`/
-  `basis_from_two_edges`, `operators/draw_cut._capture_edges_basis`). This is Grid
-  Modeler's "orient your grid by any direction / select 2 edges".
+  `basis_from_two_edges`, `operators/draw_cut._capture_edges_basis`). Orient your
+  grid by any direction / select 2 edges.
 - **Connected faces** — `core/geometry.edit_add_face` now welds the drawn face's
   vertices onto coincident existing ones, so created faces connect to the
   surrounding mesh instead of floating as a detached island.
-- **`Z` quick-close** — `Z` closes and commits the in-progress polygon (Grid
-  Modeler quick-close), alongside Enter.
+- **`Z` quick-close** — `Z` closes and commits the in-progress polygon
+  (quick-close), alongside Enter.
 - **Construction guide lines** — `HARDFLOW_OT_add_guide` drops a snappable wire
   guide line at the 3D cursor along X/Y/Z (`core/geometry.build_line`), the
-  SketchUp/Grid Modeler "construction lines" reference. N-panel Build row.
+  "construction lines" reference. N-panel Build row.
 - **Line-width preference** — the drawn shape outline thickness is now a
-  preference (`line_width`), scaled by Blender's UI scale (Grid Modeler 1.39 /
-  1.37.2 parity).
+  preference (`line_width`), scaled by Blender's UI scale.
 
 ### Added (surface-tool review)
 - **Smart edge-aligned orientation** — drawing on a surface and placing an INSERT
@@ -234,7 +233,7 @@ behaviour still awaits a live-Blender pass.
   (`core/decal_math.dominant_tangent`, `core/raycast.face_edge_tangent`,
   `ray_cast_surface_ex`). Falls back to the view-up tangent when no edge is found.
 - **Starter primitives** — `HARDFLOW_OT_add_primitive` drops a Cube or Plane at
-  the 3D cursor (`core/geometry.build_box`/`build_plane`), so the SketchUp-style
+  the 3D cursor (`core/geometry.build_box`/`build_plane`), so the direct-modeling
   tools have a mesh to act on without leaving Hardflow. N-panel Build row.
 - **Edit-Mode edge bevel** — the Bevel tool now does a real on-selection edge
   bevel when run in Edit Mode with edges selected (`core/geometry.edit_bevel_edges`,
@@ -309,7 +308,7 @@ behaviour still awaits a live-Blender pass.
 
 ## [1.8.0] — 2026-06-29
 
-KitOps parity for the asset/kitbash system: smart placement and author-side
+Asset / kitbash system depth: smart placement and author-side
 packaging. Pure logic is unit-tested without Blender (`48/48` passing); the
 bpy-dependent paths have headless coverage and still await a live-Blender smoke
 test.
@@ -321,7 +320,7 @@ test.
 - **Material INSERTs** — apply a material-only INSERT from a `.blend` to the
   target (`HARDFLOW_OT_material_insert`, `core/asset.load_blend_materials`/
   `apply_material`).
-- **KPACK-style export** — mark a selection as an INSERT and write it to a
+- **Asset-pack export** — mark a selection as an INSERT and write it to a
   `.blend` in the asset library with a generated preview
   (`HARDFLOW_OT_export_asset`, `core/asset.write_objects_blend`).
 - **Insert-grid / factory snapping** — snap repeated INSERTs to a regular grid or
@@ -331,7 +330,7 @@ test.
 
 ## [1.7.0] — 2026-06-29
 
-DECALmachine parity: decal authoring and management beyond placement.
+Decal subsystem depth: decal authoring and management beyond placement.
 
 ### Added
 - **Decal creation pipeline** — bake a decal (normal/height/alpha) out of
@@ -349,7 +348,7 @@ DECALmachine parity: decal authoring and management beyond placement.
 
 ## [1.6.0] — 2026-06-29
 
-Grid Modeler precision extras and pipe profiles.
+Precision-draw extras and pipe profiles.
 
 ### Added
 - **Live grid density in-modal** — adjust grid spacing during the draw with
@@ -363,15 +362,15 @@ Grid Modeler precision extras and pipe profiles.
 
 ## [1.5.0] — 2026-06-29
 
-Hard Ops parity: modifier-stack management, dice/greeble, and mesh helpers, in a
-new `operators/hardops.py`.
+Modifier & mesh helpers: modifier-stack management, dice/greeble, and mesh
+helpers, in a new `operators/hardops.py`.
 
 ### Added
 - **Modifier-stack manager** — an N-panel section listing the active object's
   modifiers with move / toggle / apply / remove (`ui/panel.py`).
 - **Boolean dice / panel** — grid-slice an object into N pieces along axes
   (`HARDFLOW_OT_dice`, `core/geometry.dice_mesh`, `core/transform.dice_coordinates`).
-- **Sharpen presets (SSharp / CSharp)** — preset tiers of bevel-weight + crease +
+- **Sharpen presets (tiered)** — preset tiers of bevel-weight + crease +
   WN (`core/geometry.SHARPEN_PRESETS`).
 - **Edge bevel-weight / crease** — set/clear weight + crease on selected edges in
   Edit Mode (`HARDFLOW_OT_edge_weight`).
@@ -385,7 +384,7 @@ new `operators/hardops.py`.
 
 ## [1.4.0] — 2026-06-29
 
-In-draw operations (the Boxcutter spirit): modify the cut *while drawing*. All
+In-draw operations: modify the cut *while drawing*. All
 hang off the `operators/draw_cut.py` modal via `_processed_corner_sets`.
 
 ### Added
@@ -425,18 +424,18 @@ while the operator owns the mode.
 
 ## [1.2.0] — 2026-06-29
 
-The SketchUp-style direct-modeling milestone: drag faces in/out (Push/Pull),
+The direct-modeling milestone: drag faces in/out (Push/Pull),
 inset face borders (Offset), and drop a construction-grid reference object to
 model against. Pure logic is unit-tested without Blender (`44/44` passing); the
 bpy-dependent paths have headless coverage and still await a live-Blender smoke
 test.
 
 ### Added
-- **Push/Pull (SketchUp)** — `HARDFLOW_OT_push_pull` (`operators/push_pull.py`):
+- **Push/Pull** — `HARDFLOW_OT_push_pull` (`operators/push_pull.py`):
   raycast a face, lock it, then drag along its normal to extrude in or out with
   world-grid snap and numeric entry; bmesh extrude, no `bpy.ops`. Reuses
   `core/raycast.py`, `core/grid.py`, and `core/geometry.py`.
-- **Offset (SketchUp)** — `HARDFLOW_OT_offset` (`operators/offset.py`): raycast a
+- **Offset** — `HARDFLOW_OT_offset` (`operators/offset.py`): raycast a
   face and drag to inset its border inward by a measured distance (grid-snapped,
   numeric entry), committing a bmesh inset. Pure 2D inset/offset math in
   `core/offset.py` (`signed_area`, `offset_polygon`), stdlib only.
@@ -451,8 +450,8 @@ test.
 ### Added
 - **Live placement preview (decals & assets)** — the decal and asset placement
   tools now show the **real object** under the cursor instead of a flat wireframe
-  outline, so you see exactly what you'll get before clicking (the DECALmachine /
-  BoxCutter / KitOps flow).
+  outline, so you see exactly what you'll get before clicking (the decal / asset
+  placement flow).
   - Decals (`HARDFLOW_OT_place_decal`): the actual textured/material decal is
     materialised on the first surface hit and follows the cursor; it is rebuilt
     only when the target object, size, or trim cell changes and merely re-oriented
@@ -467,14 +466,14 @@ test.
 
 ## [1.0.0] — 2026-06-29
 
-The v1.0 milestone: the KitOps-style asset/kitbash system lands and the Hard Ops
-modeling toolset is rounded out (boolean-from-selection, array, radial array,
+The v1.0 milestone: the asset/kitbash system lands and the mesh
+toolset is rounded out (boolean-from-selection, array, radial array,
 symmetrize, sharpen). Pure logic is unit-tested without Blender; the
 bpy-dependent paths have headless coverage and still await a live-Blender smoke
 test.
 
 ### Added
-- **Asset / kitbash system (v1.0, KitOps spirit)** — a new subsystem for placing
+- **Asset / kitbash system (v1.0)** — a new subsystem for placing
   ready-made parts ("INSERTs") onto surfaces. Architecture mirrors the decal
   subsystem: pure logic in `core/asset_lib.py` (library scan, tested) +
   `core/asset.py` (append/orient/bind, bpy-data only), action in
@@ -499,21 +498,21 @@ test.
     objects as Blender assets (`asset_mark` + `asset_generate_preview`).
   - Preferences: `asset_library_path`, `asset_as_cutter`, `asset_boolean`,
     `asset_conform`, `asset_transfer_shading`.
-- **Boolean from selection (Hard Ops)** — `HARDFLOW_OT_boolean`: boolean the
+- **Boolean from selection** — `HARDFLOW_OT_boolean`: boolean the
   selected meshes using the active object as the cutter (Difference / Union /
   Intersect / Slice), honouring the non-destructive preference. Reuses
   `core/boolean.py`; no drawing required.
-- **Array (Hard Ops)** — `HARDFLOW_OT_array`: a linear Array modifier along a
+- **Array** — `HARDFLOW_OT_array`: a linear Array modifier along a
   world axis, relative or constant offset (`core/transform.py
   array_offset_vector`, tested).
-- **Radial array (Hard Ops)** — `HARDFLOW_OT_radial_array`: an Array modifier
+- **Radial array** — `HARDFLOW_OT_radial_array`: an Array modifier
   driven by a rotated offset Empty parented at the 3D cursor; `count` copies
   evenly around an axis. Pure angle math in `core/transform.py
   radial_step_radians` / `radial_angles_deg` (tested).
-- **Symmetrize (Hard Ops)** — `HARDFLOW_OT_symmetrize` /
+- **Symmetrize** — `HARDFLOW_OT_symmetrize` /
   `core/geometry.symmetrize_mesh`: mirror one half of the mesh onto the other
   across an object-local axis (bmesh `symmetrize`, no `bpy.ops`).
-- **Sharpen / SSharp (Hard Ops)** — `HARDFLOW_OT_sharpen` /
+- **Sharpen** — `HARDFLOW_OT_sharpen` /
   `core/geometry.mark_sharp_by_angle`: mark edges sharp by angle, smooth the
   faces, add a Weighted Normal modifier for clean shading, and optionally an
   angle-limited bevel.
@@ -528,7 +527,7 @@ library, trim sheets, atlasing) is feature-complete. Pure logic is unit-tested
 without Blender; the bpy-dependent paths still await a live-Blender smoke test.
 
 ### Added
-- **Decals (v0.7 placement core)** — a new DECALmachine-style subsystem. Stick a
+- **Decals (v0.7 placement core)** — a new decal subsystem. Stick a
   thin plane onto any surface under the cursor: it adheres via a SHRINKWRAP
   (PROJECT) modifier and is parented to the hit object, following the surface.
   - **Place tool** (`HARDFLOW_OT_place_decal`, modal): raycasts the surface under
@@ -617,7 +616,7 @@ without Blender; the bpy-dependent paths still await a live-Blender smoke test.
   object from the drawn shape (not a boolean).
 - **Cutter management** — select/remove a cutter from the N-panel + "Apply
   Cutters (Bake)" (`operators/cutters.py`).
-- **Clean operator** — remove doubles + coplanar merge + delete loose (Hard Ops
+- **Clean operator** — remove doubles + coplanar merge + delete loose (mesh
   "clean"); also automatic after a cut via `cleanup_after_cut`.
 - **Pipe tool** — a round-profile pipe from the drawn line (`HARDFLOW_OT_pipe`,
   `pipe_radius`).
@@ -628,7 +627,7 @@ without Blender; the bpy-dependent paths still await a live-Blender smoke test.
 - **HUD measurement display** — size in meters while drawing.
 - **Test suite** — `tests/test_core.py` (11, without bpy) + `tests/test_blender.py`
   (headless: build_prism/boolean/cutters/clean/pipe/face/multi-object).
-- **ROADMAP** — added a DECALmachine-style decal subsystem (v0.7–v0.9).
+- **ROADMAP** — added a decal subsystem (v0.7–v0.9).
 
 ### Fixed
 - Bevel: removed the `Mesh.use_auto_smooth` call that was removed in Blender

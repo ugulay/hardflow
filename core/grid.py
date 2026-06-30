@@ -2,7 +2,7 @@
 #   snap_point / grid_lines : v0.1 screen-space (legacy, no longer used by the
 #       operator)
 #   snap_world / world_grid_segments : v0.2 world-scale, meter-based snap on the
-#       projection plane's local (u, v) axes (Grid Modeler "absolute size").
+#       projection plane's local (u, v) axes (world-scale / absolute size).
 # All pure: no bpy/mathutils needed, testable with plain floats/tuples.
 import math
 
@@ -49,7 +49,7 @@ def snap_world_3d(x, y, z, size, enabled):
 
 def snap_scalar(value, size, enabled):
     """Round a single distance (push/pull amount, offset thickness) to the grid.
-    1D analogue of snap_world; used by the SketchUp-style Build tools."""
+    1D analogue of snap_world; used by the direct-modeling Build tools."""
     if not enabled or size <= 0:
         return value
     return round(value / size) * size

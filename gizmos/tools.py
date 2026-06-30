@@ -56,7 +56,7 @@ class HARDFLOW_T_push_pull(WorkSpaceTool):
     bl_context_mode = 'OBJECT'
     bl_idname = "hardflow.push_pull"
     bl_label = "Hardflow Push/Pull"
-    bl_description = "Hover a face and drag along its normal (SketchUp Push/Pull)"
+    bl_description = "Hover a face and drag along its normal (Push/Pull)"
     bl_icon = "ops.mesh.extrude_region_move"
     bl_keymap = (
         ("mesh.hardflow_push_pull",

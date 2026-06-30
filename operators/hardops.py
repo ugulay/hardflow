@@ -1,5 +1,6 @@
-# Hard Ops parity operators (v1.5): edge bevel-weight/crease, viewport display
-# toggles, material/color helpers, and the boolean-health normal recalc. All thin
+# Mesh-editing parity operators (v1.5): edge bevel-weight/crease, viewport
+# display toggles, material/color helpers, and the boolean-health normal recalc.
+# All thin
 # wrappers over pure-ish core helpers in core/geometry.py + core/boolean.py; the
 # modifier stack manager lives in ui/panel.py (it only drives Blender's built-in
 # modifier operators).

@@ -1,4 +1,4 @@
-# Decal logic (DECALmachine spirit): build a thin plane, orient it to a surface,
+# Decal logic: build a thin plane, orient it to a surface,
 # stick it down with a SHRINKWRAP (PROJECT) modifier + parent, assign a
 # type-specific material, and gather it in a "Hardflow Decals" collection.
 #
@@ -388,7 +388,7 @@ def make_image_decal(context, target, location, normal, tangent, image,
     return decal
 
 
-# --- DECALmachine extras (v1.7) -----------------------------------------
+# --- Decal extras (v1.7) ------------------------------------------------
 
 
 def _decal_group_node(decal_obj):
@@ -501,8 +501,8 @@ def conform_trim_decal(context, decal_obj, target, subdivisions=8, max_gap=0.05)
 
 
 def retarget_decal(decal_obj, new_target):
-    """Move a placed decal onto a different surface object (DECALmachine
-    transfer): re-point its shrinkwrap at `new_target` and re-parent to it while
+    """Move a placed decal onto a different surface object (decal transfer):
+    re-point its shrinkwrap at `new_target` and re-parent to it while
     keeping the decal's current world pose. Returns True when a shrinkwrap was
     retargeted (False if the decal had none -- it is still re-parented)."""
     world = decal_obj.matrix_world.copy()

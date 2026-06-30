@@ -126,7 +126,7 @@ class HARDFLOW_OT_draw(Operator):
         self._preview = None        # live 3D cutter/face volume object
         self._collect_snap_geometry(context)
 
-        # Grid Modeler workflow: if you enter with edge(s) selected in Edit Mode,
+        # Edge-grid workflow: if you enter with edge(s) selected in Edit Mode,
         # start on the EDGES plane (grid laid on the selection).
         if self.edit:
             self._edges_basis = self._capture_edges_basis(context)
@@ -197,7 +197,7 @@ class HARDFLOW_OT_draw(Operator):
             if self.shape == 'POLY' and len(self.points) >= 3:
                 return self._commit(context)
 
-        # Z: close the in-progress polygon immediately (Grid Modeler quick-close).
+        # Z: close the in-progress polygon immediately (quick-close).
         elif event.type == 'Z' and event.value == 'PRESS':
             if self.shape == 'POLY' and len(self.points) >= 3:
                 return self._commit(context)
@@ -234,7 +234,7 @@ class HARDFLOW_OT_draw(Operator):
                 self.sides = max(3, min(64, self.sides + step))
 
         # Tab / Shift+Tab cycle the boolean mode (the number row now types an
-        # exact size -- Grid Modeler / Boxcutter precision entry).
+        # exact size -- precision entry).
         elif event.type == 'TAB' and event.value == 'PRESS':
             order = [m[0] for m in _MODES]
             step = -1 if event.shift else 1
@@ -307,8 +307,8 @@ class HARDFLOW_OT_draw(Operator):
             self.geo = not self.geo
 
         # H: set / clear the grid origin. Re-anchors the snap lattice (and the
-        # visible grid) to the point under the cursor on the current plane -- Grid
-        # Modeler's 'move the grid origin'. Press again to revert to the default.
+        # visible grid) to the point under the cursor on the current plane --
+        # 'move the grid origin'. Press again to revert to the default.
         elif event.type == 'H' and event.value == 'PRESS':
             if self.grid_origin is not None:
                 self.grid_origin = None
@@ -326,7 +326,7 @@ class HARDFLOW_OT_draw(Operator):
         elif event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and event.value == 'PRESS':
             direction = 1 if event.type == 'RIGHT_ARROW' else -1
             if event.shift:
-                # Shift + arrows: rotate the grid plane in place (Grid Modeler).
+                # Shift + arrows: rotate the grid plane in place.
                 import math
                 self.plane_spin += direction * math.radians(
                     get_prefs(context).angle_step)
@@ -409,7 +409,7 @@ class HARDFLOW_OT_draw(Operator):
         self._surface_basis = self._surface_basis_at(context, screen_co)
 
     def _capture_edges_basis(self, context):
-        """Grid Modeler 'grid plane on edge(s)': build a construction basis from
+        """'Grid plane on edge(s)': build a construction basis from
         the selected edit-mesh edges -- one edge gives a plane along that edge +
         its face normal, two edges give the plane they span. Cached because the
         selection doesn't change during the draw. Returns the basis tuple or None
@@ -488,7 +488,7 @@ class HARDFLOW_OT_draw(Operator):
         """Origin, local axes and normal of the projection plane, after the live
         in-plane spin (Shift + arrows). VIEW = perpendicular to view; SURFACE =
         aligned to the picked face; EDGES = aligned to the selected edit-mesh
-        edge(s); X/Y/Z = world-axis aligned (Grid Modeler grid)."""
+        edge(s); X/Y/Z = world-axis aligned (world grid)."""
         if self.plane == 'VIEW':
             self._surface_miss = False
             basis = self._view_basis(context)
@@ -519,7 +519,7 @@ class HARDFLOW_OT_draw(Operator):
 
     def _apply_spin(self, basis):
         """Rotate the plane's right/up axes around its normal by the live grid
-        spin (Shift + arrows) -- Grid Modeler's 'rotate the grid plane'. The
+        spin (Shift + arrows) -- 'rotate the grid plane'. The
         normal and origin are unchanged."""
         if abs(self.plane_spin) < 1e-9:
             return basis
@@ -559,7 +559,7 @@ class HARDFLOW_OT_draw(Operator):
         3) raw. self._snap_hit is set for the visual marker."""
         self._snap_hit = None
 
-        # 1) geometry snap -- if present overrides grid (Grid Modeler precision)
+        # 1) geometry snap -- if present overrides grid (precision snap)
         if self.geo and self._geo_enabled:
             hit = self._geo_snap(context, screen_co)
             if hit is not None:
@@ -747,7 +747,7 @@ class HARDFLOW_OT_draw(Operator):
         # VIEW faces the camera -> a screen-aligned outline is correct. On a
         # fixed plane (SURFACE/EDGES/X/Y/Z) build the shape in the plane's (u, v)
         # meter space instead, so its edges line up with the surface grid and the
-        # preview foreshortens onto the plane (Grid Modeler / Boxcutter feel)
+        # preview foreshortens onto the plane (in-plane, on-surface feel)
         # rather than reading as a flat screen overlay.
         if self.plane == 'VIEW':
             return self._shape_corners(a, b)
@@ -1181,7 +1181,7 @@ class HARDFLOW_OT_draw(Operator):
         if self.bevel_cut:
             self._bevel_on_cut(targets)
 
-    # --- stamp / repeat last shape (v1.4, Boxcutter "lazorcut") ----------
+    # --- stamp / repeat last shape (v1.4, repeat / stamp) ---------------
 
     _LAST = None  # class-level: the last committed shape, replayed with G
 

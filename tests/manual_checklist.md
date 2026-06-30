@@ -31,7 +31,7 @@ Setup: add a default cube, stay in Object Mode, keep it selected/active.
 - [ ] `Ctrl+Shift+D` → draw a **Box** → the rectangle previews on the grid, the
       HUD shows a live size in metres, and on the second click the cube is **cut**.
 - [ ] **Live cutter cage:** while drawing (after the first click), a **wireframe
-      3D volume** of the cutter is shown through the model (BoxCutter-style depth
+      3D volume** of the cutter is shown through the model (non-destructive depth
       preview), updating as you move. It disappears on commit/cancel — no
       leftover `hf_preview` object in the outliner.
 - [ ] **Slice / Make / Face** (`2`/`3`/`4`) also show the live cage; FACE shows
@@ -42,12 +42,12 @@ Setup: add a default cube, stay in Object Mode, keep it selected/active.
 
 ---
 
-## 2. Build ▸ sketch a face (the SketchUp draw-then-pull loop)
+## 2. Build ▸ sketch a face (the draw-then-pull loop)
 
 These reuse the draw operator in **FACE** mode — they make real geometry, not a
 boolean.
 
-- [ ] N-panel ▸ **Build (SketchUp)** ▸ **Rectangle** → two clicks → a new flat
+- [ ] N-panel ▸ **Build** ▸ **Rectangle** → two clicks → a new flat
       face object appears (it becomes the active object).
 - [ ] **Line** → click several points → `Enter` closes them into a face.
 - [ ] **Circle** and **N-gon** likewise produce a face ( `[` `]` change N-gon sides).
@@ -92,7 +92,7 @@ from the visible copy).
       `test_extrude_keep_original_vs_clean`.
 - [ ] **`C` Copy** ⭐ — press `C` while locked (HUD shows `(copy)` / `C copy ON`):
       the extrude now **keeps the starting face**, stacking a new volume on it
-      (SketchUp Ctrl push/pull). Press `C` again → back to clean extrude. Works in
+      (Ctrl push/pull copy). Press `C` again → back to clean extrude. Works in
       Object and Edit Mode.
 - [ ] **`R` repeat** ⭐ — after one push/pull, run the tool again, lock another
       face, press `R` → it re-applies the **last distance** (HUD shows
@@ -243,7 +243,7 @@ Setup: enter Edit Mode on a cube.
 
 ---
 
-## 11. Hard Ops parity (v1.5) & Grid Modeler extras (v1.6)
+## 11. Mesh-editing parity (v1.5) & modeling extras (v1.6)
 
 - [ ] N-panel ▸ **Dice** grid-slices the object into panels (redo panel sets X/Y/Z).
 - [ ] **Modifier Stack** sub-panel lists modifiers with show/move/apply/remove.
@@ -258,7 +258,7 @@ Setup: enter Edit Mode on a cube.
 
 ---
 
-## 12. DECALmachine (v1.7) & KitOps (v1.8) extras
+## 12. Decal (v1.7) & asset/insert (v1.8) extras
 
 - [ ] Decal list ▸ per-item **Match** (NODE_MATERIAL icon) tunes the decal to the
       target's material; **Conform** (shrinkwrap icon) trims faces over gaps.

@@ -1,4 +1,4 @@
-# N-panel "Assets" section (KitOps spirit): place INSERTs, browse a .blend kit
+# N-panel "Assets" section: place INSERTs, browse a .blend kit
 # library as a grid, mark objects as Blender assets, and list placed inserts.
 # Mirrors ui/decal_panel.py + ui/decal_library.py.
 import bpy

@@ -1,4 +1,4 @@
-# Pure 2D polygon offset (the SketchUp "Offset" tool's math).
+# Pure 2D polygon offset (the "Offset" tool's math).
 #
 # Offsets a simple polygon inward (positive distance) or outward (negative) by
 # sliding every edge along its inward normal and intersecting the offset edges
@@ -50,7 +50,7 @@ def _point_segment_dist(p, a, b):
 
 def inset_inference_candidates(boundary, interior):
     """Inset thicknesses at which the shrinking border of polygon `boundary`
-    (the SketchUp Offset drag) lines up with a real feature -- so the inset border
+    (the Offset drag) lines up with a real feature -- so the inset border
     passes through one of the `interior` points (another vertex / a coplanar edge
     within the face plane). Each candidate is an interior point's distance to the
     nearest boundary edge: at that thickness the uniformly-inset border reaches it.

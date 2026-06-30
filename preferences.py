@@ -212,7 +212,7 @@ class HARDFLOW_Preferences(AddonPreferences):
     asset_as_cutter: BoolProperty(
         name="Asset as Cutter",
         description="Placed kit parts become boolean cutters on the surface "
-                    "object instead of plain decorations (KitOps cutter INSERTs)",
+                    "object instead of plain decorations (boolean cutter INSERTs)",
         default=False,
     )
     asset_boolean: EnumProperty(
@@ -225,7 +225,7 @@ class HARDFLOW_Preferences(AddonPreferences):
     asset_auto_scale: BoolProperty(
         name="Auto Scale",
         description="Scale the INSERT to a fraction of the target's local feature "
-                    "size on the first surface hit (KitOps smart scale)",
+                    "size on the first surface hit (smart scale)",
         default=False,
     )
     asset_fit_fraction: FloatProperty(
@@ -237,7 +237,7 @@ class HARDFLOW_Preferences(AddonPreferences):
     asset_grid_snap: BoolProperty(
         name="Insert Grid Snap",
         description="Snap INSERT placement to a world grid or to existing insert "
-                    "anchors, for clean greeble arrays (KitOps factory snapping)",
+                    "anchors, for clean repeated arrays (grid / anchor snapping)",
         default=False,
     )
     asset_grid_spacing: FloatProperty(
@@ -248,7 +248,7 @@ class HARDFLOW_Preferences(AddonPreferences):
     asset_conform: BoolProperty(
         name="Conform Asset",
         description="Wrap placed parts onto the surface with a shrinkwrap "
-                    "(KitOps wrap/conform)",
+                    "(wrap / conform)",
         default=False,
     )
     asset_transfer_shading: BoolProperty(
@@ -261,7 +261,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         name="Non-Destructive",
         description="Leave a live modifier instead of applying the boolean; stash "
                     "cutters in a separate 'Hardflow Cutters' collection "
-                    "(BoxCutter style)",
+                    "(non-destructive)",
         default=False,
     )
     multi_object: BoolProperty(
@@ -338,7 +338,7 @@ class HARDFLOW_Preferences(AddonPreferences):
     line_width: FloatProperty(
         name="Line Width (px)",
         description="Thickness of the drawn shape outline (scaled by the UI "
-                    "scale, like Grid Modeler)",
+                    "scale)",
         default=2.0, min=1.0, soft_max=8.0,
     )
 

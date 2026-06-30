@@ -1,5 +1,5 @@
 # Offset: pick a face, drag to inset its border inward by a measured thickness
-# (SketchUp's Offset tool). Grid-snapped, with numeric entry; click again or
+# (the Offset tool). Grid-snapped, with numeric entry; click again or
 # Enter to apply. R repeats the last thickness.
 #
 # The hover/lock/drag/preview/cancel shell lives in face_tool._FaceDragModal;
@@ -18,7 +18,7 @@ from ..preferences import get_prefs
 class HARDFLOW_OT_offset(_FaceDragModal, Operator):
     bl_idname = "mesh.hardflow_offset"
     bl_label = "Hardflow Offset"
-    bl_description = "Inset a face's border inward by a measured distance (SketchUp Offset)"
+    bl_description = "Inset a face's border inward by a measured distance (Offset)"
     bl_options = {'REGISTER', 'UNDO'}
 
     _HOVER_FILL = (0.15, 0.8, 1.0, 0.18)

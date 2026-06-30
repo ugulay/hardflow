@@ -1,6 +1,6 @@
 # Pipe + cable/rope draw operators: draw a poly-line, convert it to a round
-# tube (pipe) or a sagging cable. Simplified versions of the Grid Modeler
-# "pipes" flow plus a hanging-cable tool.
+# tube (pipe) or a sagging cable. A surface-snapping "pipes" flow plus a
+# hanging-cable tool.
 #
 # Both share one modal (the _CurveDraw mixin). Two precision fixes over the old
 # version:
@@ -408,7 +408,7 @@ class HARDFLOW_OT_sweep(_CurveDraw, Operator):
     bl_idname = "mesh.hardflow_sweep"
     bl_label = "Hardflow Sweep"
     bl_description = ("Draw a path and sweep a structural profile along it "
-                      "(SketchUp Follow Me): L / U / T / I / box cross-sections, "
+                      "(Follow-Me / sweep): L / U / T / I / box cross-sections, "
                       "P cycles")
     bl_options = {'REGISTER', 'UNDO'}
 

@@ -113,8 +113,8 @@ def best_edge_pair(edge_vectors, parallel_eps=1e-6, forced_main=None):
 
 
 def basis_from_edge(edge_dir, normal):
-    """Construction basis aligned to a single edge (Grid Modeler 'grid plane on a
-    selected edge'): right = the edge direction projected onto the plane
+    """Construction basis aligned to a single edge (grid plane on a selected
+    edge): right = the edge direction projected onto the plane
     perpendicular to `normal`, up completes the right-handed frame. Returns
     (right, up, z) unit 3-tuples. Falls back to a stable tangent when the edge is
     (near) parallel to the normal."""
@@ -128,8 +128,8 @@ def basis_from_edge(edge_dir, normal):
 
 
 def basis_from_two_edges(edge1, edge2):
-    """Construction basis spanning two edges (Grid Modeler 'grid plane on 2
-    edges'): the plane is the one the two edges define (normal = edge1 x edge2),
+    """Construction basis spanning two edges (grid plane on 2 edges): the plane
+    is the one the two edges define (normal = edge1 x edge2),
     right = edge1, up completes it. Returns (right, up, z). Falls back to a
     single-edge basis when the edges are (near) parallel (no unique plane)."""
     n = _cross(edge1, edge2)

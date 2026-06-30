@@ -1,5 +1,5 @@
 # Construction grid object: a wire reference grid placed in the scene to model
-# against (SketchUp's ground plane / construction geometry).
+# against (a construction plane / construction geometry).
 #
 # Non-destructive and non-modal: builds a grid mesh from pure segment math
 # (core.grid.centered_grid_segments + core.geometry.build_grid_mesh), drops it at
@@ -42,7 +42,7 @@ class HARDFLOW_OT_loft(Operator):
     bl_idname = "object.hardflow_loft"
     bl_label = "Hardflow Loft"
     bl_description = ("Bridge two selected profile objects into a solid "
-                      "(Grid Modeler loft / bridge); the two loops need an equal "
+                      "(loft / bridge); the two loops need an equal "
                       "vertex count")
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -79,7 +79,7 @@ class HARDFLOW_OT_add_primitive(Operator):
     bl_idname = "object.hardflow_add_primitive"
     bl_label = "Add Primitive"
     bl_description = ("Create a starter primitive at the 3D cursor to model on "
-                      "with the SketchUp-style tools (Push/Pull, Offset, draw)")
+                      "with the direct-modeling tools (Push/Pull, Offset, draw)")
     bl_options = {'REGISTER', 'UNDO'}
 
     kind: EnumProperty(
@@ -140,7 +140,7 @@ class HARDFLOW_OT_add_guide(Operator):
     bl_idname = "object.hardflow_add_guide"
     bl_label = "Add Guide Line"
     bl_description = ("Add a construction guide line at the 3D cursor to snap "
-                      "against (SketchUp construction lines)")
+                      "against (construction guides)")
     bl_options = {'REGISTER', 'UNDO'}
 
     axis: EnumProperty(
@@ -176,7 +176,7 @@ class HARDFLOW_OT_add_grid(Operator):
     bl_idname = "object.hardflow_add_grid"
     bl_label = "Add Construction Grid"
     bl_description = ("Add a wire reference grid at the 3D cursor to model "
-                      "against (SketchUp construction plane)")
+                      "against (a construction plane)")
     bl_options = {'REGISTER', 'UNDO'}
 
     plane: EnumProperty(name="Plane", items=_PLANES, default='XY')

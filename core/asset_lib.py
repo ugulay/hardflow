@@ -1,4 +1,4 @@
-# Pure helpers for the v1.0 asset / kitbash library (KitOps spirit): discover
+# Pure helpers for the v1.0 asset / kitbash library: discover
 # .blend asset files on disk. No bpy here -- only the stdlib -- so it stays
 # unit-testable without Blender (mirrors core/decal_image.py). The bpy side
 # (appending objects, placing INSERTs) lives in core/asset.py; the operators/UI

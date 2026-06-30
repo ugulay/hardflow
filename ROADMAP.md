@@ -1,6 +1,6 @@
 # Roadmap
 
-The features of competing tools and where/how they fit into Hardflow. Each item
+The hard-surface modeling features and where/how they fit into Hardflow. Each item
 is isolated to a single module as much as possible, so that contributors can make
 progress without colliding with one another.
 
@@ -12,7 +12,7 @@ progress without colliding with one another.
 - [x] Pie menu, preferences, keymap
 
 ## v0.2 — Snapping and precision (highest value)
-This is where Grid Modeler's real power lies.
+This is the precision core.
 - [x] **World-scale grid** — `core/grid.py` `snap_world` + `world_grid_segments`,
       `core/raycast.py` `world_to_plane_uv`/`plane_uv_to_world`/`world_to_screen`.
       Snap now operates on the projection plane's local (u,v) meter axes;
@@ -26,9 +26,9 @@ This is where Grid Modeler's real power lies.
       `angle_step` step (`core/grid.py snap_angle`, tested).
 - [x] **Rotating the grid plane** — `←/→` cycles the plane between VIEW / world
       X / Y / Z (`core/raycast.py ray_to_plane`); the cutter is extruded along
-      the plane normal. World-aligned grid = Grid Modeler aligned drawing.
+      the plane normal. World-aligned grid = aligned drawing.
 
-## v0.3 — Non-destructive workflow (the Boxcutter spirit)
+## v0.3 — Non-destructive workflow
 - [x] Leave a live modifier instead of applying booleans — toggle with `N` in
       the operator, preference `non_destructive`. CUT/SLICE/MAKE are all
       supported.
@@ -46,7 +46,7 @@ This is where Grid Modeler's real power lies.
       `is_self_intersecting`; a broken poly is rejected at commit (tested).
 - [x] Post-cut cleanup — preference `cleanup_after_cut`; `core/geometry.py
       cleanup_mesh` (remove doubles + limited dissolve + delete loose).
-- [x] Dead-vertex cleanup after bevel — `HARDFLOW_OT_clean` (Hard Ops "clean").
+- [x] Dead-vertex cleanup after bevel — `HARDFLOW_OT_clean` (mesh "clean").
 - [x] Create face — `FACE` mode in the drawing operator (key `4`): a single
       n-gon surface object from the drawn shape (`geometry.build_face`). Extrude
       with native `E`.
@@ -58,7 +58,7 @@ This is where Grid Modeler's real power lies.
       Normal** modifier (clean hard-surface shading). Later: custom profile
       curve, bevel presets, vertex bevel.
 
-## v0.5 — Pipe and profile (Grid Modeler "pipes")
+## v0.5 — Pipe and profile (pipes)
 - [x] Pipe generation with a curve + bevel along the drawn line —
       `HARDFLOW_OT_pipe` modal + `core/geometry.py build_pipe`; radius preference
       `pipe_radius`. Profile is round for now; square/custom cross-sections
@@ -73,7 +73,7 @@ This is where Grid Modeler's real power lies.
 - [x] Multi-object support — `multi_object` preference; CUT/MAKE is applied to
       all selected meshes with a single cutter.
 
-## v0.7+ — Decals (the DECALmachine spirit)
+## v0.7+ — Decals (the decal subsystem)
 A new subsystem; surface-adhering detail passes (panel lines, logos,
 screw/warning marks) make hard-surface look "finished". A separate `decals/`
 package that fits the architecture: pure logic in `core/decal*.py`, actions in
@@ -143,7 +143,7 @@ existing cut core.
       (`tests/test_blender.py test_atlas_decals`); the blit/UV y-flip composition
       is checked end-to-end. Preference `atlas_max_width`.
 
-## v1.0 — Asset/kitbash system (the KitOps spirit) + modeling tools
+## v1.0 — Asset/kitbash system + modeling tools
 Non-destructive kitbashing from a ready-part (INSERT) library: stick hard-surface
 details onto the surface with boolean/snap. Pure logic in `core/asset*.py`,
 actions in `operators/assets.py`, interface in `ui/asset_panel.py`; it reuses the
@@ -169,8 +169,8 @@ subsystem).
       placed part the surface object's active material + smooth-shading state;
       preference `asset_transfer_shading`.
 
-## v1.0 — Hard Ops modeling tools
-Round out the Hard Ops feature parity beyond bevel/mirror/clean.
+## v1.0 — Mesh tools
+Round out the modifier & mesh helpers beyond bevel/mirror/clean.
 - [x] **Boolean from selection** — `HARDFLOW_OT_boolean`: boolean the selected
       meshes using the active object as the cutter (Difference / Union /
       Intersect / Slice), honouring the non-destructive preference. No drawing
@@ -182,7 +182,7 @@ Round out the Hard Ops feature parity beyond bevel/mirror/clean.
       `core/transform.py radial_step_radians` (pure, tested).
 - [x] **Symmetrize** — `HARDFLOW_OT_symmetrize` / `geometry.symmetrize_mesh`:
       mirror one half of the mesh onto the other across an object-local axis.
-- [x] **Sharpen (SSharp)** — `HARDFLOW_OT_sharpen` / `geometry.mark_sharp_by_angle`:
+- [x] **Sharpen** — `HARDFLOW_OT_sharpen` / `geometry.mark_sharp_by_angle`:
       mark edges sharp by angle and clean shading with a Weighted Normal modifier
       (+ optional angle-limited bevel).
 
@@ -193,10 +193,10 @@ Round out the Hard Ops feature parity beyond bevel/mirror/clean.
       and Esc discards it. New `core/asset.py` helpers `bind_cutters` /
       `flatten_objects` support the reuse.
 
-## v1.2 — SketchUp-style direct modeling
-Direct push/pull/offset on existing faces plus a construction reference plane —
-the SketchUp spirit, fitting the existing architecture (pure math in `core`, a
-thin modal operator on top).
+## v1.2 — Direct modeling
+Direct push/pull/offset on existing faces plus a construction reference plane,
+fitting the existing architecture (pure math in `core`, a thin modal operator on
+top).
 - [x] **Push/Pull** — `HARDFLOW_OT_push_pull` (`operators/push_pull.py`): raycast a
       face, lock it, then drag along its normal to extrude in or out with
       world-grid snap and numeric entry; bmesh extrude, no `bpy.ops`. Reuses
@@ -213,14 +213,14 @@ thin modal operator on top).
       cable that drapes between its points; pure catenary-style sag math in
       `core/transform.py` (`cable_points`, `cable_chain`, tested).
 
-## v1.3+ — Feature-parity gap with the referenced tools
+## v1.3+ — Feature gap pass with common hard-surface workflows
 
 Everything above is implemented. The sections below (v1.3–v1.8) close the
-remaining gaps between Hardflow and the five tools it tracks (Grid Modeler,
-Boxcutter, Hard Ops, DECALmachine, KitOps). Each item is scoped to a single
-module wherever possible so contributors don't collide. These are now
-**implemented** (syntax-verified + pure/headless tests added; live Blender
-verification of the modal tools is still ongoing — see `tests/manual_checklist.md`).
+remaining gaps between Hardflow and the common hard-surface workflows. Each item
+is scoped to a single module wherever possible so contributors don't collide.
+These are now **implemented** (syntax-verified + pure/headless tests added; live
+Blender verification of the modal tools is still ongoing — see
+`tests/manual_checklist.md`).
 
 Where it landed, by section:
 - **v1.3** Edit Mode — `core/geometry.py` bridge (`edit_extrude_faces`,
@@ -231,23 +231,24 @@ Where it landed, by section:
   in-plane rotate (`,`/`.`, `core/grid.rotate_2d`), array (`A`/`D`), mirror (`M`),
   bevel-on-cut (`B`), stamp/repeat (`G`); `core/geometry.build_prisms/build_faces/
   knife_polygon`.
-- **v1.5** Hard Ops — `operators/hardops.py` (dice, edge weight, display toggles,
+- **v1.5** Mesh tools — `operators/hardops.py` (dice, edge weight, display toggles,
   random colors, copy material, step/taper/knurl) + `core/geometry.py` builders,
   `core/transform.dice_coordinates`, sharpen presets, modifier-stack panel.
-- **v1.6** Grid Modeler — live grid density (Ctrl+Wheel) + live depth (PgUp/Dn) in
-  draw, square/rect pipe (`build_pipe_mesh` + `P`), loft (`build_loft` /
+- **v1.6** Precision-draw extras — live grid density (Ctrl+Wheel) + live depth
+  (PgUp/Dn) in draw, square/rect pipe (`build_pipe_mesh` + `P`), loft (`build_loft` /
   `HARDFLOW_OT_loft`).
-- **v1.7** DECALmachine — `operators/decals.py` create/match/retrim/conform +
+- **v1.7** Decal subsystem — `operators/decals.py` create/match/retrim/conform +
   editable library; `core/decal.py` `sample_material`, `match_decal_to_material`,
   `set_decal_uv_rect`, `conform_trim_decal`, `save_image`.
-- **v1.8** KitOps — auto-scale + insert-grid snap in the place modal, material
-  INSERT + KPACK export; `core/asset.py` `bound_size`/`surface_feature_size`/
-  `load_blend_materials`/`write_objects_blend`, `core/transform.fit_scale`,
-  `core/boolean.apply_boolean_fallback`, `core/snapping.snap_insert_point`.
+- **v1.8** Asset / kitbash system — auto-scale + insert-grid snap in the place
+  modal, material INSERT + asset pack export; `core/asset.py`
+  `bound_size`/`surface_feature_size`/`load_blend_materials`/`write_objects_blend`,
+  `core/transform.fit_scale`, `core/boolean.apply_boolean_fallback`,
+  `core/snapping.snap_insert_point`.
 
 ### v1.3 — Edit Mode foundation (the biggest single lever)
-Object Mode only is the most-felt limitation: it blocks Grid Modeler-style
-edit-draw and most precise Hard Ops loops. This unlocks several later sections.
+Object Mode only is the most-felt limitation: it blocks edit-draw and most precise
+mesh loops. This unlocks several later sections.
 - [x] **bmesh edit-mesh bridge** — `core/geometry.py` helpers that read/write the
       active edit-mesh via `bmesh.from_edit_mesh` / `update_edit_mesh` instead of
       object data, so the existing pure builders can target an in-edit bmesh.
@@ -261,9 +262,9 @@ edit-draw and most precise Hard Ops loops. This unlocks several later sections.
 - [x] **Edit-mode aware snapping** — `core/snapping.py` `collect_geo` reads the
       edit-mesh bmesh (live, unapplied) so vertex/edge snap works mid-edit.
 
-### v1.4 — In-draw operations (the Boxcutter spirit)
-Boxcutter's signature is modifying the cut *while drawing* instead of as separate
-ops. All of these hang off the existing `operators/draw_cut.py` modal.
+### v1.4 — In-draw operations
+The signature is modifying the cut *while drawing* instead of as separate ops. All
+of these hang off the existing `operators/draw_cut.py` modal.
 - [x] **Knife / zero-depth cut** — a CUT variant that only scores the surface
       (project the shape onto the face, split edges, no extrude/boolean). New mode
       key alongside Cut/Slice/Make; surface projection in `core/geometry.py`.
@@ -280,31 +281,31 @@ ops. All of these hang off the existing `operators/draw_cut.py` modal.
 - [x] **In-plane shape rotation handle** — rotate the drawn shape within its plane
       (distinct from the existing `←/→` plane cycle); live angle in the HUD.
 - [x] **Repeat / stamp last shape** — re-place the previous shape+size with one
-      key, Boxcutter "lazorcut" style, for repetitive panel cuts.
+      key, repeat / stamp style, for repetitive panel cuts.
 
-### v1.5 — Hard Ops parity (modifier & mesh management)
-Hard Ops is more than bevel/mirror/clean; the gap is mostly non-destructive
+### v1.5 — Modifier & mesh helpers (stack management)
+There is more than bevel/mirror/clean; the gap is mostly non-destructive
 stack management and dice/greeble helpers.
 - [x] **Modifier stack manager** — an N-panel section (`ui/panel.py`) listing the
-      active object's modifiers with move/toggle/apply/remove, the Hard Ops "Q"
-      mod-list equivalent, so non-destructive edits stay navigable.
+      active object's modifiers with move/toggle/apply/remove, so non-destructive
+      edits stay navigable.
 - [x] **Boolean dice / split / panel** — grid-slice an object into N pieces along
       one or more axes (`core/geometry.py` cut-plane generation + boolean SLICE),
       the basis for greebling and panel breaks.
-- [x] **Sharpen presets (SSharp / CSharp tiers)** — extend `HARDFLOW_OT_sharpen`
+- [x] **Sharpen presets (tiered)** — extend `HARDFLOW_OT_sharpen`
       with preset levels (bevel-weight + crease + WN combinations), not a single
       angle pass; presets table in `core/geometry.py`.
 - [x] **Edge bevel-weight / crease workflow** — operators to set/clear bevel
       weight and crease on selected edges (Edit Mode; depends on v1.3) so the
       bevel modifier can be weight-limited.
 - [x] **Mesh display toggles** — quick wireframe / sharp-edge / cutter-visibility
-      viewport toggles (`ui/panel.py` + `operators/`), the Hard Ops display menu.
+      viewport toggles (`ui/panel.py` + `operators/`), the display menu.
 - [x] **Material / viewport helpers** — assign random viewport colors, copy the
       active material to selection (`operators/`), for fast block-out readability.
 - [x] **Step / taper / knurl helpers** — parametric detail generators
       (`core/geometry.py` pure builders + thin operators) for recurring greeble.
 
-### v1.6 — Grid Modeler extras
+### v1.6 — Precision-draw extras
 Precision-draw features beyond the world grid already shipped.
 - [x] **Live grid density in-modal** — adjust grid spacing with a hotkey during
       the draw (`operators/draw_cut.py`), not only via the `grid_world` preference.
@@ -317,10 +318,10 @@ Precision-draw features beyond the world grid already shipped.
 - [x] **Square / custom pipe cross-section** — `core/geometry.py build_pipe` gains
       a profile arg (square, rectangular, custom) beyond the current round tube.
 
-### v1.7 — DECALmachine extras
+### v1.7 — Decal subsystem extras
 The decal subsystem is broad already; the gaps are authoring and management.
 - [x] **Decal creation pipeline** — bake a decal (normal/height/alpha) out of
-      high-poly source geometry into the library, the DM "create decal" flow;
+      high-poly source geometry into the library, the "create decal" flow;
       pure baking helpers extend `core/decal.py` bake path, op in
       `operators/decals.py`.
 - [x] **Material matching** — match a placed decal's blend to the target's active
@@ -336,15 +337,15 @@ The decal subsystem is broad already; the gaps are authoring and management.
       project + trim its mesh to the surface boundary so it doesn't float over
       gaps (`core/decal.py` projection/trim helper).
 
-### v1.8 — KitOps extras
+### v1.8 — Asset / kitbash extras
 The INSERT system covers placement; authoring and smart-scale are missing.
 - [x] **Auto / smart scale** — scale the INSERT to the target's local feature size
       on placement (raycast footprint → fit), not only manual wheel scale;
       `core/asset.py` fit helper.
 - [x] **Material INSERTs** — apply a material-only INSERT from a `.blend` to the
-      target (KitOps material kpack equivalent); `core/asset.py` material-append
+      target (material asset pack equivalent); `core/asset.py` material-append
       path + op in `operators/assets.py`.
-- [x] **KPACK-style packaging / export** — author side: mark a selection as an
+- [x] **Asset-pack packaging / export** — author side: mark a selection as an
       INSERT and write it to a `.blend` in the asset library with a generated
       preview (`operators/assets.py`, reuse `mark_asset` + write path).
 - [x] **Insert grid / factory snapping** — snap repeated INSERTs to a regular grid
@@ -354,9 +355,9 @@ The INSERT system covers placement; authoring and smart-scale are missing.
       EXACT solver, retry FAST / nudge / report, so boolean INSERTs are robust on
       messy targets (`core/boolean.py`).
 
-## v1.9 — Tool smartness + Grid Modeler / SketchUp surface modeling
+## v1.9 — Tool smartness + surface modeling
 Make the tools *reason* about the geometry, and bring the on-surface drawing /
-editing workflow closer to Grid Modeler and SketchUp. Pure math is unit-tested
+editing workflow forward. Pure math is unit-tested
 (`tests/test_core.py`); bpy paths have headless coverage; the modal/interactive
 behaviour still awaits a live-Blender pass.
 
@@ -382,7 +383,7 @@ behaviour still awaits a live-Blender pass.
       longest edge, so the box reads correctly on non-rectangular (boolean-cut)
       faces; INSERT / decal placement keep the longest-edge rule.
 
-### Grid Modeler / SketchUp surface modeling
+### Surface modeling
 - [x] **Grid plane on selected edges** — Edit-Mode draw with 1–2 edges selected
       lays the construction grid on them (`decal_math.basis_from_edge`/
       `basis_from_two_edges`, draw tool `EDGES` plane).
@@ -403,7 +404,7 @@ behaviour still awaits a live-Blender pass.
 - [x] **Set / move the grid origin** — `H` in the draw tool re-anchors the snap
       lattice (and the visible grid) to the point under the cursor on the current
       plane; press again to revert (`draw_cut` `grid_origin`, applied in
-      `_plane_basis`). Grid Modeler's movable grid origin.
+      `_plane_basis`). A movable grid origin.
 - [x] **Deterministic main edge** — the 2-edge grid plane uses the longest
       selected edge as the main axis and its most-perpendicular partner for the
       plane (`core/decal_math.best_edge_pair`), so the grid no longer depends on
@@ -428,8 +429,8 @@ behaviour still awaits a live-Blender pass.
 On-object handles for the common transforms, so the hard-surface loop doesn't
 have to lean on keyboard shortcuts. Two surfaces, sharing one set of gizmo
 groups (`gizmos/`): an **always-on persistent** widget toggled from the N-panel
-(BoxCutter / Hard Ops feel) and a set of **Workspace Tools** in the toolbar (T,
-like Blender's native Move/Rotate/Scale).
+and a set of **Workspace Tools** in the toolbar (T, like Blender's native
+Move/Rotate/Scale).
 - [x] **Move / Rotate / Scale** — wrap the built-in `transform.translate` /
       `transform.rotate` / `transform.resize` via `target_set_operator`
       (arrow + dial gizmos, world-axis constrained), so snapping / numeric entry
@@ -477,9 +478,9 @@ the core pipeline (POLY shape + Cut/Make/Intersect). All on
       Project narrows the cap nearer the camera apex (frustum taper). A side-by-side
       visual A/B against the native Sculpt tool remains a manual nicety.
 
-## v1.12 — SketchUp tool improvements
+## v1.12 — Direct-modeling tool improvements
 Push/Pull and Offset were minimal (hover → lock → drag/type → apply). Bring them
-up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py`
+up to better ergonomics and fix an extrude bug. All on `operators/push_pull.py`
 / `operators/offset.py` + `core/geometry.py`; interactions in
 `tests/manual_checklist.md` §3/§4.
 - [x] **Shared modal base** — `operators/face_tool._FaceDragModal` factors the
@@ -492,7 +493,7 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       divider, unlike Edit Mode); `keep_original` opt-in preserves it. Headless
       `test_extrude_keep_original_vs_clean`.
 - [x] **Push/Pull "Copy"** (`C`) — keep the starting face and stack a new volume on
-      it (SketchUp Ctrl push/pull), Object + Edit Mode (`extrude_faces`/
+      it (Ctrl push/pull), Object + Edit Mode (`extrude_faces`/
       `edit_extrude_faces` `keep_original`).
 - [x] **Repeat last** (`R`) — re-apply the last committed distance (Push/Pull) /
       thickness (Offset) on the newly locked face; remembered across runs.
@@ -542,7 +543,7 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
 
 ## v1.13 — Build/Boolean expansion + tool-set trim
 Refocus the toolkit on its boolean / direct-modeling core: drop the secondary
-Hard Ops modifier wrappers and greeble, and deepen the Build and Boolean draw
+modifier wrappers and greeble, and deepen the Build and Boolean draw
 tools instead. All pure math is unit-tested; the bpy paths add headless coverage
 (64 pure + 84 headless), live-verified in Blender 5.1.2; modal feel in
 `tests/manual_checklist.md` §19.
@@ -577,12 +578,11 @@ tools instead. All pure math is unit-tested; the bpy paths add headless coverage
       5.1.2 (axis aligns to the clicked edge within ~0.02deg); headless
       `test_face_edge_tangent_near_point`.
 
-## Reference-tool gap pass (pre-publish)
-A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /
-KitOps. Closed in this pass:
+## Feature gap pass (pre-publish)
+A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock
       the shape's size (`core/grid.lock_distance`, `_apply_numeric`); the boolean
-      mode moved to `Tab`/`Shift+Tab`. Grid Modeler / Boxcutter precision.
+      mode moved to `Tab`/`Shift+Tab`. Precision entry.
 - [x] **INTERSECT draw mode** — keep only what's inside the drawn volume.
 - [x] **Bevelled cutter** (`C`) — chamfered recess walls (`geometry.bevel_cutter`),
       distinct from `B` bevel-on-cut (target edge).

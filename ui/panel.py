@@ -77,7 +77,7 @@ class HARDFLOW_PT_tools(Panel):
                      icon='MATERIAL')
 
         col = layout.column(align=True)
-        col.label(text="Build (SketchUp)", icon='MESH_GRID')
+        col.label(text="Build", icon='MESH_GRID')
         # Starter primitives to model on (Push/Pull / Offset need a mesh to act on).
         row = col.row(align=True)
         row.operator("object.hardflow_add_primitive", text="Cube",
@@ -254,7 +254,7 @@ class HARDFLOW_PT_modifiers(Panel):
             layout.label(text="No modifiers on the active object", icon='INFO')
             return
         # Compact mod-list: name + show/hide + move + apply + remove. Drives
-        # Blender's own modifier operators (the Hard Ops "Q" mod-list equivalent).
+        # Blender's own modifier operators (a compact modifier-stack manager).
         box = layout.box().column(align=True)
         for mod in obj.modifiers:
             row = box.row(align=True)

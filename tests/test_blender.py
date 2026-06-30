@@ -697,7 +697,7 @@ def test_asset_operators_registered():
         hardflow.unregister()
 
 
-# --- SketchUp Build tools: Push/Pull, Offset, Construction Grid --------------
+# --- Build tools: Push/Pull, Offset, Construction Grid ----------------------
 
 def test_extrude_faces_pushpull():
     # geometry behind Push/Pull: extruding one face must add side walls and move
@@ -1280,8 +1280,8 @@ def test_edit_inset_and_add_face_and_knife():
 
 
 def test_edit_add_face_welds_to_existing():
-    # Grid Modeler "connected faces": a drawn face that shares corners with the
-    # existing mesh welds onto them instead of leaving a detached island.
+    # "Connected faces": a drawn face that shares corners with the existing
+    # mesh welds onto them instead of leaving a detached island.
     _reset()
     plane = bpy.data.meshes.new("P")
     import bmesh as _bm
@@ -1399,7 +1399,7 @@ def test_build_prism_project_taper():
     assert fxs == [-1.0, 1.0], fxs
 
 
-# --- v1.5 Hard Ops parity ----------------------------------------------------
+# --- v1.5 mesh-editing parity ------------------------------------------------
 
 def test_edge_weights():
     # Edit-Mode edge bevel-weight / crease on the selected edges (the surviving
@@ -1412,7 +1412,7 @@ def test_edge_weights():
     assert m == 4                            # one quad face = 4 edges
 
 
-# --- v1.6 Grid Modeler extras ------------------------------------------------
+# --- v1.6 modeling extras ----------------------------------------------------
 
 def test_pipe_mesh_and_profile():
     assert geometry.profile_points('ROUND', 0.1) is None
@@ -1451,7 +1451,7 @@ def test_build_loft():
     assert geometry.build_loft(a, b[:3]) is None               # mismatched loops
 
 
-# --- v1.7 DECALmachine extras ------------------------------------------------
+# --- v1.7 decal extras -------------------------------------------------------
 
 def test_decal_uv_rect_and_match():
     _reset()
@@ -1498,7 +1498,7 @@ def test_conform_trim_decal():
     assert removed2 > 0
 
 
-# --- v1.8 KitOps extras ------------------------------------------------------
+# --- v1.8 asset/insert extras ------------------------------------------------
 
 def test_asset_fit_and_material_and_export():
     _reset()

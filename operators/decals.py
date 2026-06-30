@@ -1,4 +1,4 @@
-# Decal placement + management (DECALmachine spirit).
+# Decal placement + management.
 #
 # HARDFLOW_OT_place_decal: a modal tool. The mouse ray is cast into the scene;
 # the decal previews on whatever surface is under the cursor, aligned to the hit
@@ -492,7 +492,7 @@ class HARDFLOW_OT_match_decal(Operator):
     bl_label = "Match Decal to Surface"
     bl_description = ("Match the decal's blend (metallic / roughness / tint) to "
                       "its target's active material so it reads as the same "
-                      "surface (DECALmachine material match)")
+                      "surface (material match)")
     bl_options = {'REGISTER', 'UNDO'}
 
     name: StringProperty()
@@ -572,7 +572,7 @@ class HARDFLOW_OT_transfer_decal(Operator):
     bl_label = "Transfer Decal to Surface"
     bl_description = ("Move the selected decal(s) onto the active mesh: re-point "
                       "their shrinkwrap and re-parent, keeping the world pose "
-                      "(DECALmachine transfer)")
+                      "(decal transfer)")
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -602,8 +602,8 @@ class HARDFLOW_OT_create_decal(Operator):
     bl_idname = "object.hardflow_create_decal"
     bl_label = "Create Decal (Bake)"
     bl_description = ("Bake the selected high-poly source's normal onto the active "
-                      "plane and save it into the decal library (DECALmachine "
-                      "create-decal). Active plane needs a UV map")
+                      "plane and save it into the decal library (create decal). "
+                      "Active plane needs a UV map")
     bl_options = {'REGISTER', 'UNDO'}
 
     decal_name: StringProperty(name="Decal Name", default="HF_NewDecal")

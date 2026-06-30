@@ -221,7 +221,7 @@ def estimate_thickness(obj, factor=2.0, minimum=1.0):
 
 def bevel_cutter(mesh, width, segments=2, profile=0.5):
     """Chamfer every edge of a cutter mesh in place, so a boolean CUT leaves
-    bevelled recess walls instead of sharp ones (Boxcutter bevelled cut -- this
+    bevelled recess walls instead of sharp ones (bevelled cut -- this
     bevels the *cutter*, distinct from bevel-on-cut which chamfers the target's
     cut edge). `width` <= 0 is a no-op. clamp_overlap keeps a thin cutter sane.
     Returns the mesh. Object Mode, pure bmesh."""
@@ -241,7 +241,7 @@ def bevel_cutter(mesh, width, segments=2, profile=0.5):
 
 def build_face(corners, name="hf_face"):
     """Build a single n-gon face from a list of corners on a plane (not a
-    boolean; Grid Modeler 'create face'). At least 3 points."""
+    boolean; create face). At least 3 points."""
     bm = bmesh.new()
     verts = [bm.verts.new(co) for co in corners]
     try:
@@ -258,7 +258,7 @@ def build_face(corners, name="hf_face"):
 
 def build_box(size=1.0, name="Hardflow_Cube"):
     """A unit cube of edge length `size`, centred on the origin -- a starting
-    primitive for the SketchUp-style tools (the caller positions it at the 3D
+    primitive for the direct-modeling tools (the caller positions it at the 3D
     cursor). Returns mesh data."""
     bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=max(1e-6, size))
@@ -279,7 +279,7 @@ def build_plane(size=1.0, name="Hardflow_Plane"):
 
 def build_line(length=2.0, axis='X', name="Hardflow_Guide"):
     """A single wire edge of `length`, centred on the origin along the chosen
-    local axis -- a construction guide line to snap against (SketchUp guides).
+    local axis -- a construction guide line to snap against (construction guides).
     The geometry snap picks up its two endpoints and the edge. Returns mesh data."""
     h = max(1e-6, length) * 0.5
     i = {'X': 0, 'Y': 1, 'Z': 2}.get(axis, 0)
@@ -299,7 +299,7 @@ def build_line(length=2.0, axis='X', name="Hardflow_Guide"):
 
 def build_cylinder(radius=0.5, depth=1.0, segments=32, name="Hardflow_Cylinder"):
     """A capped cylinder of `radius` and `depth` (height along +/-Z), centred on
-    the origin -- a starter primitive for the SketchUp-style tools. `segments` is
+    the origin -- a starter primitive for the direct-modeling tools. `segments` is
     the number of sides. Returns mesh data; the caller positions the object."""
     bm = bmesh.new()
     bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False,
@@ -379,9 +379,8 @@ def build_tube(radius=0.5, inner_radius=0.3, depth=1.0, segments=32,
 
 
 def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
-    """Build a round-section pipe curve from a list of 3D points (Grid Modeler
-    'pipes'). At least 2 points. Returns curve data; the caller links it to an
-    object."""
+    """Build a round-section pipe curve from a list of 3D points. At least 2
+    points. Returns curve data; the caller links it to an object."""
     if len(points) < 2:
         return None
     curve = bpy.data.curves.new(name, 'CURVE')
@@ -490,8 +489,8 @@ def build_pipe_mesh(points, profile_pts, name="Hardflow_Pipe"):
 
 
 def build_loft(loop_a, loop_b, caps=True, name="Hardflow_Loft"):
-    """Bridge two equal-length point loops into a solid (Grid Modeler loft /
-    bridge): side quads between corresponding vertices, plus end caps. `loop_a`
+    """Bridge two equal-length point loops into a solid (loft / bridge): side
+    quads between corresponding vertices, plus end caps. `loop_a`
     and `loop_b` are lists of 3D points of the SAME length (>= 3). Returns mesh
     data, or None when the loops are mismatched or degenerate."""
     from mathutils import Vector
@@ -522,8 +521,8 @@ def build_loft(loop_a, loop_b, caps=True, name="Hardflow_Loft"):
 
 def build_grid_mesh(segments, name="Hardflow_Grid"):
     """Build a wire reference grid (edges only, no faces) from a list of 2D line
-    segments ((x1, y1), (x2, y2)) laid on the local XY plane -- the SketchUp
-    construction grid. The caller positions/orients the object. Vertices are
+    segments ((x1, y1), (x2, y2)) laid on the local XY plane -- the construction
+    grid. The caller positions/orients the object. Vertices are
     de-duplicated so shared crossings weld. Returns mesh data, or None when the
     segment list is empty."""
     if not segments:
@@ -561,7 +560,7 @@ def extrude_faces(obj, face_indices, local_vec, keep_original=False):
 
     `keep_original=False` removes the original (now interior) faces for a clean
     extrude, matching Edit Mode. `True` leaves the starting face in place --
-    SketchUp's Ctrl / "Copy" push-pull that stacks a new volume on the face."""
+    the Ctrl / "Copy" push-pull that stacks a new volume on the face."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.faces.ensure_lookup_table()
@@ -684,7 +683,7 @@ def edit_extrude_faces(obj, local_vec, keep_original=False):
     """Edit Mode Push/Pull: extrude obj's selected edit-mesh faces and move the
     new region by `local_vec` (object-local). With `keep_original=False` the
     original (now interior) faces are removed for a clean extrude; `True` keeps
-    the starting face (SketchUp Ctrl / "Copy" stack). The extruded cap is left
+    the starting face (Ctrl / "Copy" stack). The extruded cap is left
     selected. Returns True on success, False when no face is selected."""
     bm = bmesh.from_edit_mesh(obj.data)
     faces = [f for f in bm.faces if f.select]
@@ -760,7 +759,7 @@ def edit_add_face(obj, local_corners, select=True, weld=True, weld_dist=1e-4):
     With `weld` (the default), the new face's vertices that land on existing mesh
     vertices (within `weld_dist`) are merged onto them, so the drawn face connects
     to the surrounding geometry instead of floating as a detached island -- the
-    Grid Modeler 'create connected faces' behaviour."""
+    create-connected-faces behaviour."""
     if len(local_corners) < 3:
         return False
     bm = bmesh.from_edit_mesh(obj.data)
@@ -1095,7 +1094,7 @@ def edit_knife_polygon(obj, local_corners, view_dir):
     return scored
 
 
-# --- Hard Ops parity: edge weights (v1.5) -------------------------------
+# --- Edge weights (v1.5) ------------------------------------------------
 
 
 def _edge_weight_layers(bm, want_bevel, want_crease):
@@ -1118,8 +1117,8 @@ def _edge_weight_layers(bm, want_bevel, want_crease):
 def edit_set_edge_weights(obj, bevel_weight=None, crease=None, only_selected=True):
     """Edit Mode: set bevel weight and/or crease on the selected edges (or all
     edges when only_selected is False). `None` leaves that attribute untouched.
-    Returns the edge count changed. The Hard Ops edge bevel-weight / crease
-    workflow that feeds a weight-limited Bevel or a creased Subdivision."""
+    Returns the edge count changed. The edge bevel-weight / crease workflow that
+    feeds a weight-limited Bevel or a creased Subdivision."""
     bm = bmesh.from_edit_mesh(obj.data)
     bw, cr = _edge_weight_layers(bm, bevel_weight is not None, crease is not None)
     n = 0

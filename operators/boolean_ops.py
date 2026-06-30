@@ -1,5 +1,5 @@
-# Boolean from selected objects (Hard Ops spirit): use one already-existing
-# object as the cutter against the other selected meshes -- no drawing. The
+# Boolean from selected objects: use one already-existing object as the cutter
+# against the other selected meshes -- no drawing. The
 # active object is the cutter; every other selected mesh is a target. Honours the
 # non-destructive preference (leave a live modifier + stash the cutter).
 import bpy

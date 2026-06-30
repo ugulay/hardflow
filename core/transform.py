@@ -1,4 +1,4 @@
-# Pure transform helpers for the array / radial-array tools (Hard Ops spirit).
+# Pure transform helpers for the array / radial-array tools.
 #
 # No bpy / mathutils here -- only arithmetic -- so it is unit-tested without
 # Blender (mirrors core/grid.py and core/atlas.py). The bpy side (creating the
@@ -41,7 +41,7 @@ def mirror_axis_flags(axis):
 
 def fit_scale(insert_size, target_feature, fraction=0.25, default=1.0):
     """Uniform scale that fits an INSERT of size `insert_size` to `fraction` of a
-    target's local feature size -- KitOps auto/smart scale on placement. Returns
+    target's local feature size -- smart scale on placement. Returns
     `default` when either size is non-positive. Pure arithmetic, unit-tested; the
     bbox measurement lives in core/asset.py."""
     if insert_size <= 0.0 or target_feature <= 0.0:

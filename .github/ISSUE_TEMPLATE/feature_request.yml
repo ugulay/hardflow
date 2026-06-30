@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the idea! Hardflow aims to deliver the core workflows of
-        Grid Modeler, Boxcutter, Hard Ops, DECALmachine, and KitOps for free —
-        if your request maps to one of those, mention how it works there.
+        Thanks for the idea! Hardflow is a free, open-source hard-surface
+        modeling toolkit — describe the workflow you want and how you'd expect
+        it to behave.
   - type: textarea
     id: problem
     attributes:
@@ -27,7 +27,7 @@ body:
     id: prior-art
     attributes:
       label: Prior art (optional)
-      description: Is there an equivalent in another tool? e.g. "Hard Ops Mirror Gizmo"
+      description: Is there an equivalent in another tool or app? e.g. "a mirror gizmo"
   - type: dropdown
     id: contribute
     attributes:

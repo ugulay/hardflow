@@ -1,5 +1,5 @@
-# Shared modal base for the SketchUp-style "pick a face, drag a value" direct
-# modeling tools (Push/Pull, Offset). Both have the same shell -- hover-pick a
+# Shared modal base for the "pick a face, drag a value" direct modeling tools
+# (Push/Pull, Offset). Both have the same shell -- hover-pick a
 # face, click to lock it, drag or type a measured value with a live
 # snapshot/restore preview, commit or cancel -- and differ only in how they build
 # the drag basis from the face and what they do with the value. Subclasses fill
@@ -243,8 +243,8 @@ class _FaceDragModal:
     def _capture_axis_inference(self, axis_co, axis_dir):
         """Build the candidate scalar positions a drag along (axis_co, axis_dir)
         can infer/snap to: every vertex and edge-midpoint of the locked object
-        projected onto the axis (SketchUp-style inference -- e.g. snap an extrude
-        to another feature's height). Captured once from the pre-edit snapshot;
+        projected onto the axis (geometry inference -- e.g. snap an extrude to
+        another feature's height). Captured once from the pre-edit snapshot;
         skipped on very dense meshes. Stores self._infer (sorted)."""
         src = self._base if self._base is not None else self.obj.data
         self._infer_hit = False

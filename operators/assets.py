@@ -1,4 +1,4 @@
-# Asset / kitbash placement + management (KitOps spirit).
+# Asset / kitbash placement + management.
 #
 # HARDFLOW_OT_place_asset: a modal tool. It loads a part (an "INSERT") from a
 # .blend library, then previews it on whatever surface is under the cursor,
@@ -142,8 +142,8 @@ class HARDFLOW_OT_place_asset(Operator):
         return {'RUNNING_MODAL'}
 
     def _apply_smart_placement(self, context):
-        """KitOps smart placement (v1.8): snap the hit to an insert grid / anchor,
-        and auto-scale the INSERT to the target's feature size on the first hit."""
+        """Smart placement (v1.8): snap the hit to an insert grid / anchor, and
+        auto-scale the INSERT to the target's feature size on the first hit."""
         if self._hit is None:
             return
         prefs = get_prefs(context)
@@ -320,7 +320,7 @@ class HARDFLOW_OT_material_insert(Operator, ImportHelper):
     bl_idname = "object.hardflow_material_insert"
     bl_label = "Material INSERT"
     bl_description = ("Append the first material from a .blend and apply it to the "
-                      "selected meshes (KitOps material kpack)")
+                      "selected meshes (material insert)")
     bl_options = {'REGISTER', 'UNDO'}
 
     filter_glob: StringProperty(default="*.blend", options={'HIDDEN'})
@@ -347,7 +347,7 @@ class HARDFLOW_OT_export_asset(Operator):
     bl_idname = "object.hardflow_export_asset"
     bl_label = "Export INSERT"
     bl_description = ("Write the selected objects to a .blend in the asset library "
-                      "and mark them as assets (KPACK-style INSERT export)")
+                      "and mark them as assets (asset-pack INSERT export)")
     bl_options = {'REGISTER'}
 
     name: StringProperty(name="INSERT Name", default="HF_Insert")
