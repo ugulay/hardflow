@@ -10,7 +10,7 @@
 import bpy
 from mathutils import Vector
 
-from ..core import raycast, geometry
+from ..core import raycast, geometry, grid, snap
 from ..preferences import get_prefs
 from ..ui import draw as hud
 
@@ -71,6 +71,8 @@ class _FaceDragModal:
         self.face_index = -1      # face under the cursor (Object Mode pick)
         self.locked = False       # has a face been picked?
         self.typed = ""           # numeric entry buffer
+        self._infer = []          # axis-drag inference candidates (shared)
+        self._infer_hit = False   # drag currently snapped to geometry
         self._base = None         # mesh snapshot for the live preview
         self._committed = False
         self._init_tool(context, event)
@@ -235,6 +237,42 @@ class _FaceDragModal:
         except (ValueError, AttributeError):
             pass
         context.area.tag_redraw()
+
+    # --- shared axis-drag inference --------------------------------------
+
+    def _capture_axis_inference(self, axis_co, axis_dir):
+        """Build the candidate scalar positions a drag along (axis_co, axis_dir)
+        can infer/snap to: every vertex and edge-midpoint of the locked object
+        projected onto the axis (SketchUp-style inference -- e.g. snap an extrude
+        to another feature's height). Captured once from the pre-edit snapshot;
+        skipped on very dense meshes. Stores self._infer (sorted)."""
+        src = self._base if self._base is not None else self.obj.data
+        self._infer_hit = False
+        if src is None or len(src.vertices) > 50000:
+            self._infer = []
+            return
+        mw = self.obj.matrix_world
+        vco = [mw @ v.co for v in src.vertices]
+        cands = {round((p - axis_co).dot(axis_dir), 6) for p in vco}
+        for e in src.edges:
+            a, b = e.vertices
+            mid = (vco[a] + vco[b]) * 0.5
+            cands.add(round((mid - axis_co).dot(axis_dir), 6))
+        self._infer = sorted(cands)
+
+    def _snap_axis_value(self, value, context):
+        """Inference-then-grid snap for an axis drag. Sets self._infer_hit and
+        returns the snapped value (raw value when snap is off)."""
+        self._infer_hit = False
+        if not self.snap:
+            return value
+        prefs = get_prefs(context)
+        tol = max(1e-4, prefs.grid_world * 0.5)
+        inferred = snap.snap_to_candidates(value, self._infer, tol)
+        if inferred != value:
+            self._infer_hit = True
+            return inferred
+        return grid.snap_scalar(value, prefs.grid_world, True)
 
     # --- default hooks (subclasses override) -----------------------------
 

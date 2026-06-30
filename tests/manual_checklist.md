@@ -97,11 +97,11 @@ from the visible copy).
 - [ ] **`R` repeat** ⭐ — after one push/pull, run the tool again, lock another
       face, press `R` → it re-applies the **last distance** (HUD shows
       `R repeat <m>`). `Enter` keeps it.
-- [ ] **Vertex inference** ⭐ — with snap ON (`X`), drag a face until its height
-      lines up with **another feature's vertex** (e.g. push a boss down to the base
-      level): the distance **snaps to that height** and the HUD shows
-      `-> on geometry`. Off-feature, it falls back to the grid. Skipped on meshes
-      over 50k verts. Core covered by `test_snap_to_candidates`.
+- [ ] **Vertex/edge inference** ⭐ — with snap ON (`X`), drag a face until its
+      height lines up with **another feature's vertex or edge-midpoint** (e.g. push
+      a boss down to the base level): the distance **snaps to that height** and the
+      HUD shows `-> on geometry`. Off-feature, it falls back to the grid. Skipped on
+      meshes over 50k verts. Core covered by `test_snap_to_candidates`.
 
 Watch for: wrong extrude direction on a **rotated/scaled** object (the world→local
 vector transform in `_commit`), and any `IndexError` in the console (should be
@@ -124,7 +124,8 @@ Setup: same as Push/Pull.
 - [ ] **`E` → extrude (recess/panel)** ⭐ — with an inset set, press `E`: the HUD
       switches to **Depth** and dragging now extrudes the **inner** face along the
       normal — drag **in** for a recessed panel, **out** for a raised one (the
-      outer border stays put). Numeric + `X` snap work; `Enter` keeps both. `Esc`
+      outer border stays put). Numeric + `X` snap work; the depth also has
+      **vertex/edge inference** (HUD `-> on geometry`). `Enter` keeps both; `Esc`
       before confirming rolls back to the original mesh. Headless:
       `test_inset_extrude_faces_recess`.
 

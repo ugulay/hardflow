@@ -113,10 +113,10 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
                 return
             d = (p - self.pick0).length
             self.thickness = grid.snap_scalar(d, prefs.grid_world, self.snap)
-        else:  # EXTRUDE: drag along the face normal (signed)
+        else:  # EXTRUDE: drag along the face normal (signed), with inference
             d = raycast.closest_axis_distance(region, rv3d, co,
                                               self.plane_co, self.plane_no)
-            self.distance = grid.snap_scalar(d, prefs.grid_world, self.snap)
+            self.distance = self._snap_axis_value(d, context)
         self.typed = ""
 
     def _set_value(self, v):
@@ -132,6 +132,8 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
                 and self.thickness > 1e-6):
             self.phase = 'EXTRUDE'
             self.typed = ""
+            # Inference for the recess depth: snap to real feature heights.
+            self._capture_axis_inference(self.plane_co, self.plane_no)
             return True
         return False
 
@@ -157,8 +159,9 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
             line2 = ("drag / type = thickness    E = then extrude (recess/panel)"
                      "    X snap %s" % ('ON' if self.snap else 'OFF'), dim)
         else:  # EXTRUDE
-            top = ("Depth:  %+.3f m%s    (inset %.3f m)"
-                   % (self.distance, typed, self.thickness), accent)
+            infer = "  -> on geometry" if self._infer_hit else ""
+            top = ("Depth:  %+.3f m%s%s    (inset %.3f m)"
+                   % (self.distance, typed, infer, self.thickness), accent)
             line2 = ("drag / type = recess depth (- in / + out)    "
                      "X snap %s" % ('ON' if self.snap else 'OFF'), dim)
         last = HARDFLOW_OT_offset._LAST_THICKNESS

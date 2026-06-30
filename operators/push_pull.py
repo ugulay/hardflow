@@ -12,8 +12,7 @@
 from bpy.types import Operator
 
 from .face_tool import _FaceDragModal
-from ..core import raycast, geometry, grid, snap
-from ..preferences import get_prefs
+from ..core import raycast, geometry
 
 
 class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
@@ -35,8 +34,6 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
     def _init_tool(self, context, event):
         self.distance = 0.0       # signed extrude amount, meters
         self.copy = False         # keep the starting face (SketchUp Ctrl/Copy)
-        self._infer = []          # candidate extrude heights (vertex inference)
-        self._infer_hit = False   # drag currently snapped to geometry
 
     # --- locking ---------------------------------------------------------
 
@@ -55,7 +52,7 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
         self.locked = True
         geometry.flush_edit_mesh(self.obj)   # sync selection before snapshot
         self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
-        self._capture_inference()
+        self._capture_axis_inference(self.axis_co, self.axis_dir)
         return True
 
     def _lock_face(self, context, co):
@@ -69,21 +66,7 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
         self.typed = ""
         self.locked = True
         self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
-        self._capture_inference()
-
-    def _capture_inference(self):
-        """Project the locked object's vertices onto the drag axis to get the
-        candidate extrude heights the drag can infer/snap to (SketchUp-style
-        inference: e.g. snap to the height of another feature). Captured once from
-        the pre-extrude snapshot; skipped on very dense meshes."""
-        src = self._base if self._base is not None else self.obj.data
-        if src is None or len(src.vertices) > 50000:
-            self._infer = []
-            return
-        mw = self.obj.matrix_world
-        co, ax = self.axis_co, self.axis_dir
-        self._infer = sorted({round((mw @ v.co - co).dot(ax), 6)
-                              for v in src.vertices})
+        self._capture_axis_inference(self.axis_co, self.axis_dir)
 
     # --- dragging / apply ------------------------------------------------
 
@@ -112,20 +95,7 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
         region, rv3d = context.region, context.region_data
         d = raycast.closest_axis_distance(region, rv3d, co,
                                           self.axis_co, self.axis_dir)
-        prefs = get_prefs(context)
-        self._infer_hit = False
-        if not self.snap:
-            self.distance = d
-        else:
-            # Inference first: snap to a real vertex height under the drag, else
-            # fall back to the world grid (SketchUp's geometry inference).
-            tol = max(1e-4, prefs.grid_world * 0.5)
-            inferred = snap.snap_to_candidates(d, self._infer, tol)
-            if inferred != d:
-                self.distance = inferred
-                self._infer_hit = True
-            else:
-                self.distance = grid.snap_scalar(d, prefs.grid_world, True)
+        self.distance = self._snap_axis_value(d, context)  # inference + grid
         self.typed = ""   # dragging clears a stale numeric entry
 
     def _set_value(self, v):

@@ -487,8 +487,13 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       height (`core/snap.snap_to_candidates`, candidates captured at lock from the
       object's verts projected onto the drag axis); HUD shows `-> on geometry`,
       grid is the fallback. Headless `test_snap_to_candidates`.
-- [ ] **Offset / edge inference** — extend inference to the Offset thickness
-      (in-plane border alignment) and to edge mid-points, pending a live pass.
+- [x] **Edge-midpoint + extrude inference** — inference moved into the shared
+      `_FaceDragModal._capture_axis_inference` / `_snap_axis_value`; candidates now
+      include edge mid-points (not just vertices), and the Offset EXTRUDE depth
+      drag uses it too (not only Push/Pull). Reuses the tested
+      `snap.snap_to_candidates`.
+- [ ] **In-plane offset-thickness inference** — snap the inset *thickness* so the
+      border aligns with another vertex/edge within the face plane; pending.
 - [x] **Offset → auto Push/Pull** — press `E` mid-Offset to lock the inset and
       chain into extruding the inner face along its normal (recess for `-`, raised
       panel for `+`), one bmesh pass `geometry.inset_extrude_faces` /
