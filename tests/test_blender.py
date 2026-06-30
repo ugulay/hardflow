@@ -776,6 +776,20 @@ def test_extrude_faces_pushpull():
     assert geometry.extrude_faces(cube, [9999], Vector((0, 0, 1))) is False
 
 
+def test_extrude_keep_original_vs_clean():
+    # Clean push/pull drops the source face (manifold extrude); Copy keeps it as
+    # an interior divider, so the only difference is that one extra face.
+    _reset()
+    a = _add_cube("Clean", size=2.0)
+    assert geometry.extrude_faces(a, [0], Vector((0, 0, 1.0))) is True
+    clean = len(a.data.polygons)
+    b = _add_cube("Keep", size=2.0, location=(5, 0, 0))
+    assert geometry.extrude_faces(b, [0], Vector((0, 0, 1.0)),
+                                  keep_original=True) is True
+    keep = len(b.data.polygons)
+    assert keep == clean + 1, (clean, keep)
+
+
 def test_inset_faces_offset():
     # geometry behind Offset: inset adds a ring of faces around the picked face.
     _reset()

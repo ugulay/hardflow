@@ -464,6 +464,25 @@ the core pipeline (POLY shape + Cut/Make/Intersect). All on
 - [ ] **Project verify** — the perspective taper is built and unit-checked; a
       live-Blender pass should confirm the frustum cut matches the native tool.
 
+## v1.12 — SketchUp tool improvements
+Push/Pull and Offset were minimal (hover → lock → drag/type → apply). Bring them
+up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py`
+/ `operators/offset.py` + `core/geometry.py`; interactions in
+`tests/manual_checklist.md` §3/§4.
+- [x] **Clean object-mode extrude (fix)** — `geometry.extrude_faces` now drops the
+      source face by default (object-mode push/pull used to leave an interior
+      divider, unlike Edit Mode); `keep_original` opt-in preserves it. Headless
+      `test_extrude_keep_original_vs_clean`.
+- [x] **Push/Pull "Copy"** (`C`) — keep the starting face and stack a new volume on
+      it (SketchUp Ctrl push/pull), Object + Edit Mode (`extrude_faces`/
+      `edit_extrude_faces` `keep_original`).
+- [x] **Repeat last** (`R`) — re-apply the last committed distance (Push/Pull) /
+      thickness (Offset) on the newly locked face; remembered across runs.
+- [ ] **Inference snapping** — snap the push/pull distance / offset to a vertex or
+      edge under the cursor (SketchUp inference), pending a live-Blender pass.
+- [ ] **Hover-pick through modifiers** — Object-Mode face pick still indexes the
+      base mesh; supporting generative modifiers needs an evaluated-mesh map.
+
 ## Reference-tool gap pass (pre-publish)
 A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /
 KitOps. Closed in this pass:

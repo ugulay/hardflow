@@ -23,6 +23,8 @@ class HARDFLOW_OT_offset(Operator):
     bl_description = "Inset a face's border inward by a measured distance (SketchUp Offset)"
     bl_options = {'REGISTER', 'UNDO'}
 
+    _LAST_THICKNESS = 0.0   # remembered across runs -> R repeats the last inset
+
     @classmethod
     def poll(cls, context):
         obj = context.active_object
@@ -104,6 +106,12 @@ class HARDFLOW_OT_offset(Operator):
 
         elif event.type == 'X' and event.value == 'PRESS':
             self.snap = not self.snap
+
+        # R: repeat the last committed inset thickness on the locked face.
+        elif event.type == 'R' and event.value == 'PRESS' and self.locked:
+            self.thickness = HARDFLOW_OT_offset._LAST_THICKNESS
+            self.typed = ""
+            self._refresh_preview()
 
         elif self.locked and event.value == 'PRESS' and self._edit_typed(event):
             self._refresh_preview()
@@ -225,11 +233,13 @@ class HARDFLOW_OT_offset(Operator):
         else:
             typed = ("  [typing %s]" % self.typed) if self.typed else ""
             top = ("Thickness:  %.3f m%s" % (self.thickness, typed), accent)
+        last = HARDFLOW_OT_offset._LAST_THICKNESS
+        repeat = ("    R repeat %.3f m" % last) if last > 1e-6 else ""
         lines = [
             top,
             ("Click face = lock    drag / type number = thickness    "
              "X snap %s" % ('ON' if self.snap else 'OFF'), dim),
-            ("Enter / click apply    Esc cancel", dim),
+            ("Enter / click apply%s    Esc cancel" % repeat, dim),
         ]
         hud.draw_hud(context.region, lines)
 
@@ -242,6 +252,8 @@ class HARDFLOW_OT_offset(Operator):
             self._refresh_preview()
         except Exception as ex:
             self.report({'ERROR'}, f"Hardflow: {ex}")
+        if self.thickness > 1e-6:                      # remember for R repeat
+            HARDFLOW_OT_offset._LAST_THICKNESS = self.thickness
         self._committed = True
         self._cleanup(context)
         return {'FINISHED'}

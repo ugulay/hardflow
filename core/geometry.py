@@ -454,12 +454,16 @@ def build_grid_mesh(segments, name="Hardflow_Grid"):
     return mesh
 
 
-def extrude_faces(obj, face_indices, local_vec):
+def extrude_faces(obj, face_indices, local_vec, keep_original=False):
     """Push/Pull: extrude the given faces (indices into obj.data.polygons) and
     move the new region by `local_vec` (an object-local Vector). Edits obj.data
     via bmesh in Object Mode. Returns True on success. Face indices must be valid
     on the base mesh -- generative modifiers that change the face count are not
-    accounted for."""
+    accounted for.
+
+    `keep_original=False` removes the original (now interior) faces for a clean
+    extrude, matching Edit Mode. `True` leaves the starting face in place --
+    SketchUp's Ctrl / "Copy" push-pull that stacks a new volume on the face."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.faces.ensure_lookup_table()
@@ -470,6 +474,10 @@ def extrude_faces(obj, face_indices, local_vec):
     res = bmesh.ops.extrude_face_region(bm, geom=faces)
     moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
     bmesh.ops.translate(bm, vec=local_vec, verts=moved)
+    if not keep_original:
+        # extrude_face_region leaves the source faces behind as the (interior)
+        # bottom cap; drop them so the result is a clean, manifold extrude.
+        bmesh.ops.delete(bm, geom=faces, context='FACES')
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(obj.data)
     obj.data.update()
@@ -586,11 +594,12 @@ def restore_edit_mesh(obj, snapshot):
     bmesh.update_edit_mesh(obj.data, destructive=True)
 
 
-def edit_extrude_faces(obj, local_vec):
+def edit_extrude_faces(obj, local_vec, keep_original=False):
     """Edit Mode Push/Pull: extrude obj's selected edit-mesh faces and move the
-    new region by `local_vec` (object-local). The original (now interior) faces
-    are removed and the extruded cap is left selected. Returns True on success,
-    False when no face is selected."""
+    new region by `local_vec` (object-local). With `keep_original=False` the
+    original (now interior) faces are removed for a clean extrude; `True` keeps
+    the starting face (SketchUp Ctrl / "Copy" stack). The extruded cap is left
+    selected. Returns True on success, False when no face is selected."""
     bm = bmesh.from_edit_mesh(obj.data)
     faces = [f for f in bm.faces if f.select]
     if not faces:
@@ -598,7 +607,8 @@ def edit_extrude_faces(obj, local_vec):
     res = bmesh.ops.extrude_face_region(bm, geom=faces)
     moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
     bmesh.ops.translate(bm, vec=local_vec, verts=moved)
-    bmesh.ops.delete(bm, geom=faces, context='FACES')   # drop the old caps
+    if not keep_original:
+        bmesh.ops.delete(bm, geom=faces, context='FACES')   # drop the old caps
     new_faces = {f for v in moved for f in v.link_faces}
     for f in bm.faces:
         f.select_set(f in new_faces)

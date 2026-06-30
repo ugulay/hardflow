@@ -76,6 +76,17 @@ mesh).
 - [ ] `Esc` before confirming cancels with **no geometry change** (the live
       preview is rolled back to the original mesh — verify vert/face counts match).
 - [ ] Result survives **Undo** (`Ctrl+Z`) in one step.
+- [ ] **Clean extrude (fix):** push/pull a cube's top face out in **Object Mode**,
+      then check Edit Mode — there is **no leftover interior face** at the old
+      level (object-mode extrude used to leave one). Headless:
+      `test_extrude_keep_original_vs_clean`.
+- [ ] **`C` Copy** ⭐ — press `C` while locked (HUD shows `(copy)` / `C copy ON`):
+      the extrude now **keeps the starting face**, stacking a new volume on it
+      (SketchUp Ctrl push/pull). Press `C` again → back to clean extrude. Works in
+      Object and Edit Mode.
+- [ ] **`R` repeat** ⭐ — after one push/pull, run the tool again, lock another
+      face, press `R` → it re-applies the **last distance** (HUD shows
+      `R repeat <m>`). `Enter` keeps it.
 
 Watch for: wrong extrude direction on a **rotated/scaled** object (the world→local
 vector transform in `_commit`), and any `IndexError` in the console (should be
@@ -93,6 +104,8 @@ Setup: same as Push/Pull.
       as you drag/type.
 - [ ] Confirm → the inset is kept; `Esc` rolls the mesh back with no change;
       `Ctrl+Z` reverts in one step.
+- [ ] **`R` repeat** ⭐ — after one offset, run the tool again, lock another face,
+      press `R` → it re-applies the **last thickness** (HUD shows `R repeat <m>`).
 
 ---
 

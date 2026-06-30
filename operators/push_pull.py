@@ -25,6 +25,8 @@ class HARDFLOW_OT_push_pull(Operator):
     bl_description = "Extrude a face along its normal by dragging (SketchUp Push/Pull)"
     bl_options = {'REGISTER', 'UNDO'}
 
+    _LAST_DISTANCE = 0.0   # remembered across runs -> R repeats the last amount
+
     @classmethod
     def poll(cls, context):
         obj = context.active_object
@@ -43,6 +45,7 @@ class HARDFLOW_OT_push_pull(Operator):
         self.axis_co = None       # world-space face center (drag axis origin)
         self.axis_dir = None      # world-space face normal (drag axis)
         self.distance = 0.0       # signed extrude amount, meters
+        self.copy = False         # keep the starting face (SketchUp Ctrl/Copy)
         self.typed = ""           # numeric entry buffer
         self._base = None         # mesh snapshot for the live preview
         self._committed = False
@@ -106,6 +109,20 @@ class HARDFLOW_OT_push_pull(Operator):
         elif event.type == 'X' and event.value == 'PRESS':
             self.snap = not self.snap
 
+        # C: toggle "Copy" -- keep the starting face so the extrude stacks a new
+        # volume on it (SketchUp's Ctrl push/pull, bound to C to stay clear of the
+        # navigation modifiers).
+        elif event.type == 'C' and event.value == 'PRESS':
+            self.copy = not self.copy
+            if self.locked:
+                self._refresh_preview()
+
+        # R: repeat the last committed distance on the locked face.
+        elif event.type == 'R' and event.value == 'PRESS' and self.locked:
+            self.distance = HARDFLOW_OT_push_pull._LAST_DISTANCE
+            self.typed = ""
+            self._refresh_preview()
+
         elif self.locked and event.value == 'PRESS' and self._edit_typed(event):
             self._refresh_preview()  # numeric entry handled
 
@@ -161,11 +178,13 @@ class HARDFLOW_OT_push_pull(Operator):
             geometry.restore_edit_mesh(self.obj, self._base)
             if abs(self.distance) > 1e-6:
                 local_vec = self._local_disp()
-                geometry.edit_extrude_faces(self.obj, local_vec)
+                geometry.edit_extrude_faces(self.obj, local_vec,
+                                            keep_original=self.copy)
             return
         geometry.restore_mesh(self.obj, self._base)
         if abs(self.distance) > 1e-6:
-            geometry.extrude_faces(self.obj, [self.face_index], self._local_disp())
+            geometry.extrude_faces(self.obj, [self.face_index],
+                                   self._local_disp(), keep_original=self.copy)
 
     def _local_disp(self):
         world_disp = self.axis_dir * self.distance
@@ -236,12 +255,16 @@ class HARDFLOW_OT_push_pull(Operator):
             top = ("Hover a face, then click to push/pull", accent)
         else:
             typed = ("  [typing %s]" % self.typed) if self.typed else ""
-            top = ("Distance:  %.3f m%s" % (self.distance, typed), accent)
+            copy = "  (copy)" if self.copy else ""
+            top = ("Distance:  %.3f m%s%s" % (self.distance, typed, copy), accent)
+        last = HARDFLOW_OT_push_pull._LAST_DISTANCE
+        repeat = ("    R repeat %.3f m" % last) if abs(last) > 1e-6 else ""
         lines = [
             top,
             ("Click face = lock    drag / type number = distance    "
-             "X snap %s" % ('ON' if self.snap else 'OFF'), dim),
-            ("Enter / click apply    Esc cancel", dim),
+             "X snap %s    C copy %s" % ('ON' if self.snap else 'OFF',
+                                         'ON' if self.copy else 'OFF'), dim),
+            ("Enter / click apply%s    Esc cancel" % repeat, dim),
         ]
         hud.draw_hud(context.region, lines)
 
@@ -254,6 +277,8 @@ class HARDFLOW_OT_push_pull(Operator):
             self._refresh_preview()
         except Exception as ex:
             self.report({'ERROR'}, f"Hardflow: {ex}")
+        if abs(self.distance) > 1e-6:                  # remember for R repeat
+            HARDFLOW_OT_push_pull._LAST_DISTANCE = self.distance
         self._committed = True
         self._cleanup(context)
         return {'FINISHED'}
