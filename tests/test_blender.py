@@ -97,6 +97,34 @@ def test_bevel_cutter_chamfers_edges():
     assert len(me2.vertices) == 8
 
 
+def test_mirror_pivot_cursor_and_active():
+    # Mirror across the 3D cursor (an empty pivot) and across the active object.
+    _reset()
+    hardflow.register()
+    try:
+        a = _add_cube("A", size=2.0)
+        bpy.context.scene.cursor.location = (1.0, 0.0, 0.0)
+        _activate(a)
+        res = bpy.ops.object.hardflow_mirror(axis='X', pivot='CURSOR')
+        assert res == {'FINISHED'}, res
+        m = a.modifiers.get("HF_Mirror")
+        assert m is not None and m.mirror_object is not None
+        assert m.mirror_object.name.startswith("HF_MirrorPivot")
+
+        b = _add_cube("B", size=2.0, location=(3, 0, 0))
+        for o in bpy.context.selected_objects:
+            o.select_set(False)
+        b.select_set(True)
+        a.select_set(True)
+        bpy.context.view_layer.objects.active = a   # active = mirror plane
+        res = bpy.ops.object.hardflow_mirror(axis='X', pivot='ACTIVE')
+        assert res == {'FINISHED'}, res
+        bm = b.modifiers.get("HF_Mirror")
+        assert bm is not None and bm.mirror_object is a
+    finally:
+        hardflow.unregister()
+
+
 def test_robust_boolean_intersect():
     # The draw tool's Intersect mode (and the menu entry) route to an INTERSECT
     # boolean: keep only the volume inside the cutter. Verify against real Blender.

@@ -186,6 +186,17 @@ class HARDFLOW_OT_mirror(Operator):
         items=[('X', "X", ""), ('Y', "Y", ""), ('Z', "Z", "")],
         default='X',
     )
+    pivot: EnumProperty(
+        name="Mirror Across",
+        description="Where the mirror plane sits",
+        items=[
+            ('SELF', "Self", "The object's own origin (a plain Mirror modifier)"),
+            ('CURSOR', "3D Cursor", "Mirror across an empty at the 3D cursor"),
+            ('ACTIVE', "Active Object",
+             "Mirror the other selected meshes across the active object"),
+        ],
+        default='SELF',
+    )
     bisect: BoolProperty(name="Bisect", default=True)
     flip: BoolProperty(name="Flip", default=False)
 
@@ -194,15 +205,42 @@ class HARDFLOW_OT_mirror(Operator):
         obj = context.active_object
         return obj is not None and obj.type == 'MESH'
 
-    def execute(self, context):
-        obj = context.active_object
+    def _add_mirror(self, obj, mirror_object=None):
+        """Add the HF_Mirror modifier to obj with the chosen axis/bisect/flip,
+        optionally mirroring across `mirror_object` instead of obj's origin."""
         mod = obj.modifiers.new("HF_Mirror", 'MIRROR')
         idx = {'X': 0, 'Y': 1, 'Z': 2}[self.axis]
         mod.use_axis = (idx == 0, idx == 1, idx == 2)
-        mod.use_bisect_axis = (idx == 0, idx == 1, idx == 2)
+        if self.bisect:
+            mod.use_bisect_axis = (idx == 0, idx == 1, idx == 2)
         if self.flip:
             mod.use_bisect_flip_axis = (idx == 0, idx == 1, idx == 2)
         mod.use_clip = True
+        if mirror_object is not None:
+            mod.mirror_object = mirror_object
+        return mod
+
+    def execute(self, context):
+        active = context.active_object
+        if self.pivot == 'CURSOR':
+            pivot = bpy.data.objects.new("HF_MirrorPivot", None)
+            pivot.empty_display_size = 0.2
+            pivot.location = context.scene.cursor.location.copy()
+            context.collection.objects.link(pivot)
+            self._add_mirror(active, pivot)
+        elif self.pivot == 'ACTIVE':
+            targets = [o for o in context.selected_objects
+                       if o.type == 'MESH' and o is not active]
+            if not targets:
+                self.report({'WARNING'},
+                            "Select object(s) to mirror plus an active object")
+                return {'CANCELLED'}
+            for t in targets:
+                self._add_mirror(t, active)
+            self.report({'INFO'}, "Mirrored %d object(s) across %s"
+                        % (len(targets), active.name))
+        else:  # SELF
+            self._add_mirror(active)
         return {'FINISHED'}
 
 

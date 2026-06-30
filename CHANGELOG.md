@@ -25,6 +25,10 @@ logic is unit-tested (`59/59`); the new bpy paths gain headless coverage.
   `B` bevel-on-cut which chamfers the target's cut edge (Boxcutter bevelled cut).
 
 ### Changed
+- **Mirror across the 3D cursor or active object** — `HARDFLOW_OT_mirror` gains a
+  "Mirror Across" option (Self / 3D Cursor / Active Object): mirror the selected
+  meshes across the active object, or across an empty at the 3D cursor, not only
+  the object's own origin (Hard Ops parity).
 - **Deterministic main edge for the 2-edge grid plane** — the `EDGES` construction
   plane picked edges by arbitrary bmesh order, so which selected edge became the
   grid's main axis was unpredictable. It now takes the longest selected edge as the
