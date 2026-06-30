@@ -140,20 +140,25 @@ class _FaceDragModal:
     # --- shared picking / numeric entry ----------------------------------
 
     def _hover_face(self, context, co):
-        """Raycast the active object's own mesh; remember the polygon index under
-        the cursor (-1 when the cursor misses the object)."""
+        """Raycast the active object; remember the base-mesh polygon index under
+        the cursor (-1 when the cursor misses). `ray_cast` indexes the EVALUATED
+        mesh -- a direct hit on the base mesh is used as-is; a hit on geometry a
+        generative modifier added (index past the base mesh) is mapped back to the
+        nearest base face so the tools still work on modified objects."""
         from bpy_extras import view3d_utils
         region, rv3d = context.region, context.region_data
         v = Vector((co[0], co[1]))
         ray_dir = view3d_utils.region_2d_to_vector_3d(region, rv3d, v)
         ray_o = view3d_utils.region_2d_to_origin_3d(region, rv3d, v)
         mw_inv = self.obj.matrix_world.inverted_safe()
-        ok, _loc, _nrm, index = self.obj.ray_cast(
+        ok, loc, _nrm, index = self.obj.ray_cast(
             mw_inv @ ray_o, mw_inv.to_3x3() @ ray_dir)
-        # ray_cast indexes the EVALUATED mesh; clamp to the base mesh range so
-        # every downstream obj.data.polygons[...] access stays in bounds.
-        self.face_index = index if (ok and index < len(self.obj.data.polygons)) \
-            else -1
+        if not ok:
+            self.face_index = -1
+        elif index < len(self.obj.data.polygons):
+            self.face_index = index                      # direct base-face hit
+        else:
+            self.face_index = geometry.nearest_face_to_point(self.obj, loc)
 
     def _edit_typed(self, event):
         """Build a numeric value from key presses, routing it to `_set_value`.

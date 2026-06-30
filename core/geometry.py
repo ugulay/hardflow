@@ -777,6 +777,22 @@ def nearest_edge_on_face(obj, face_index, local_point):
     return best
 
 
+def nearest_face_to_point(obj, local_point):
+    """Return the index of the base-mesh polygon whose center is nearest
+    `local_point` (object-local), or -1 for an empty mesh. Maps an evaluated-mesh
+    raycast hit (when generative modifiers push the hit face index past the base
+    mesh) back onto a base face. Exact for deform-only modifiers; a best-effort
+    nearest-pick for topology-changing ones (subdivision / array / mirror). Pure
+    mesh-data read."""
+    polys = obj.data.polygons
+    best_i, best_d = -1, None
+    for p in polys:
+        d = (local_point - p.center).length_squared
+        if best_d is None or d < best_d:
+            best_d, best_i = d, p.index
+    return best_i
+
+
 def bevel_object_edges(obj, edge_keys, width, segments=2, profile=0.5):
     """Object Mode: bevel the edges given as (vi, vj) vertex-index pairs into real
     chamfer geometry (bmesh.ops.bevel, affect EDGES). The destructive,

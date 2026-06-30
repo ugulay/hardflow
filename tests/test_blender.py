@@ -852,6 +852,20 @@ def test_bevel_object_edges():
     assert geometry.bevel_object_edges(cube, [(0, 9000)], 0.2) == 0    # bad edge
 
 
+def test_nearest_face_to_point():
+    # Maps an evaluated-mesh raycast hit back to a base face (the hover-pick
+    # through generative modifiers path).
+    _reset()
+    cube = _add_cube("FacePick", size=2.0)
+    i = geometry.nearest_face_to_point(cube, Vector((0, 0, 1.2)))   # above top
+    assert i >= 0
+    assert cube.data.polygons[i].normal.z > 0.9, cube.data.polygons[i].normal[:]
+    j = geometry.nearest_face_to_point(cube, Vector((1.2, 0, 0)))   # past +X
+    assert cube.data.polygons[j].normal.x > 0.9
+    empty = bpy.data.objects.new("Empty", bpy.data.meshes.new("empty"))
+    assert geometry.nearest_face_to_point(empty, Vector((0, 0, 0))) == -1
+
+
 def test_snapshot_restore_mesh():
     # the live-preview backbone for Push/Pull + Offset: snapshot a mesh, mutate
     # it, then restore it back to the captured state.

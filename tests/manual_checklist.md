@@ -57,8 +57,14 @@ boolean.
 ## 3. Push/Pull ⭐ (modal — the highest-risk new path)
 
 Setup: select a mesh with clean faces (a cube, or the face from step 2). Object
-Mode. **No generative modifiers** (documented limitation — index targets the base
-mesh).
+Mode. Generative modifiers (subdivision, etc.) now work **best-effort** — the hit
+maps to the nearest base face (`geometry.nearest_face_to_point`); exact for
+deform-only modifiers, approximate for array/mirror (the base face can sit away
+from the visible copy).
+
+- [ ] **Pick through a modifier** ⭐ — add a **Subdivision Surface** modifier to a
+      cube, run Push/Pull, hover the rounded surface → a base face still
+      highlights and push/pull works (the extrude feeds back through the modifier).
 
 > Push/Pull and Offset now share `operators/face_tool._FaceDragModal`. Behavior
 > is unchanged, so re-running §3 and §4 in full is the regression check for that

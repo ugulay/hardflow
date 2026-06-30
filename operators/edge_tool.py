@@ -57,7 +57,9 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
         mw_inv = self.obj.matrix_world.inverted_safe()
         ok, loc, _nrm, index = self.obj.ray_cast(
             mw_inv @ ray_o, mw_inv.to_3x3() @ ray_dir)
-        if not (ok and index < len(self.obj.data.polygons)):
+        if ok and index >= len(self.obj.data.polygons):
+            index = geometry.nearest_face_to_point(self.obj, loc)  # past base mesh
+        if not ok or index < 0:
             self.face_index = -1
             self._edge_key = self._edge_world = None
             return

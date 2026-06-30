@@ -500,8 +500,13 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       Edit Mode. Headless `test_nearest_edge_on_face` + `test_bevel_object_edges`.
 - [ ] **Edge-loop bevel + loop cut** — expand the pick to the connected edge loop,
       and a loop-cut modal (insert a ring) — both need loop traversal; pending.
-- [ ] **Hover-pick through modifiers** — Object-Mode face pick still indexes the
-      base mesh; supporting generative modifiers needs an evaluated-mesh map.
+- [x] **Hover-pick through modifiers** — when the raycast hits geometry a
+      generative modifier added (evaluated face index past the base mesh), map the
+      hit point back to the nearest base face (`geometry.nearest_face_to_point`) so
+      Push/Pull, Offset and Edge Bevel work on modified objects. Exact for
+      deform-only modifiers; best-effort nearest-pick for subdivision/array/mirror
+      (the base face can sit away from the visible copy). Headless
+      `test_nearest_face_to_point`.
 
 ## Reference-tool gap pass (pre-publish)
 A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /
