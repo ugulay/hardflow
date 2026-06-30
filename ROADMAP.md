@@ -377,7 +377,10 @@ behaviour still awaits a live-Blender pass.
       (`raycast.ray_cast_surface` `ignore`); stable decal orientation on curves.
 - [x] **Edge-aligned orientation** — drawing on a surface / placing an INSERT
       aligns to the hit face's dominant edge (`raycast.face_edge_tangent`,
-      `decal_math.dominant_tangent`).
+      `decal_math.dominant_tangent`). *Refined in v1.13:* SURFACE drawing now
+      aligns to the edge **nearest the click** (`near_point`), not the single
+      longest edge, so the box reads correctly on non-rectangular (boolean-cut)
+      faces; INSERT / decal placement keep the longest-edge rule.
 
 ### Grid Modeler / SketchUp surface modeling
 - [x] **Grid plane on selected edges** — Edit-Mode draw with 1–2 edges selected
@@ -567,6 +570,12 @@ tools instead. All pure math is unit-tested; the bpy paths add headless coverage
 - [x] **Cutter Options in the N-panel** — prefs-backed inset / bevel-on-cut /
       bevelled-cutter / array defaults (`HARDFLOW_PT_cutter_options`) that seed the
       next draw, then live-tweak with the modal keys.
+- [x] **SURFACE box orientation on angled faces (fix)** — the on-surface grid now
+      aligns to the face edge **nearest the click** (`raycast.face_edge_tangent`
+      `near_point`) instead of the single longest edge, so a box reads correctly on
+      non-rectangular (boolean-cut parallelogram) faces. Live-verified in Blender
+      5.1.2 (axis aligns to the clicked edge within ~0.02deg); headless
+      `test_face_edge_tangent_near_point`.
 
 ## Reference-tool gap pass (pre-publish)
 A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /

@@ -465,6 +465,13 @@ once then Offset again so the prior inset edge is a coplanar reference):
 - [ ] **`U` Arc** draws a filled pie sector; `[ ]` grows/shrinks the **sweep angle**
       (15° steps); HUD reads `Arc: D deg`. Each shape commits a valid boolean cutter.
 
+**Draw tool ▸ SURFACE plane on angled faces** (fix):
+- [ ] On a **non-rectangular angled face** (e.g. a boolean-cut slope), `←/→` to the
+      SURFACE plane and start a Box near one of the face's edges → the box's edges
+      line up with the **edge you clicked near** (not rotated at an odd angle).
+- [ ] Start the box near a **different** edge of the same face → the box now follows
+      **that** edge instead. Decal / asset placement still align to the longest edge.
+
 **N-panel ▸ Boolean Draw** — Intersect / Join / Knife buttons and the
 Circle / N-gon / Slot / Star / Arc shape rows each launch the draw tool in the
 right mode/shape.

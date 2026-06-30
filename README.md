@@ -231,7 +231,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Pre-cut health warning | N-panel flags broken geometry before you draw + one-click normal fix | `ui/panel.py`, `operators/hardops.py recalc_normals` |
 | Adaptive sizing | Cut chamfer, decal offset, bevel-drag speed scale to the object | `core/transform.py adaptive_dimension`, `core/decal.py adaptive_decal_offset` |
 | Smart snapping | Nearest-wins vertex/edge disambiguation; raycast skips the live preview | `core/snap.py resolve_snap`, `core/raycast.py` |
-| Edge-aligned orientation | Drawing / INSERTs align to the hit face's dominant edge | `core/raycast.py face_edge_tangent`, `core/decal_math.py dominant_tangent` |
+| Edge-aligned orientation | SURFACE drawing aligns to the face edge nearest the click (v1.13 — correct on non-rectangular faces); INSERTs / decals align to the dominant (longest) edge | `core/raycast.py face_edge_tangent`, `core/decal_math.py dominant_tangent` |
 | Connected faces | Drawn faces weld onto coincident existing vertices | `core/geometry.py edit_add_face` |
 
 ### UX & shared
