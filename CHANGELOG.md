@@ -5,7 +5,51 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **Asset placement leaked orphan data** — cancelling (or a failed commit of) an
+  INSERT placement removed the appended objects but left their mesh / material
+  data-blocks behind. `assets._discard_objects` now removes the data too, and the
+  as-cutter commit drops its non-mesh helper empties/curves in both destructive
+  and non-destructive modes (matching `core/asset.make_asset_cutter`).
+- **Material INSERT leaked materials** — `material_insert` appended every material
+  from the .blend but only used the first; the rest (and the first, when no mesh
+  received it) are now purged instead of orphaned.
+- **Create-Decal bake clobbered scene state** — the bake set `cage_extrusion`
+  without restoring it (and never touched `max_ray_distance`), and never arranged
+  the selected-to-active selection it depends on. It now saves/restores both bake
+  settings and arranges the source/destination selection like `bake_decal`.
+- **Atlas aborted on one bad image** — `atlas_decals` now skips images whose pixel
+  buffer is unreadable (unloaded / zero-size / mismatched) and reports the count,
+  instead of crashing the whole operator with a traceback.
+- **"Match to Surface" accumulated materials** — re-matching a decal left the
+  previous single-user material copy as an orphan; the orphan is now removed
+  (shared templates keep their other users and are untouched).
+- **Pipe/Cable/Sweep confirm could delete the result** — if the selection
+  bookkeeping after promoting the preview raised, cleanup deleted the just-created
+  object. The commit is marked final the moment the object is promoted.
+- **Offset `R` corrupted an in-progress recess** — repeating the last thickness in
+  the EXTRUDE phase silently overwrote the locked offset; `R` is now ignored
+  outside the OFFSET phase.
+- **Draw tool robustness** — the modal is wrapped so a mid-draw exception cleans up
+  (GPU handler + temp `HF_LivePreview` modifiers) instead of stranding them; a
+  failed SLICE no longer orphans its spare duplicate half; live-boolean cleanup
+  sweeps the scene so no preview modifier survives the tool; an edge-on plane no
+  longer stores a `None` draw anchor.
+- **Face-drag tools** — `_cleanup` always removes the GPU draw handler even if the
+  mesh restore raises.
+- **Push/Pull gizmo** — dragging a not-yet-populated handle no longer raises
+  `AttributeError` (the group-written slots are initialized in `setup`).
+- **Add-on registration** — gizmo / Workspace-Tool registration is guarded so a
+  headless or edge-context failure can't strand the rest of the add-on
+  half-registered; gizmo unregistration is defensive against a partial register.
+- **Geometry guards** — `edit_add_face` rejects a zero-area (collinear) footprint
+  and fully cleans up its verts on failure; `build_pipe_mesh` returns `None` when
+  no side faces build and adds each end cap independently; the radial draw shapes
+  (`circle`/`ngon`/`star`/`arc_points`) return no points for a zero-radius drag
+  instead of a coincident cluster.
+- **Apply Cutters** warns when a boolean sat below a non-Hardflow modifier (applied
+  out of stack order, so the result can differ from the preview).
+- `snap_to_candidates` ties now resolve deterministically (first candidate wins).
 
 ## [1.13.0] — 2026-06-30
 

@@ -12,6 +12,8 @@
 #   Tab / Shift+Tab   cycle the mode (Cut/Slice/Make/Intersect/Face/Knife)
 #   X             toggle snap
 #   Right click / ESC  cancel
+import math
+
 import bpy
 from bpy.types import Operator
 from bpy.props import EnumProperty
@@ -122,7 +124,6 @@ class HARDFLOW_OT_draw(Operator):
         self._edges_basis = None    # locked basis from selected edges (EDGES plane)
         self._forced_main_key = None  # Ctrl+Click main-edge override (vert-idx set)
         self.grid_origin = None     # H: re-anchor the snap grid to a chosen point
-        self.committing = False
         self._preview = None        # live 3D cutter/face volume object
         self._collect_snap_geometry(context)
 
@@ -145,6 +146,20 @@ class HARDFLOW_OT_draw(Operator):
     # --- event loop ------------------------------------------------------
 
     def modal(self, context, event):
+        # A raise anywhere in the modal body would otherwise leave the registered
+        # GPU draw handler firing against a dead operator and any HF_LivePreview
+        # temp modifiers stuck on the targets. Guard it: clean up and bail.
+        try:
+            return self._modal(context, event)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, "Hardflow: %s" % ex)
+            try:
+                self._cleanup(context)
+            except Exception:  # noqa: BLE001
+                pass
+            return {'CANCELLED'}
+
+    def _modal(self, context, event):
         context.area.tag_redraw()
         # Re-anchor placed points to the current view before doing anything, so an
         # orbit/zoom on a fixed plane leaves the shape where it was drawn.
@@ -226,7 +241,6 @@ class HARDFLOW_OT_draw(Operator):
             # clamped to a full turn); for the other shapes they set the side /
             # point / cap-segment count.
             if self.shape == 'ARC':
-                import math
                 self.arc_sweep = max(math.radians(15),
                                      min(math.tau,
                                          self.arc_sweep + step * math.radians(15)))
@@ -264,7 +278,6 @@ class HARDFLOW_OT_draw(Operator):
                 self.typed = "0."
                 self._apply_numeric(context)
             else:
-                import math
                 step = math.radians(get_prefs(context).angle_step)
                 self.rotation += step if event.type == 'PERIOD' else -step
 
@@ -327,7 +340,6 @@ class HARDFLOW_OT_draw(Operator):
             direction = 1 if event.type == 'RIGHT_ARROW' else -1
             if event.shift:
                 # Shift + arrows: rotate the grid plane in place.
-                import math
                 self.plane_spin += direction * math.radians(
                     get_prefs(context).angle_step)
             else:
@@ -536,8 +548,14 @@ class HARDFLOW_OT_draw(Operator):
         self.points.append((screen_co[0], screen_co[1]))
         region, rv3d = context.region, context.region_data
         origin, right, up, normal = self._plane_basis(context)
-        self.world_points.append(
-            raycast.ray_to_plane(region, rv3d, screen_co, origin, normal))
+        w = raycast.ray_to_plane(region, rv3d, screen_co, origin, normal)
+        if w is None:
+            # Plane edge-on to the view: fall back to a view-facing plane through
+            # the same origin so the anchor is never None -- a None anchor would
+            # desync this point from the rest on the next orbit.
+            w = raycast.ray_to_plane(
+                region, rv3d, screen_co, origin, raycast.view_direction(rv3d))
+        self.world_points.append(w)
 
     def _sync_points_from_world(self, context):
         """Re-project the anchored 3D points back to screen for the *current*
@@ -823,7 +841,6 @@ class HARDFLOW_OT_draw(Operator):
              "Esc cancel", dim),
         ]
         # Surface the in-draw operation state only when something is active.
-        import math
         bits = []
         if abs(self.inset) > 1e-9:
             bits.append("inset %.3f m" % self.inset)
@@ -890,7 +907,6 @@ class HARDFLOW_OT_draw(Operator):
             r = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
             return "Star:  %d points   Radius:  %.3f m" % (self.sides, r)
         if self.shape == 'ARC':
-            import math
             r = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
             return "Arc:  %.0f deg   Radius:  %.3f m" % (
                 math.degrees(self.arc_sweep), r)
@@ -1065,6 +1081,15 @@ class HARDFLOW_OT_draw(Operator):
         for t in getattr(self, "_bool_targets", []):
             self._remove_live_mod(t)
         self._bool_targets = []
+        # Safety net: a target that left the tracked set mid-draw (active/selection
+        # changed) could still carry an HF_LivePreview modifier. Sweep the scene so
+        # a temp preview modifier never survives the tool.
+        scene = getattr(context, "scene", None)
+        if scene is not None:
+            for ob in scene.objects:
+                if (ob.type == 'MESH'
+                        and ob.modifiers.get("HF_LivePreview") is not None):
+                    self._remove_live_mod(ob)
 
     def _sync_live_boolean(self, context):
         """Show the actual boolean RESULT on the target(s) while drawing: add a
@@ -1449,6 +1474,14 @@ class HARDFLOW_OT_draw(Operator):
                 other = boolean.duplicate_object(context, target)
                 cut(target, 'DIFFERENCE')
                 cut(other, 'INTERSECT')
+                if failures:
+                    # A half-failed slice leaves an inconsistent spare duplicate;
+                    # drop it (and its copied mesh) rather than orphan it.
+                    me = other.data
+                    if other.name in bpy.data.objects:
+                        bpy.data.objects.remove(other, do_unlink=True)
+                    if me is not None and me.users == 0:
+                        bpy.data.meshes.remove(me)
             else:  # CUT / MAKE
                 for t in targets:
                     cut(t, op)

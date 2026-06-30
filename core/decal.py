@@ -437,8 +437,14 @@ def match_decal_to_material(decal_obj, sample):
         return False
     # Copy the material so tuning one decal does not affect every sibling, and
     # replace it in the ACTIVE slot (the decal's material may not be slot 0).
-    mat = decal_obj.active_material.copy()
+    old = decal_obj.active_material
+    mat = old.copy()
     decal_obj.active_material = mat
+    # Re-matching the same decal would otherwise leave the previous single-user
+    # copy as an orphan (HF_Decal_*.001/.002...). Drop it once it hits 0 users;
+    # shared templates keep other users, so they are never removed here.
+    if old is not None and old.users == 0:
+        bpy.data.materials.remove(old)
     grp = _decal_group_node(decal_obj)
     if not grp.inputs['Base Color'].is_linked:
         grp.inputs['Base Color'].default_value = sample['base_color']

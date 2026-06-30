@@ -342,11 +342,13 @@ class _CurveDraw:
         if data is None:
             return False
         self._set_preview_data(context, data, is_mesh)
+        # Mark finalized the moment the object is promoted -- if the selection
+        # bookkeeping below raises, _cleanup must NOT delete the committed object.
+        self._finalized = True
         for o in list(context.selected_objects):
             o.select_set(False)
         self._preview.select_set(True)
         context.view_layer.objects.active = self._preview
-        self._finalized = True
         return True
 
     def _commit(self, context):

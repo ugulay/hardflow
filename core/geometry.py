@@ -469,18 +469,23 @@ def build_pipe_mesh(points, profile_pts, name="Hardflow_Pipe"):
         rings.append(ring)
 
     m = len(profile_pts)
+    built = 0
     for a, b in zip(rings[:-1], rings[1:]):
         for k in range(m):
             j = (k + 1) % m
             try:
                 bm.faces.new((a[k], a[j], b[j], b[k]))
+                built += 1
             except ValueError:
                 pass
-    try:
-        bm.faces.new(list(reversed(rings[0])))   # start cap
-        bm.faces.new(rings[-1])                   # end cap
-    except ValueError:
-        pass
+    if built == 0:                 # every side quad was degenerate -> no solid
+        bm.free()
+        return None
+    for cap in (list(reversed(rings[0])), rings[-1]):
+        try:                       # each cap independently: a bad start cap must
+            bm.faces.new(cap)      # not skip the end cap
+        except ValueError:
+            pass
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
@@ -767,8 +772,16 @@ def edit_add_face(obj, local_corners, select=True, weld=True, weld_dist=1e-4):
     try:
         face = bm.faces.new(new_verts)
     except ValueError:               # repeated vertex / duplicate face
+        # The new verts were just created (faces.new failed before linking any
+        # edge), so none belong to the surrounding mesh -- drop them all.
         for v in new_verts:
-            if v.is_valid and not v.link_edges:
+            if v.is_valid:
+                bm.verts.remove(v)
+        return False
+    if face.calc_area() <= 1e-12:    # collinear / zero-area footprint -> useless
+        bm.faces.remove(face)
+        for v in new_verts:
+            if v.is_valid:
                 bm.verts.remove(v)
         return False
     if select:

@@ -5,8 +5,9 @@
 # The hover/lock/drag/preview/cancel shell lives in face_tool._FaceDragModal;
 # this file only adds the in-plane drag measure and the inset apply.
 #
-# Object Mode, active mesh. Like Push/Pull the face index comes from a raycast,
-# so generative modifiers that change the face count are not supported.
+# Object Mode, active mesh. Like Push/Pull the face index comes from a raycast;
+# a hit past the base mesh (a generative modifier added it) is mapped back to the
+# nearest base face by the shared base -- best-effort for topology-changing mods.
 from bpy.types import Operator
 
 from .face_tool import _FaceDragModal
@@ -190,6 +191,11 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         return False
 
     def _repeat_last(self):
+        # R repeats the last inset thickness -- only meaningful while still
+        # setting the offset. In the EXTRUDE phase the thickness is locked, so
+        # overwriting it here would silently corrupt the in-progress recess.
+        if self.phase != 'OFFSET':
+            return
         self.thickness = HARDFLOW_OT_offset._LAST_THICKNESS
 
     def _remember_last(self):

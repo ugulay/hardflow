@@ -29,10 +29,12 @@ def snap_to_candidates(value, candidates, tol):
     Used for direct-modeling inference: snapping a push/pull distance to a real
     vertex / feature height instead of the free-drag value."""
     best = value
-    best_d = tol
+    best_d = None
     for c in candidates:
         d = abs(c - value)
-        if d <= best_d:
+        # Within tol (inclusive); strict improvement keeps it deterministic --
+        # on an exact tie the FIRST candidate wins regardless of iteration order.
+        if d <= tol and (best_d is None or d < best_d):
             best_d = d
             best = c
     return best

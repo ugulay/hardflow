@@ -223,20 +223,25 @@ class _FaceDragModal:
         return {'FINISHED'}
 
     def _cleanup(self, context):
-        # Cancelled mid-preview -> roll the mesh back to the snapshot.
-        if self._base is not None:
-            if not self._committed:
-                if self.edit:
-                    geometry.restore_edit_mesh(self.obj, self._base)
-                else:
-                    geometry.restore_mesh(self.obj, self._base)
-            geometry.free_mesh(self._base)
-            self._base = None
+        # Cancelled mid-preview -> roll the mesh back to the snapshot. Wrap the
+        # restore best-effort: the GPU draw handler MUST be removed below even if
+        # a restore raises, otherwise it keeps firing against a dead operator.
         try:
-            bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
-        except (ValueError, AttributeError):
-            pass
-        context.area.tag_redraw()
+            if self._base is not None:
+                if not self._committed:
+                    if self.edit:
+                        geometry.restore_edit_mesh(self.obj, self._base)
+                    else:
+                        geometry.restore_mesh(self.obj, self._base)
+                geometry.free_mesh(self._base)
+                self._base = None
+        finally:
+            try:
+                bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
+            except (ValueError, AttributeError):
+                pass
+            if context.area is not None:
+                context.area.tag_redraw()
 
     # --- shared axis-drag inference --------------------------------------
 

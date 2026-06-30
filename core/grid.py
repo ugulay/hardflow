@@ -120,6 +120,8 @@ def grid_lines(region, grid_px, enabled):
 def circle_points(center, edge, segments=32):
     """Screen-space circle corners from a center and an edge point."""
     r = math.hypot(edge[0] - center[0], edge[1] - center[1])
+    if r < 1e-9:                     # zero-radius drag -> no shape (not a cluster
+        return []                    # of coincident points)
     pts = []
     for i in range(segments):
         a = (i / segments) * math.tau
@@ -155,6 +157,8 @@ def ngon_points(center, edge, sides, rotation=0.0):
     dx = edge[0] - center[0]
     dy = edge[1] - center[1]
     r = math.hypot(dx, dy)
+    if r < 1e-9:                      # zero-radius drag -> no shape
+        return []
     base = math.atan2(dy, dx) + rotation
     pts = []
     for i in range(sides):
@@ -209,6 +213,8 @@ def star_points(center, edge, points, inner_ratio=0.5, rotation=0.0):
     dx = edge[0] - center[0]
     dy = edge[1] - center[1]
     r_out = math.hypot(dx, dy)
+    if r_out < 1e-9:                  # zero-radius drag -> no shape
+        return []
     r_in = r_out * max(0.01, min(0.99, inner_ratio))
     base = math.atan2(dy, dx) + rotation
     n = points * 2
@@ -230,6 +236,8 @@ def arc_points(center, edge, segments=16, sweep=math.pi / 2, rotation=0.0):
     dx = edge[0] - center[0]
     dy = edge[1] - center[1]
     r = math.hypot(dx, dy)
+    if r < 1e-9:                      # zero-radius drag -> no shape
+        return []
     base = math.atan2(dy, dx) + rotation
     pts = [(center[0], center[1])]
     for i in range(segments + 1):

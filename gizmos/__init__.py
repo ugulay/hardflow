@@ -60,8 +60,16 @@ def register():
 
 
 def unregister():
-    tools.unregister()
+    try:
+        tools.unregister()
+    except Exception:  # noqa: BLE001
+        pass
     if hasattr(bpy.types.Scene, "hardflow_gizmos"):
         del bpy.types.Scene.hardflow_gizmos
+    # Defensive per-class: register() may have stopped part-way (e.g. headless),
+    # so a class in the tuple might never have been registered.
     for cls in reversed(_classes):
-        bpy.utils.unregister_class(cls)
+        try:
+            bpy.utils.unregister_class(cls)
+        except (RuntimeError, ValueError):
+            pass

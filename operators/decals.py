@@ -632,11 +632,27 @@ class HARDFLOW_OT_create_decal(Operator):
 
         prev_engine = scene.render.engine
         prev_active = view_layer.objects.active
+        prev_selected = list(context.selected_objects)
         prev_s2a = scene.render.bake.use_selected_to_active
+        prev_ext = scene.render.bake.cage_extrusion
+        prev_ray = scene.render.bake.max_ray_distance
         try:
             scene.render.engine = 'CYCLES'
             scene.render.bake.use_selected_to_active = True
-            scene.render.bake.cage_extrusion = max(0.1, max(dest.dimensions) * 0.5)
+            reach = max(0.1, max(dest.dimensions) * 0.5)
+            scene.render.bake.cage_extrusion = reach
+            scene.render.bake.max_ray_distance = reach * 2.0
+
+            # Selected-to-active bakes the *selected* sources onto the *active*
+            # destination, so arrange the selection explicitly rather than trust
+            # whatever ambient selection happens to be set.
+            for o in prev_selected:
+                o.select_set(False)
+            for o in sources:
+                o.select_set(True)
+            dest.select_set(True)
+            view_layer.objects.active = dest
+
             bpy.ops.object.bake(type='NORMAL')
         except RuntimeError as ex:
             decal.discard_bake_image(mat, img, remove_node=not node_existed,
@@ -646,6 +662,13 @@ class HARDFLOW_OT_create_decal(Operator):
         finally:
             scene.render.engine = prev_engine
             scene.render.bake.use_selected_to_active = prev_s2a
+            scene.render.bake.cage_extrusion = prev_ext
+            scene.render.bake.max_ray_distance = prev_ray
+            for o in context.selected_objects:
+                o.select_set(False)
+            for o in prev_selected:
+                if o is not None:
+                    o.select_set(True)
             view_layer.objects.active = prev_active
 
         # Save into the library folder when one is set, else just pack it.
@@ -747,13 +770,26 @@ class HARDFLOW_OT_atlas_decals(Operator):
             self.report({'WARNING'}, "No image decals to atlas")
             return {'CANCELLED'}
 
-        # Pack the UNIQUE source images; many decals may share one image.
+        # Pack the UNIQUE source images; many decals may share one image. Skip
+        # any image whose pixel buffer isn't readable (unloaded, zero-size, or a
+        # multilayer format whose size and buffer disagree) so one bad image
+        # can't abort the whole atlas with a traceback.
         images = []
         seen = set()
+        skipped = 0
         for _ob, img in pairs:
-            if img.name not in seen:
+            if img.name in seen:
+                continue
+            w, h = int(img.size[0]), int(img.size[1])
+            if w <= 0 or h <= 0 or len(img.pixels) != 4 * w * h:
                 seen.add(img.name)
-                images.append(img)
+                skipped += 1
+                continue
+            seen.add(img.name)
+            images.append(img)
+        if not images:
+            self.report({'WARNING'}, "No readable image decals to atlas")
+            return {'CANCELLED'}
 
         max_w = get_prefs(context).atlas_max_width
         sizes = [(int(img.size[0]), int(img.size[1])) for img in images]
@@ -780,8 +816,11 @@ class HARDFLOW_OT_atlas_decals(Operator):
 
         # Retarget every decal: compose its existing UVs into its source's slot,
         # then swap to the single shared atlas material.
+        retargeted = 0
         for ob, img in pairs:
-            slot = slots[img.name]
+            slot = slots.get(img.name)
+            if slot is None:           # its source image was skipped above
+                continue
             me = ob.data
             uv_layer = me.uv_layers.active
             if uv_layer is not None:
@@ -791,7 +830,9 @@ class HARDFLOW_OT_atlas_decals(Operator):
             me.materials.clear()
             me.materials.append(atlas_mat)
             ob["hf_decal_atlas"] = atlas_img.name
+            retargeted += 1
 
-        self.report({'INFO'}, "Atlased %d decals (%d images) into %dx%d"
-                    % (len(pairs), len(images), final_w, final_h))
+        suffix = " (%d unreadable skipped)" % skipped if skipped else ""
+        self.report({'INFO'}, "Atlased %d decals (%d images) into %dx%d%s"
+                    % (retargeted, len(images), final_w, final_h, suffix))
         return {'FINISHED'}

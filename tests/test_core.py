@@ -91,6 +91,9 @@ def test_snap_to_candidates():
     assert snap.snap_to_candidates(2.46, cands, 0.1) == 2.5
     assert snap.snap_to_candidates(5.0, [], 0.2) == 5.0       # no candidates
     assert snap.snap_to_candidates(-1.9, [-2.0, 0.0], 0.2) == -2.0  # negative side
+    # exact tie -> the FIRST candidate within tol wins (deterministic: strict <)
+    assert snap.snap_to_candidates(1.0, [0.5, 1.5], 0.6) == 0.5
+    assert snap.snap_to_candidates(1.0, [1.5, 0.5], 0.6) == 1.5
 
 
 def test_centered_grid_segments():
@@ -235,6 +238,8 @@ def test_ngon_points():
     # sides < 3 is clamped to a triangle; sides count is respected otherwise
     assert len(grid.ngon_points((0, 0), (2, 0), 1)) == 3
     assert len(grid.ngon_points((0, 0), (2, 0), 6)) == 6
+    # a zero-radius drag (edge == center) yields no shape, not a coincident cluster
+    assert grid.ngon_points((1.0, 1.0), (1.0, 1.0), 6) == []
 
 
 def test_slot_points():
@@ -264,6 +269,8 @@ def test_star_points():
     assert math.isclose(pts[0][1], 0.0, abs_tol=1e-9)
     # spikes < 2 clamp to 2 (4 verts); ratio is clamped into (0, 1)
     assert len(grid.star_points((0, 0), (1, 0), 1)) == 4
+    # zero-radius drag -> no shape
+    assert grid.star_points((0, 0), (0, 0), 5) == []
 
 
 def test_arc_points():
@@ -276,6 +283,8 @@ def test_arc_points():
     # arc spans from the edge angle (0) through the sweep (90 deg)
     assert math.isclose(pts[1][0], 1.0, abs_tol=1e-9)        # start on +x
     assert math.isclose(pts[-1][1], 1.0, abs_tol=1e-9)       # end on +y
+    # zero-radius drag -> no shape
+    assert grid.arc_points((2, 2), (2, 2), segments=8) == []
 
 
 # --- grid: angle lock --------------------------------------------------------

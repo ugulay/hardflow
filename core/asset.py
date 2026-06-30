@@ -128,11 +128,11 @@ def make_asset_cutter(context, objects, target, location, normal, tangent,
 
     bind_cutters(context, meshes, target, operation, solver, non_destructive,
                  failures)
-    # non-mesh helpers (empties/curves) of a cutter kit are dropped destructively
-    if not non_destructive:
-        for o in objects:
-            if o.type != 'MESH' and o.name in bpy.data.objects:
-                bpy.data.objects.remove(o, do_unlink=True)
+    # Non-mesh helpers (empties/curves) of a cutter kit have no role once the
+    # meshes are bound; drop them in both modes so they don't float unparented.
+    for o in objects:
+        if o.type != 'MESH' and o.name in bpy.data.objects:
+            bpy.data.objects.remove(o, do_unlink=True)
     return meshes
 
 

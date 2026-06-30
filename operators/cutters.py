@@ -41,11 +41,18 @@ class HARDFLOW_OT_apply_cutters(Operator):
         obj = context.active_object
         used = []
         failed = 0
+        not_first = 0
         for mod in list(obj.modifiers):
             if not mod.name.startswith("HF_Bool"):
                 continue
             if mod.type == 'BOOLEAN' and mod.object is not None:
                 used.append(mod.object)
+            # By now every HF_Bool above this one has been applied/removed, so if
+            # this boolean still isn't first a NON-Hardflow modifier sits above
+            # it -- Blender then applies it out of stack order and the result can
+            # differ from the live preview. Surface that rather than hide it.
+            if obj.modifiers and obj.modifiers[0].name != mod.name:
+                not_first += 1
             if not self._apply_with_fallback(context, obj, mod):
                 failed += 1
 
@@ -59,6 +66,11 @@ class HARDFLOW_OT_apply_cutters(Operator):
             self.report({'WARNING'},
                         "%d cutter(s) failed to apply (left as live modifiers). "
                         "Fix the target's normals/non-manifold geometry." % failed)
+        elif not_first:
+            self.report({'WARNING'},
+                        "Applied, but %d cutter(s) sat below other modifiers; the "
+                        "result may differ from the preview. Move Hardflow "
+                        "booleans to the top of the stack." % not_first)
         else:
             self.report({'INFO'}, "Cutters applied (%d deleted)" % removed)
         return {'FINISHED'}

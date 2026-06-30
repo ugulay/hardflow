@@ -44,10 +44,20 @@ class HARDFLOW_GT_drag_extrude(Gizmo):
         self._base = None
         self._dragging = False
         self._distance = 0.0
+        # Slots the owning group fills in each refresh. Default them so an invoke
+        # on a not-yet-populated / hidden gizmo bails cleanly instead of raising
+        # AttributeError on an unassigned __slots__ member.
+        self._obj = None
+        self._edit = False
+        self._face_index = -1
+        self._axis_co = None
+        self._axis_dir = None
 
     # --- drag lifecycle --------------------------------------------------
 
     def invoke(self, context, event):
+        if self._obj is None or self._axis_dir is None:
+            return {'FINISHED'}      # gizmo not populated -> nothing to drag
         self._snap = get_prefs(context).snap_enabled
         self._distance = 0.0
         self._dragging = True
@@ -98,7 +108,7 @@ class HARDFLOW_GT_drag_extrude(Gizmo):
         context.area.header_text_set(None)
         self._dragging = False
         obj = getattr(self, "_obj", None)
-        if cancel and self._base is not None and obj is not None:
+        if cancel and getattr(self, "_base", None) is not None and obj is not None:
             if self._edit:
                 geometry.restore_edit_mesh(obj, self._base)
             else:

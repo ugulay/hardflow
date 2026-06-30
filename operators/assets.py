@@ -245,10 +245,11 @@ class HARDFLOW_OT_place_asset(Operator):
                                    solver=prefs.default_solver,
                                    non_destructive=prefs.non_destructive,
                                    failures=failures)
-                if not prefs.non_destructive:
-                    for o in self._objects:
-                        if o.type != 'MESH' and o.name in bpy.data.objects:
-                            bpy.data.objects.remove(o, do_unlink=True)
+                # Flattened cutters have no use for their helper empties/curves;
+                # drop them in both modes so they don't float unparented (and so
+                # their data doesn't linger as orphans).
+                self._discard_objects(
+                    [o for o in self._objects if o.type != 'MESH'])
                 if failures:
                     self.report({'WARNING'}, failures[0])
                 self._select(context, meshes[0] if meshes else obj)
@@ -274,11 +275,29 @@ class HARDFLOW_OT_place_asset(Operator):
             active.select_set(True)
             context.view_layer.objects.active = active
 
+    @staticmethod
+    def _discard_objects(objects):
+        """Remove appended objects together with the mesh/curve/material data they
+        brought in -- Blender does not auto-purge orphan data within a session, so
+        an object-only removal would leak every cancelled placement's datablocks."""
+        data = set()
+        for o in list(objects or []):
+            if o.name not in bpy.data.objects:
+                continue
+            if o.data is not None:
+                data.add(o.data)
+            for slot in getattr(o, "material_slots", []):
+                if slot.material is not None:
+                    data.add(slot.material)
+            bpy.data.objects.remove(o, do_unlink=True)
+        orphans = [d for d in data if getattr(d, "users", 1) == 0]
+        if orphans:
+            bpy.data.batch_remove(orphans)
+
     def _cleanup(self, context):
         if not self._finalized:                 # cancelled -> discard the preview
-            for o in list(getattr(self, "_objects", [])):
-                if o.name in bpy.data.objects:
-                    bpy.data.objects.remove(o, do_unlink=True)
+            self._discard_objects(getattr(self, "_objects", []))
+            self._objects = []
             if self._root is not None and self._root.name in bpy.data.objects:
                 bpy.data.objects.remove(self._root, do_unlink=True)
             self._root = None
@@ -335,10 +354,20 @@ class HARDFLOW_OT_material_insert(Operator, ImportHelper):
             self.report({'WARNING'}, "No materials in that .blend")
             return {'CANCELLED'}
         mat = mats[0]
+        # Only the first material is used; drop the rest so they don't linger as
+        # orphan data-blocks in the file.
+        for extra in mats[1:]:
+            if extra.users == 0:
+                bpy.data.materials.remove(extra)
         targets = [o for o in context.selected_objects if o.type == 'MESH']
         if not targets and context.active_object is not None:
             targets = [context.active_object]
         n = sum(1 for o in targets if asset.apply_material(o, mat))
+        if n == 0:
+            if mat.users == 0:           # nothing received it -> don't orphan it
+                bpy.data.materials.remove(mat)
+            self.report({'WARNING'}, "Select a mesh to receive the material")
+            return {'CANCELLED'}
         self.report({'INFO'}, "Applied '%s' to %d mesh(es)" % (mat.name, n))
         return {'FINISHED'}
 

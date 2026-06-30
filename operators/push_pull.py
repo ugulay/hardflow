@@ -6,9 +6,10 @@
 # The hover/lock/drag/preview/cancel shell lives in face_tool._FaceDragModal;
 # this file only adds the normal-axis drag, the extrude apply, and inference.
 #
-# Object Mode, active mesh. The face is picked by raycasting the scene, so the
-# index must be valid on the base mesh -- generative modifiers that change the
-# face count are not supported (a documented limitation, like the rest of v1).
+# Object Mode, active mesh. The face is picked by raycasting the scene; a hit on
+# geometry a generative modifier added (face index past the base mesh) is mapped
+# back to the nearest base face by the shared base (geometry.nearest_face_to_point)
+# -- exact for deform-only modifiers, best-effort for topology-changing ones.
 from bpy.types import Operator
 
 from .face_tool import _FaceDragModal

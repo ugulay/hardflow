@@ -79,10 +79,16 @@ _classes = (
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
-    gizmos.register()      # gizmo groups + Workspace Tools + scene settings
     decal_library.register()
     menu.register()        # header dropdown (after the menu classes exist)
     keymaps.register_keymaps()
+    # Gizmos last + guarded: gizmo/Workspace-Tool registration can raise in
+    # headless or edge contexts, and that must not strand the rest of the add-on
+    # half-registered (menus/keymaps already wired up above).
+    try:
+        gizmos.register()  # gizmo groups + Workspace Tools + scene settings
+    except Exception as ex:  # noqa: BLE001
+        print("Hardflow: gizmo registration skipped (%s)" % ex)
 
 
 def unregister():
