@@ -210,6 +210,26 @@ def estimate_thickness(obj, factor=2.0, minimum=1.0):
     return max(d.x, d.y, d.z, minimum) * factor
 
 
+def bevel_cutter(mesh, width, segments=2, profile=0.5):
+    """Chamfer every edge of a cutter mesh in place, so a boolean CUT leaves
+    bevelled recess walls instead of sharp ones (Boxcutter bevelled cut -- this
+    bevels the *cutter*, distinct from bevel-on-cut which chamfers the target's
+    cut edge). `width` <= 0 is a no-op. clamp_overlap keeps a thin cutter sane.
+    Returns the mesh. Object Mode, pure bmesh."""
+    if width <= 0.0:
+        return mesh
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    if bm.edges:
+        bmesh.ops.bevel(bm, geom=bm.edges[:], offset=width,
+                        offset_type='OFFSET', segments=max(1, int(segments)),
+                        profile=profile, affect='EDGES', clamp_overlap=True)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
 def build_face(corners, name="hf_face"):
     """Build a single n-gon face from a list of corners on a plane (not a
     boolean; Grid Modeler 'create face'). At least 3 points."""

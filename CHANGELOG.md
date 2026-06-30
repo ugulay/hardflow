@@ -20,6 +20,9 @@ logic is unit-tested (`59/59`); the new bpy paths gain headless coverage.
 - **Intersect draw mode** — the draw modal gains an INTERSECT mode (keep only the
   part of the object inside the drawn volume), reached via `Tab` mode-cycle or
   the header Boolean menu (Boxcutter / Hard Ops parity).
+- **Bevelled cutter** — `C` in the draw modal chamfers the cutter itself, so a
+  CUT leaves bevelled recess walls (`core/geometry.bevel_cutter`), distinct from
+  `B` bevel-on-cut which chamfers the target's cut edge (Boxcutter bevelled cut).
 
 ### Changed
 - **Deterministic main edge for the 2-edge grid plane** — the `EDGES` construction

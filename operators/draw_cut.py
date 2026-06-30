@@ -74,6 +74,7 @@ class HARDFLOW_OT_draw(Operator):
         self.array_axis = 'X'     # array world axis; D cycles
         self.mirror_axis = ''     # live mirror across a world axis; M cycles
         self.bevel_cut = False    # add an angle-limited bevel to the cut; B toggles
+        self.cutter_bevel = False  # chamfer the cutter itself (bevelled cut); C toggles
         self.grid_size = prefs.grid_world  # live grid spacing (Ctrl+Wheel adjusts)
         self.depth = 0.0          # explicit cutter depth (0 = auto pierce); PgUp/Dn
         self.points = []          # confirmed screen points (current view)
@@ -216,6 +217,9 @@ class HARDFLOW_OT_draw(Operator):
 
         elif event.type == 'B' and event.value == 'PRESS':
             self.bevel_cut = not self.bevel_cut
+
+        elif event.type == 'C' and event.value == 'PRESS':
+            self.cutter_bevel = not self.cutter_bevel  # chamfer the cutter walls
 
         elif event.type == 'G' and event.value == 'PRESS':
             return self._stamp_last(context)   # repeat the previous shape
@@ -656,6 +660,8 @@ class HARDFLOW_OT_draw(Operator):
             bits.append("grid spin %.0f°" % math.degrees(self.plane_spin))
         if self.bevel_cut:
             bits.append("bevel-on-cut")
+        if self.cutter_bevel:
+            bits.append("cutter bevel")
         if self.depth > 1e-6:
             bits.append("depth %.3f m" % self.depth)
         bits.append("grid %.3f m" % self.grid_size)
@@ -887,6 +893,8 @@ class HARDFLOW_OT_draw(Operator):
         if cutter_mesh is None:
             self.report({'WARNING'}, "Invalid shape")
             return
+        if self.cutter_bevel:
+            self._chamfer_cutter(cutter_mesh)
         cutter = bpy.data.objects.new("hf_cutter", cutter_mesh)
         context.collection.objects.link(cutter)
 
@@ -1002,6 +1010,21 @@ class HARDFLOW_OT_draw(Operator):
             bev.angle_limit = radians(30.0)
             bev.harden_normals = True
             bev.use_clamp_overlap = True
+
+    def _chamfer_cutter(self, mesh):
+        """Bevel every edge of the cutter mesh so the cut leaves chamfered walls
+        (C toggle). The width scales to the cutter's own size, capped so a thin
+        cutter doesn't collapse (geometry.bevel_cutter clamps overlap too)."""
+        from ..core import transform
+        co = [v.co for v in mesh.vertices]
+        if not co:
+            return
+        size = max((max(c[i] for c in co) - min(c[i] for c in co))
+                   for i in range(3))
+        width = transform.adaptive_dimension(
+            size, fraction=0.06, min_value=0.0005,
+            max_value=max(0.001, size * 0.3))
+        geometry.bevel_cutter(mesh, width)
 
     def _build_and_apply_edit(self, context, sets):
         """Edit Mode commit: project the drawn shape(s) into the active mesh.

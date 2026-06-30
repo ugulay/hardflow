@@ -185,6 +185,8 @@ Setup: a cube, Object Mode, `Ctrl+Shift+D`.
 - [ ] `M` cycles a live **mirror** across a world axis (off→X→Y→Z).
 - [ ] `B` toggles **bevel-on-cut** → after a CUT the cut edge is chamfered
       (an `HF_CutBevel` modifier on the target).
+- [ ] `C` toggles **bevelled cutter** → the CUT leaves chamfered *recess walls*
+      (the cutter mesh itself is bevelled, distinct from `B`'s target-edge bevel).
 - [ ] `Ctrl+Wheel` changes **grid density** live (the visible grid re-spaces);
       `PgUp`/`PgDn` set an explicit **cutter depth** (HUD `depth … m`, `grid … m`).
 - [ ] After a commit, `G` **stamps** the previous shape+params again.

@@ -73,6 +73,30 @@ def test_apply_boolean_difference():
     assert len(target.modifiers) == 0, "modifier not applied (still present)"
 
 
+def test_bevel_cutter_chamfers_edges():
+    # Bevelled cut: chamfering the cutter adds geometry (more faces/verts) and
+    # leaves a valid closed mesh. A unit cube has 8 verts / 6 faces.
+    _reset()
+    import bmesh
+    me = bpy.data.meshes.new("Cutter")
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    bm.to_mesh(me)
+    bm.free()
+    out = geometry.bevel_cutter(me, 0.1, segments=2)
+    assert out is me
+    assert len(me.vertices) > 8 and len(me.polygons) > 6, \
+        (len(me.vertices), len(me.polygons))
+    # width <= 0 is a no-op
+    me2 = bpy.data.meshes.new("Cutter2")
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    bm.to_mesh(me2)
+    bm.free()
+    geometry.bevel_cutter(me2, 0.0)
+    assert len(me2.vertices) == 8
+
+
 def test_robust_boolean_intersect():
     # The draw tool's Intersect mode (and the menu entry) route to an INTERSECT
     # boolean: keep only the volume inside the cutter. Verify against real Blender.
