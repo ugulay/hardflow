@@ -7,7 +7,7 @@ context in every session.
 
 Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
 Blender 4.2+. The goal: deliver the core workflows of Grid Modeler, Boxcutter,
-Hard Ops, DECALmachine, and KitOps for free. **All roadmap features through v1.8
+Hard Ops, DECALmachine, and KitOps for free. **All roadmap features through v1.11
 are implemented** — the core boolean/snap/cutter workflows; the full decal
 subsystem (placement, PBR material, bake, image library, trim sheets, atlasing,
 plus v1.7 create/match/retrim/conform + editable library); the asset/kitbash
@@ -19,9 +19,14 @@ material helpers, step/taper/knurl greeble); live placement preview; the
 SketchUp direct-modeling tools (Push/Pull, Offset, construction grid, cable);
 **Edit Mode** for draw/Push-Pull/Offset/snap (v1.3); the Boxcutter-style
 **in-draw operations** (knife, inset, array, mirror, bevel-on-cut, in-plane
-rotation, stamp/repeat, live grid + depth — v1.4/v1.6); and square/rect pipe
-profiles + loft (v1.6). Code is syntax-verified with pure + headless tests; live
-Blender verification of the modal tools is still ongoing. Roadmap: `ROADMAP.md`.
+rotation, stamp/repeat, live grid + depth — v1.4/v1.6); square/rect pipe
+profiles + loft (v1.6); the v1.10 **viewport gizmos**; and the v1.11
+**direct-modeling depth** — Polyline Trim parity (Join, Project/Fixed, Manifold
+solver, double-click), Push/Pull copy/repeat/inference, the Offset recess/panel
+chain, Object-Mode **Edge Bevel + Loop Cut**, and picking **through generative
+modifiers**, all on the shared `operators/face_tool._FaceDragModal` base. Code is
+syntax-verified with pure + headless tests; live Blender verification of the modal
+tools is still ongoing. Roadmap: `ROADMAP.md`.
 
 ## FIRST TASK: smoke test inside Blender
 

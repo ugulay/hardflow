@@ -7,6 +7,58 @@ logic: minor versions add features, patch versions fix bugs.
 
 _Nothing yet._
 
+## [1.11.0] — 2026-06-30
+
+Direct-modeling depth: the SketchUp-style tools were consolidated onto a shared
+modal base and grown to parity (copy/repeat/inference, recess chaining), two new
+Object-Mode edge tools landed (Edge Bevel + Loop Cut), the face tools now pick
+through generative modifiers, and the draw tool gained Blender's **Polyline Trim**
+parity. Pure logic is unit-tested (`61/61`); the new bpy paths add headless
+coverage (project taper, keep/clean extrude, inset-extrude, edge pick/loop/ring +
+bevel, loop cut, modifier-pick). The modal/interactive feel is checked via
+[tests/manual_checklist.md](tests/manual_checklist.md) §3/§4/§15/§16/§17.
+
+### Added
+- **Polyline Trim parity** in the draw tool — **double-click** closes a polyline
+  (native finish); a **Join** mode adds the drawn shape as a separate solid (no
+  boolean); a per-cut **Solver** (Default / Exact / Fast / **Manifold**, the last
+  version-safe via `core/boolean._coerce_solver`); and a **Project / Fixed**
+  extrude orientation (`O`) that tapers the cut along the camera rays in
+  perspective (`core/geometry.build_prism(s)` `apex`). "Polyline Trim / Add / Join"
+  entries in the Boolean menu + pie.
+- **Push/Pull — Copy & Repeat & inference** — `C` keeps the starting face and
+  stacks a new volume on it (SketchUp Ctrl push/pull); `R` repeats the last
+  distance; with snap on, the drag **infers** to a real vertex / edge-midpoint
+  height before falling back to the grid (`core/snap.snap_to_candidates`).
+- **Offset — Repeat & recess/panel chain** — `R` repeats the last thickness; `E`
+  locks the inset and continues into **extruding the inner face** along its normal
+  (recess for `-`, raised panel for `+`), one bmesh pass
+  (`core/geometry.inset_extrude_faces`); the depth infers too.
+- **Edge Bevel (Object Mode)** — `HARDFLOW_OT_edge_bevel`: raycast-pick the nearest
+  edge, drag a width, `[ ]` segments, `L` to bevel the whole connected **edge
+  loop** — chamfer an edge without entering Edit Mode
+  (`core/geometry.nearest_edge_on_face` / `edge_loop` / `bevel_object_edges`).
+- **Loop Cut (Object Mode)** — `HARDFLOW_OT_loop_cut`: pick an edge, insert an edge
+  loop by subdividing its ring; `[ ]` / type sets how many loops
+  (`core/geometry.edge_ring` / `loop_cut`).
+- **Pick through generative modifiers** — Push/Pull, Offset and the edge tools map
+  an evaluated-mesh raycast hit (subdivision / array / mirror, etc.) back to the
+  nearest base face (`core/geometry.nearest_face_to_point`), so they work on
+  modified objects (exact for deform-only, best-effort otherwise).
+
+### Changed
+- **Shared modal base** — Push/Pull and Offset (and the new edge tools) are built
+  on one mixin, `operators/face_tool._FaceDragModal`, that owns the
+  hover-pick / lock / drag / live snapshot-preview / numeric / snap+inference / HUD
+  / cancel shell (~300 lines of duplication removed; a fix/feature lands once). The
+  two edge tools further share `operators/edge_tool._EdgePickModal`. Mirrors the
+  existing `operators/pipe._CurveDraw` base.
+
+### Fixed
+- **Object-Mode Push/Pull left an interior face** — `core/geometry.extrude_faces`
+  now drops the source face by default (clean, manifold extrude, matching Edit
+  Mode); `keep_original=True` is the opt-in for the new Copy behavior.
+
 ## [1.10.0] — 2026-06-30
 
 A code-review hardening pass over the decal/asset subsystems plus a reference-tool

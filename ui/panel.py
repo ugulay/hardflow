@@ -96,6 +96,12 @@ class HARDFLOW_PT_tools(Panel):
         row.operator("mesh.hardflow_push_pull", text="Push/Pull",
                      icon='EMPTY_SINGLE_ARROW')
         row.operator("mesh.hardflow_offset", text="Offset", icon='MOD_SOLIDIFY')
+        # Object-Mode edge tools (no Edit Mode needed).
+        row = col.row(align=True)
+        row.operator("mesh.hardflow_edge_bevel", text="Edge Bevel",
+                     icon='MOD_BEVEL')
+        row.operator("mesh.hardflow_loop_cut", text="Loop Cut",
+                     icon='MOD_MULTIRES')
         row = col.row(align=True)
         row.operator("object.hardflow_add_grid", text="Grid", icon='MESH_GRID')
         row.operator("object.hardflow_add_guide", text="Guide", icon='IPO_LINEAR')
