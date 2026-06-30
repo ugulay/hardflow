@@ -1451,6 +1451,69 @@ def test_new_operators_registered():
         hardflow.unregister()
 
 
+def test_gizmos_registered():
+    _reset()
+    # Gizmo / GizmoGroup classes aren't exposed on bpy.types by name; the
+    # registry lookup bl_rna_get_subclass_py returns the class (or None).
+    assert bpy.types.Gizmo.bl_rna_get_subclass_py("HARDFLOW_GT_drag_extrude") is None
+    hardflow.register()
+    try:
+        assert bpy.types.Gizmo.bl_rna_get_subclass_py(
+            "HARDFLOW_GT_drag_extrude") is not None
+        for name in ("HARDFLOW_GGT_persistent", "HARDFLOW_GGT_move",
+                     "HARDFLOW_GGT_rotate", "HARDFLOW_GGT_scale",
+                     "HARDFLOW_GGT_bevel", "HARDFLOW_GGT_push_pull"):
+            assert bpy.types.GizmoGroup.bl_rna_get_subclass_py(name) is not None, \
+                "unregistered gizmo group: %s" % name
+        # Scene settings present and writable.
+        s = bpy.context.scene.hardflow_gizmos
+        s.show = True
+        assert s.show is True
+        # Persistent group polls True with a mesh active + the toggle on, and
+        # False once the master switch is off.
+        from hardflow.gizmos import groups
+        ob = _add_cube("GzCube")
+        _activate(ob)
+        assert groups.HARDFLOW_GGT_persistent.poll(bpy.context) is True
+        s.show = False
+        assert groups.HARDFLOW_GGT_persistent.poll(bpy.context) is False
+    finally:
+        hardflow.unregister()
+    # Cleanly removed again.
+    assert bpy.types.GizmoGroup.bl_rna_get_subclass_py("HARDFLOW_GGT_move") is None
+
+
+def test_gizmo_bevel_handler_creates_modifier():
+    _reset()
+    hardflow.register()
+    try:
+        from hardflow.gizmos import groups
+        ob = _add_cube("BevelGz")
+        _activate(ob)
+        # Below the epsilon nothing is created; a real drag value adds HF_Bevel.
+        groups._bevel_set(0.0)
+        assert ob.modifiers.get("HF_Bevel") is None
+        groups._bevel_set(0.05)
+        mod = ob.modifiers.get("HF_Bevel")
+        assert mod is not None and abs(mod.width - 0.05) < 1e-6
+        assert abs(groups._bevel_get() - 0.05) < 1e-6
+        groups._bevel_set(0.12)          # subsequent drags adjust, not duplicate
+        assert len([m for m in ob.modifiers if m.name == "HF_Bevel"]) == 1
+        assert abs(ob.modifiers["HF_Bevel"].width - 0.12) < 1e-6
+    finally:
+        hardflow.unregister()
+
+
+def test_gizmo_arrow_shape_is_triangle_soup():
+    from hardflow.gizmos import shapes
+    verts = shapes.arrow_tris(segments=8)
+    assert len(verts) % 3 == 0 and len(verts) > 0
+    assert all(len(v) == 3 for v in verts)
+    # spans from the base (z=0) up to the cone tip
+    zs = [v[2] for v in verts]
+    assert min(zs) == 0.0 and max(zs) > 0.5
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

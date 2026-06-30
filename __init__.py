@@ -2,7 +2,7 @@
 # Registration orchestration: gathers submodules, registers classes and shortcuts.
 import bpy
 
-from . import preferences, keymaps
+from . import preferences, keymaps, gizmos
 from .operators import (draw_cut, modifiers, cutters, pipe, decals,
                         boolean_ops, array, assets, push_pull, offset,
                         construction, hardops)
@@ -76,6 +76,7 @@ _classes = (
     menu.HARDFLOW_MT_menu_decals,
     menu.HARDFLOW_MT_menu_assets,
     panel.HARDFLOW_PT_tools,
+    panel.HARDFLOW_PT_gizmos,
     panel.HARDFLOW_PT_snap,
     panel.HARDFLOW_PT_modifiers,
     panel.HARDFLOW_PT_cutters,
@@ -88,6 +89,7 @@ _classes = (
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
+    gizmos.register()      # gizmo groups + Workspace Tools + scene settings
     decal_library.register()
     menu.register()        # header dropdown (after the menu classes exist)
     keymaps.register_keymaps()
@@ -97,6 +99,7 @@ def unregister():
     keymaps.unregister_keymaps()
     menu.unregister()
     decal_library.unregister()
+    gizmos.unregister()
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
 

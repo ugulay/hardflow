@@ -122,6 +122,34 @@ class HARDFLOW_PT_tools(Panel):
                      text="Recalculate Normals", icon='NORMALS_FACE')
 
 
+class HARDFLOW_PT_gizmos(Panel):
+    bl_label = "Gizmos"
+    bl_idname = "HARDFLOW_PT_gizmos"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        s = getattr(context.scene, "hardflow_gizmos", None)
+        if s is None:
+            layout.label(text="Gizmos unavailable", icon='ERROR')
+            return
+        layout.prop(s, "show", text="Always-On Gizmos", icon='GIZMO')
+        col = layout.column(align=True)
+        col.active = s.show
+        row = col.row(align=True)
+        row.prop(s, "move", toggle=True)
+        row.prop(s, "rotate", toggle=True)
+        row.prop(s, "scale", toggle=True)
+        col.prop(s, "bevel", text="Bevel Width (Object Mode)", toggle=True)
+        col.prop(s, "push_pull", text="Push/Pull (Edit Mode faces)", toggle=True)
+        layout.label(text="Or pick a Hardflow tool in the toolbar (T)",
+                     icon='TOOL_SETTINGS')
+
+
 class HARDFLOW_PT_snap(Panel):
     bl_label = "Snapping & Settings"
     bl_idname = "HARDFLOW_PT_snap"

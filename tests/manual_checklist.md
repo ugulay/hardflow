@@ -259,5 +259,74 @@ Setup: Edit Mode on a face whose edges have clearly different lengths (e.g. a
 
 ---
 
+## 14. Gizmos ⭐ (v1.10 — viewport handles)
+
+Registration is covered headless (`test_gizmos_registered`, plus a live GUI
+check that the 6 tools land in the right toolbar mode-lists); the **drag
+interactions** below need a real viewport.
+
+### Always-on persistent gizmos (N-panel toggle)
+
+Setup: a mesh in Object Mode. N-panel ▸ Hardflow ▸ **Gizmos** sub-panel.
+
+- [ ] **Always-On Gizmos** off by default → no Hardflow handles in the viewport.
+- [ ] Tick **Always-On Gizmos** → the per-kind toggles activate; **Move** (arrows)
+      and **Rotate** (dials) show on the active object by default; **Scale** off.
+- [ ] **Move** arrows drag the object along world X/Y/Z (wraps `transform.translate`
+      — snapping, numeric entry, `Shift`/`Ctrl` all work as in the native gizmo).
+- [ ] **Rotate** dials spin about world X/Y/Z (`transform.rotate`); the angle HUD shows.
+- [ ] **Scale** (tick it) — box-tipped arrows resize per axis (`transform.resize`).
+- [ ] Handles **follow the active object** when you select a different mesh and
+      stay put as you orbit (placed at the object origin).
+- [ ] **Bevel Width** (tick it, Object Mode): a cyan arrow; drag it → an `HF_Bevel`
+      modifier appears and its **width tracks the drag** (drag from zero creates it;
+      drag again only adjusts — no duplicate modifier). Header shows the value.
+- [ ] **Push/Pull** (tick it) shows **only in Edit Mode** with face(s) selected:
+      an orange arrow on the selection's average normal. Drag → the faces **extrude
+      live** along the normal (grid-snapped; `Ctrl` inverts snap). Release keeps it;
+      right-click/Esc mid-drag rolls the mesh back. The arrow does **not** drift
+      while dragging (axis is frozen at grab).
+
+### Workspace Tools (toolbar, press `T`)
+
+- [ ] Below the built-in transform tools, a Hardflow group appears: **Move /
+      Rotate / Scale / Push/Pull / Bevel** (Object Mode).
+- [ ] Picking **Hardflow Move/Rotate/Scale/Bevel** shows that single gizmo set
+      (same behaviour as the toggles above) without enabling the always-on panel.
+- [ ] **Hardflow Push/Pull** (Object Mode tool): click-drag a face runs the
+      raycast modal `mesh.hardflow_push_pull` (hover-pick + drag, as in section 3).
+- [ ] In **Edit Mode** the toolbar shows **Hardflow Push/Pull** with the drag-arrow
+      gizmo (selected faces).
+- [ ] Disable/re-enable the addon → tools and gizmos unregister with no console
+      errors and no orphaned toolbar entries.
+
+---
+
+## 15. Polyline Trim parity ⭐ (new — Blender native Polyline Trim workflow)
+
+Setup: a cube, Object Mode, selected/active.
+
+- [ ] **Double-click to close** — `Ctrl+Shift+D`, press `E` (Polygon), click ≥3
+      points, then **double-click** → the polyline closes and the cut commits
+      (previously needed `Enter`/`Z`). The triggering second click must not leave a
+      stray extra point.
+- [ ] **Menu/pie entry** — N-panel/header ▸ Boolean ▸ **Polyline Trim** starts the
+      draw already in POLY + Cut; **Polyline Add** starts POLY + Make. `Alt+Q` ▸
+      Boolean ▸ has a **Polyline Trim** slot (replaced the old Circle Cut slot;
+      circle is still reachable in the header menu / by pressing `W` mid-draw).
+- [ ] **Join mode** — `Tab` to **Join** (between Make and Intersect), draw a shape →
+      a **separate solid object** (`Hardflow_Solid`) is created, with **no boolean**
+      on the target (the target is untouched). In Edit Mode, Join adds an n-gon face
+      into the active mesh (documented best-effort).
+- [ ] **Solver choice** — the draw operator exposes a **Solver** property
+      (Default / Exact / Fast / Manifold; Default defers to the preference). The
+      reliable global control is Preferences ▸ **Boolean Solver**, which now lists
+      **Manifold**. Set it to each value and confirm a cut still succeeds.
+- [ ] **Manifold safety** — set the preference (or op) solver to **Manifold** on a
+      Blender **< 4.5**: the cut must fall back to **Exact silently** (no error) —
+      `core/boolean._coerce_solver`. On 4.5+ the Manifold solver runs.
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.

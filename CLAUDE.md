@@ -90,7 +90,12 @@ ops ─┘
 | `ui/draw.py` | GPU + blf helpers |
 | `ui/pie.py` | Categorized pie system: main pie + Build/Boolean/Modify/Curves sub-pies (`HARDFLOW_MT_pie`, `HARDFLOW_MT_pie_build/boolean/modify/curves`); `_draw`/`_open` helpers |
 | `ui/menu.py` | 3D-View header dropdown covering every tool incl. Decals/Assets; data-driven `*_ITEMS` tables + submenus (`HARDFLOW_MT_menu`, `HARDFLOW_MT_menu_*`); `register`/`unregister` add the header hook |
-| `ui/panel.py` | N-panel: tools, snap settings, **modifier-stack manager** (v1.5), cutter list, greeble + display + material rows (`HARDFLOW_PT_tools/snap/modifiers/cutters`) |
+| `ui/panel.py` | N-panel: tools, snap settings, **modifier-stack manager** (v1.5), **gizmo toggles** (v1.10), cutter list, greeble + display + material rows (`HARDFLOW_PT_tools/gizmos/snap/modifiers/cutters`) |
+| `gizmos/__init__.py` | Gizmo subsystem registration (v1.10): `HARDFLOW_GizmoSettings` (Scene-stored toggles `show`/`move`/`rotate`/`scale`/`bevel`/`push_pull`) + its own `register`/`unregister` (gizmo classes via `register_class`, Workspace Tools via `tools.register`), called from the add-on `__init__` |
+| `gizmos/shapes.py` | Pure custom-gizmo geometry, stdlib math only (`arrow_tris` — +Z shaft+cone triangle soup for the Push/Pull handle) |
+| `gizmos/custom.py` | Custom modal Gizmo `HARDFLOW_GT_drag_extrude`: drag a face along its normal to extrude it live (snapshot/restore in invoke/modal/exit, reuses `core.geometry` extrude + `core.raycast.closest_axis_distance` — the gizmo form of `operators/push_pull.py`) |
+| `gizmos/groups.py` | GizmoGroups — persistent `HARDFLOW_GGT_persistent` (toggle-gated; hides handles per mode) + per-tool `HARDFLOW_GGT_move/rotate/scale/bevel/push_pull`. Move/Rotate/Scale wrap built-in `transform.translate/rotate/resize` (arrow/dial via `target_set_operator` + `constraint_axis`); Bevel drives an `HF_Bevel` width via `target_set_handler` (`_bevel_get`/`_bevel_set`); shared `_make_*`/`_axis_basis`/`_setup_pushpull` builders |
+| `gizmos/tools.py` | Workspace Tools (toolbar T): `HARDFLOW_T_move/rotate/scale/bevel` + `push_pull` (Object, launches the raycast modal) + `push_pull_edit` (Edit Mesh, gizmo); `register`/`unregister` wrap `register_tool` defensively (it can raise headless) |
 | `ui/decal_panel.py` | N-panel "Decals" section: place by type + decal list (`HARDFLOW_PT_decals`) |
 | `ui/decal_library.py` | N-panel "Decal Library" section: image icon grid (`HARDFLOW_PT_decal_library`, `bpy.utils.previews`) |
 | `ui/asset_panel.py` | N-panel "Assets" + "Asset Library" sections (`HARDFLOW_PT_assets/asset_library`) |
@@ -103,6 +108,13 @@ ops ─┘
 Every new class must be added to the `_classes` tuple in `__init__.py`,
 otherwise it won't be registered. Keymaps live in `keymaps.register_keymaps()`;
 users can rebind them from the standard Blender keymap editor in preferences.
+
+**Gizmos are the exception:** `Gizmo`/`GizmoGroup` classes and `WorkSpaceTool`s
+register through `gizmos.register()` (called from the add-on `__init__`), *not*
+the `_classes` tuple — gizmos use `register_class` but tools use
+`register_tool`. Note registered gizmo classes are **not** exposed on
+`bpy.types.<Name>`; look them up with
+`bpy.types.GizmoGroup.bl_rna_get_subclass_py("HARDFLOW_GGT_…")`.
 
 ## Blender API constraints (4.2 LTS+ target)
 

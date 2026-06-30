@@ -413,6 +413,32 @@ behaviour still awaits a live-Blender pass.
       the exact drawn outline needs the view-dependent `knife_project` operator,
       pending a live-Blender pass.
 
+## v1.10 — Viewport gizmos (interactive handles)
+On-object handles for the common transforms, so the hard-surface loop doesn't
+have to lean on keyboard shortcuts. Two surfaces, sharing one set of gizmo
+groups (`gizmos/`): an **always-on persistent** widget toggled from the N-panel
+(BoxCutter / Hard Ops feel) and a set of **Workspace Tools** in the toolbar (T,
+like Blender's native Move/Rotate/Scale).
+- [x] **Move / Rotate / Scale** — wrap the built-in `transform.translate` /
+      `transform.rotate` / `transform.resize` via `target_set_operator`
+      (arrow + dial gizmos, world-axis constrained), so snapping / numeric entry
+      / axis constraints come for free (`gizmos/groups.py`).
+- [x] **Bevel width** — a drag handle bound to an `HF_Bevel` modifier's width
+      through `target_set_handler` (`_bevel_get`/`_bevel_set`); dragging from
+      zero adds the modifier, dragging again only adjusts it.
+- [x] **Push/Pull** — custom modal gizmo `HARDFLOW_GT_drag_extrude`
+      (`gizmos/custom.py`): drag the selected faces' average normal to extrude
+      live, reusing the operator's snapshot/restore path. Edit-Mesh gizmo;
+      Object Mode keeps the raycast hover-pick modal (toolbar tool launches it).
+- [x] **N-panel toggles** — `HARDFLOW_PT_gizmos` + Scene-stored
+      `HARDFLOW_GizmoSettings` (master `show` + per-kind switches).
+- [x] **Workspace Tools** — `hardflow.move/rotate/scale/bevel/push_pull`
+      (Object) + `push_pull` gizmo in Edit Mesh (`gizmos/tools.py`).
+- Registration + tool placement live-verified in Blender 5.1.2; the drag
+  interactions themselves are in `tests/manual_checklist.md` §14 (need a
+  viewport). Possible follow-ups: GLOBAL/LOCAL orientation toggle, a uniform
+  centre scale handle, an Offset gizmo to mirror Push/Pull.
+
 ## Reference-tool gap pass (pre-publish)
 A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /
 KitOps. Closed in this pass:
