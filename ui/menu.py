@@ -45,6 +45,7 @@ _MODIFY_ITEMS = (
     ("object.hardflow_mirror", "Mirror", 'MOD_MIRROR', {}),
     ("object.hardflow_array", "Array", 'MOD_ARRAY', {}),
     ("object.hardflow_radial_array", "Radial Array", 'MOD_ARRAY', {}),
+    ("object.hardflow_curve_array", "Array Along Curve", 'MOD_ARRAY', {}),
     ("object.hardflow_symmetrize", "Symmetrize", 'MOD_MIRROR', {}),
     ("object.hardflow_sharpen", "Sharpen", 'MOD_BEVEL', {}),
     ("object.hardflow_clean", "Clean", 'BRUSH_DATA', {}),

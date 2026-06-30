@@ -21,6 +21,7 @@ _classes = (
     boolean_ops.HARDFLOW_OT_boolean,
     array.HARDFLOW_OT_array,
     array.HARDFLOW_OT_radial_array,
+    array.HARDFLOW_OT_curve_array,
     pipe.HARDFLOW_OT_pipe,
     pipe.HARDFLOW_OT_cable,
     push_pull.HARDFLOW_OT_push_pull,

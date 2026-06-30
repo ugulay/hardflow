@@ -97,6 +97,36 @@ def test_bevel_cutter_chamfers_edges():
     assert len(me2.vertices) == 8
 
 
+def test_curve_array_modifiers():
+    # Array along a curve: an Array (fit-curve) + a Curve deform pointing at the
+    # selected curve land on the active mesh.
+    _reset()
+    hardflow.register()
+    try:
+        cd = bpy.data.curves.new("Path", 'CURVE')
+        cd.dimensions = '3D'
+        sp = cd.splines.new('POLY')
+        sp.points.add(1)
+        sp.points[0].co = (0.0, 0.0, 0.0, 1.0)
+        sp.points[1].co = (5.0, 0.0, 0.0, 1.0)
+        cobj = bpy.data.objects.new("Path", cd)
+        bpy.context.collection.objects.link(cobj)
+        mesh = _add_cube("Body", size=1.0)
+        for o in bpy.context.selected_objects:
+            o.select_set(False)
+        cobj.select_set(True)
+        mesh.select_set(True)
+        bpy.context.view_layer.objects.active = mesh
+        res = bpy.ops.object.hardflow_curve_array(count=0, axis='POS_X')
+        assert res == {'FINISHED'}, res
+        arr = mesh.modifiers.get("HF_CurveArray")
+        deform = mesh.modifiers.get("HF_CurveDeform")
+        assert arr is not None and arr.fit_type == 'FIT_CURVE' and arr.curve is cobj
+        assert deform is not None and deform.object is cobj
+    finally:
+        hardflow.unregister()
+
+
 def test_mirror_pivot_cursor_and_active():
     # Mirror across the 3D cursor (an empty pivot) and across the active object.
     _reset()

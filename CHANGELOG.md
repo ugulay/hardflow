@@ -23,6 +23,9 @@ logic is unit-tested (`59/59`); the new bpy paths gain headless coverage.
 - **Bevelled cutter** — `C` in the draw modal chamfers the cutter itself, so a
   CUT leaves bevelled recess walls (`core/geometry.bevel_cutter`), distinct from
   `B` bevel-on-cut which chamfers the target's cut edge (Boxcutter bevelled cut).
+- **Array along a curve** — `HARDFLOW_OT_curve_array` arrays the active mesh along
+  a selected curve (Array fit-curve + Curve deform) so copies follow the path;
+  header Modify menu (Hard Ops parity).
 
 ### Changed
 - **Mirror across the 3D cursor or active object** — `HARDFLOW_OT_mirror` gains a

@@ -97,3 +97,55 @@ class HARDFLOW_OT_radial_array(Operator):
         self.report({'INFO'}, "Radial array x%d around %s (pivot at 3D cursor)"
                     % (self.count, self.axis))
         return {'FINISHED'}
+
+
+class HARDFLOW_OT_curve_array(Operator):
+    bl_idname = "object.hardflow_curve_array"
+    bl_label = "Hardflow Array Along Curve"
+    bl_description = ("Array the active mesh along a selected curve (Array "
+                      "fit-curve + Curve deform), so copies follow the path")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    count: IntProperty(
+        name="Count", default=0, min=0, max=512,
+        description="0 = fit the curve's length; otherwise a fixed copy count")
+    axis: EnumProperty(
+        name="Deform Axis",
+        items=[('POS_X', "X", ""), ('POS_Y', "Y", ""), ('POS_Z', "Z", "")],
+        default='POS_X',
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (context.mode == 'OBJECT' and obj is not None
+                and obj.type == 'MESH'
+                and any(o.type == 'CURVE' for o in context.selected_objects))
+
+    def execute(self, context):
+        obj = context.active_object
+        curve = next((o for o in context.selected_objects
+                      if o.type == 'CURVE'), None)
+        if curve is None:
+            self.report({'WARNING'}, "Select a curve to array along")
+            return {'CANCELLED'}
+        idx = {'POS_X': 0, 'POS_Y': 1, 'POS_Z': 2}[self.axis]
+        arr = obj.modifiers.new("HF_CurveArray", 'ARRAY')
+        if self.count > 0:
+            arr.fit_type = 'FIXED_COUNT'
+            arr.count = self.count
+        else:
+            arr.fit_type = 'FIT_CURVE'
+            arr.curve = curve
+        # one body-length offset along the deform axis -> copies sit end to end
+        arr.use_relative_offset = True
+        arr.use_constant_offset = False
+        off = [0.0, 0.0, 0.0]
+        off[idx] = 1.0
+        arr.relative_offset_displace = off
+        # Curve modifier AFTER the array bends the row of copies along the path
+        deform = obj.modifiers.new("HF_CurveDeform", 'CURVE')
+        deform.object = curve
+        deform.deform_axis = self.axis
+        self.report({'INFO'}, "Arrayed '%s' along '%s'" % (obj.name, curve.name))
+        return {'FINISHED'}
