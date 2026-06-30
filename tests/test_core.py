@@ -84,6 +84,15 @@ def test_snap_scalar():
     assert grid.snap_scalar(0.123, 0.0, True) == 0.123
 
 
+def test_snap_to_candidates():
+    cands = [0.0, 1.0, 2.5]
+    assert snap.snap_to_candidates(0.95, cands, 0.2) == 1.0   # within tol -> snap
+    assert snap.snap_to_candidates(0.5, cands, 0.2) == 0.5    # outside tol -> free
+    assert snap.snap_to_candidates(2.46, cands, 0.1) == 2.5
+    assert snap.snap_to_candidates(5.0, [], 0.2) == 5.0       # no candidates
+    assert snap.snap_to_candidates(-1.9, [-2.0, 0.0], 0.2) == -2.0  # negative side
+
+
 def test_centered_grid_segments():
     segs = grid.centered_grid_segments(1.0, 0.5)
     # lines at -1, -0.5, 0, 0.5, 1 on each axis -> 5 verticals + 5 horizontals

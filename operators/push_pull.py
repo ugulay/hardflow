@@ -9,7 +9,7 @@ import bpy
 from bpy.types import Operator
 from mathutils import Vector
 
-from ..core import raycast, geometry, grid
+from ..core import raycast, geometry, grid, snap
 from ..preferences import get_prefs
 from ..ui import draw as hud
 
@@ -47,6 +47,8 @@ class HARDFLOW_OT_push_pull(Operator):
         self.distance = 0.0       # signed extrude amount, meters
         self.copy = False         # keep the starting face (SketchUp Ctrl/Copy)
         self.typed = ""           # numeric entry buffer
+        self._infer = []          # candidate extrude heights (vertex inference)
+        self._infer_hit = False   # drag currently snapped to geometry
         self._base = None         # mesh snapshot for the live preview
         self._committed = False
 
@@ -80,6 +82,7 @@ class HARDFLOW_OT_push_pull(Operator):
         self.locked = True
         geometry.flush_edit_mesh(self.obj)   # sync selection before snapshot
         self._base = geometry.snapshot_mesh(self.obj, "hf_pushpull_base")
+        self._capture_inference()
         return True
 
     # --- event loop ------------------------------------------------------
@@ -167,6 +170,21 @@ class HARDFLOW_OT_push_pull(Operator):
         self.typed = ""
         self.locked = True
         self._base = geometry.snapshot_mesh(self.obj, "hf_pushpull_base")
+        self._capture_inference()
+
+    def _capture_inference(self):
+        """Project the locked object's vertices onto the drag axis to get the
+        candidate extrude heights the drag can infer/snap to (SketchUp-style
+        inference: e.g. snap to the height of another feature). Captured once from
+        the pre-extrude snapshot; skipped on very dense meshes."""
+        src = self._base if self._base is not None else self.obj.data
+        if src is None or len(src.vertices) > 50000:
+            self._infer = []
+            return
+        mw = self.obj.matrix_world
+        co, ax = self.axis_co, self.axis_dir
+        self._infer = sorted({round((mw @ v.co - co).dot(ax), 6)
+                              for v in src.vertices})
 
     def _refresh_preview(self):
         """Show the real extrude live: restore the snapshot, then re-extrude the
@@ -194,8 +212,20 @@ class HARDFLOW_OT_push_pull(Operator):
         region, rv3d = context.region, context.region_data
         d = raycast.closest_axis_distance(region, rv3d, co,
                                           self.axis_co, self.axis_dir)
-        self.distance = grid.snap_scalar(d, get_prefs(context).grid_world,
-                                         self.snap)
+        prefs = get_prefs(context)
+        self._infer_hit = False
+        if not self.snap:
+            self.distance = d
+        else:
+            # Inference first: snap to a real vertex height under the drag, else
+            # fall back to the world grid (SketchUp's geometry inference).
+            tol = max(1e-4, prefs.grid_world * 0.5)
+            inferred = snap.snap_to_candidates(d, self._infer, tol)
+            if inferred != d:
+                self.distance = inferred
+                self._infer_hit = True
+            else:
+                self.distance = grid.snap_scalar(d, prefs.grid_world, True)
         self.typed = ""   # dragging clears a stale numeric entry
 
     def _edit_typed(self, event):
@@ -256,7 +286,9 @@ class HARDFLOW_OT_push_pull(Operator):
         else:
             typed = ("  [typing %s]" % self.typed) if self.typed else ""
             copy = "  (copy)" if self.copy else ""
-            top = ("Distance:  %.3f m%s%s" % (self.distance, typed, copy), accent)
+            infer = "  -> on geometry" if self._infer_hit else ""
+            top = ("Distance:  %.3f m%s%s%s"
+                   % (self.distance, typed, copy, infer), accent)
         last = HARDFLOW_OT_push_pull._LAST_DISTANCE
         repeat = ("    R repeat %.3f m" % last) if abs(last) > 1e-6 else ""
         lines = [

@@ -478,8 +478,16 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       `edit_extrude_faces` `keep_original`).
 - [x] **Repeat last** (`R`) — re-apply the last committed distance (Push/Pull) /
       thickness (Offset) on the newly locked face; remembered across runs.
-- [ ] **Inference snapping** — snap the push/pull distance / offset to a vertex or
-      edge under the cursor (SketchUp inference), pending a live-Blender pass.
+- [x] **Push/Pull vertex inference** — snap the drag distance to a real vertex
+      height (`core/snap.snap_to_candidates`, candidates captured at lock from the
+      object's verts projected onto the drag axis); HUD shows `-> on geometry`,
+      grid is the fallback. Headless `test_snap_to_candidates`.
+- [ ] **Offset / edge inference** — extend inference to the Offset thickness
+      (in-plane border alignment) and to edge mid-points, pending a live pass.
+- [ ] **Offset → auto Push/Pull** — chain the inset into an extrude of the inner
+      ring in one modal (the common recess/panel combo).
+- [ ] **Interactive edge tools** — Object-Mode edge/loop bevel + loop-cut modals
+      (drag width / segments) so edge work doesn't require Edit Mode.
 - [ ] **Hover-pick through modifiers** — Object-Mode face pick still indexes the
       base mesh; supporting generative modifiers needs an evaluated-mesh map.
 
