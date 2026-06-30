@@ -79,6 +79,35 @@ def dominant_tangent(edge_vectors, normal):
     return _normalize(best)
 
 
+def best_edge_pair(edge_vectors, parallel_eps=1e-6):
+    """Choose which two of the selected edges define the 2-edge grid plane. The
+    'main' edge (returned first) is the longest -- the same longest-edge rule
+    dominant_tangent uses -- so the grid's main axis is the dominant selected
+    edge instead of whichever edge bmesh happened to list first. The partner is
+    the edge whose (normalized) cross product with the main is largest, i.e. the
+    most perpendicular, giving the most stable plane normal. Returns
+    (main_index, partner_index), or (main_index, None) when no other edge is
+    non-parallel (fewer than two usable edges -> a single-edge plane). Pure,
+    deterministic, unit-tested; the operator maps the indices back to its edges.
+
+    This is the automatic main-edge pick; a manual Ctrl+Click override still
+    awaits the modal edge-pick UX (see ROADMAP)."""
+    n = len(edge_vectors)
+    if n == 0:
+        return 0, None
+    main = max(range(n), key=lambda i: _length(edge_vectors[i]))
+    a = _normalize(edge_vectors[main])
+    partner, best_sin = None, parallel_eps
+    for j in range(n):
+        if j == main:
+            continue
+        sin = _length(_cross(a, _normalize(edge_vectors[j])))
+        if sin > best_sin:
+            best_sin = sin
+            partner = j
+    return main, partner
+
+
 def basis_from_edge(edge_dir, normal):
     """Construction basis aligned to a single edge (Grid Modeler 'grid plane on a
     selected edge'): right = the edge direction projected onto the plane

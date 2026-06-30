@@ -307,17 +307,21 @@ class HARDFLOW_OT_draw(Operator):
         def edge_mid(e):
             return (e.verts[0].co + e.verts[1].co) * 0.5
 
-        if len(sel) >= 2:
-            r, u, n = decal_math.basis_from_two_edges(
-                tuple(edge_vec(sel[0])), tuple(edge_vec(sel[1])))
-            origin = mw @ ((edge_mid(sel[0]) + edge_mid(sel[1])) * 0.5)
+        # Pick the main (longest) edge + its most-perpendicular partner, so the
+        # grid axis is the dominant selected edge regardless of bmesh order, and
+        # parallel selections degrade cleanly to a single-edge plane.
+        vecs = [tuple(edge_vec(e)) for e in sel]
+        main_i, partner_i = decal_math.best_edge_pair(vecs)
+        if partner_i is not None:
+            r, u, n = decal_math.basis_from_two_edges(vecs[main_i], vecs[partner_i])
+            origin = mw @ ((edge_mid(sel[main_i]) + edge_mid(sel[partner_i])) * 0.5)
         else:
-            e = sel[0]
+            e = sel[main_i]
             if e.link_faces:
                 nrm = rot @ e.link_faces[0].normal
             else:
                 nrm = raycast.view_direction(context.region_data)
-            r, u, n = decal_math.basis_from_edge(tuple(edge_vec(e)), tuple(nrm))
+            r, u, n = decal_math.basis_from_edge(vecs[main_i], tuple(nrm))
             origin = mw @ edge_mid(e)
         return (origin, Vector(r), Vector(u), Vector(n))
 

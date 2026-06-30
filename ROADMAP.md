@@ -393,10 +393,16 @@ behaviour still awaits a live-Blender pass.
 - [x] **Local knife** — the knife score is restricted to the drawn footprint
       (`geometry.knife_polygon`), not infinite planes across the whole mesh.
 - [x] **`Z` quick-close** + **line-width preference** (UI-scaled).
+- [x] **Deterministic main edge** — the 2-edge grid plane uses the longest
+      selected edge as the main axis and its most-perpendicular partner for the
+      plane (`core/decal_math.best_edge_pair`), so the grid no longer depends on
+      bmesh selection order; parallel selections degrade to a clean single-edge
+      plane.
 - [ ] **`X` start-from-edge-vertex** — deferred: `X` is the snap toggle; vertex
       snap (`V`) already starts a draw from an existing vertex.
-- [ ] **`Ctrl+Click` set main edge** for the 2-edge grid plane — needs the modal
-      edge-pick UX; pending a live-Blender pass.
+- [ ] **`Ctrl+Click` set main edge** — manually override the automatic
+      longest-edge main (above); needs the modal edge-pick UX, pending a
+      live-Blender pass.
 - [ ] **Pixel-accurate knife** (`knife_project`) — the footprint restriction stops
       whole-mesh slicing, but a single large face still scores a full-width line;
       a true cut needs the view-dependent `knife_project` operator.

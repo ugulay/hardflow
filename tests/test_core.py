@@ -320,6 +320,19 @@ def _dot(a, b):
     return sum(x * y for x, y in zip(a, b))
 
 
+def test_best_edge_pair():
+    # longest edge is the 'main'; the most-perpendicular edge is the partner,
+    # a nearly-parallel edge is rejected in its favour
+    assert decal_math.best_edge_pair([(10, 0, 0), (2, 0.1, 0), (0, 3, 0)]) == (0, 2)
+    # order independence: same edges shuffled -> same chosen vectors
+    assert decal_math.best_edge_pair([(0, 3, 0), (10, 0, 0), (2, 0.1, 0)]) == (1, 0)
+    # all parallel -> no valid partner, the longest is the lone main edge
+    assert decal_math.best_edge_pair([(1, 0, 0), (2, 0, 0)]) == (1, None)
+    # single edge / empty are well-defined
+    assert decal_math.best_edge_pair([(5, 0, 0)]) == (0, None)
+    assert decal_math.best_edge_pair([]) == (0, None)
+
+
 def test_orientation_basis_identity():
     x, y, z = decal_math.orientation_basis((0, 0, 1), (1, 0, 0))
     assert math.isclose(z[2], 1.0, abs_tol=1e-9)      # z follows the normal
