@@ -102,12 +102,22 @@ class HARDFLOW_OT_bevel(Operator):
 
     def _bevel_edit_edges(self, context):
         self._apply_adaptive(context)
-        n = geometry.edit_bevel_edges(context.active_object, self.width,
-                                      self.segments, self.profile)
-        if n == 0:
+        # Distinct from the no-selection case (both used to share one message).
+        if self.width <= 0.0:
+            self.report({'WARNING'}, "Bevel width is zero; increase Width")
+            return {'CANCELLED'}
+        # Bevel selected edges across every mesh in Edit Mode (Blender edits
+        # multiple objects at once), not just the active one.
+        objs = (getattr(context, "objects_in_mode_unique_data", None)
+                or getattr(context, "objects_in_mode", None)
+                or [context.active_object])
+        total = sum(geometry.edit_bevel_edges(o, self.width, self.segments,
+                                              self.profile)
+                    for o in objs if o and o.type == 'MESH')
+        if total == 0:
             self.report({'WARNING'}, "Select edge(s) to bevel in Edit Mode")
             return {'CANCELLED'}
-        self.report({'INFO'}, "Beveled %d edge(s)" % n)
+        self.report({'INFO'}, "Beveled %d edge(s)" % total)
         return {'FINISHED'}
 
     # --- interactive modal (HardOps style live adjustment) ------------------

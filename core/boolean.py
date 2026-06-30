@@ -54,6 +54,13 @@ def recalc_normals(obj):
     most of those cases. Safe on generated/disposable cutter meshes."""
     import bmesh
     me = obj.data
+    if me.is_editmode:
+        # In Edit Mode the mesh is owned by the open bmesh; write back through
+        # it (bm.to_mesh would raise) and don't free it.
+        bm = bmesh.from_edit_mesh(me)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bmesh.update_edit_mesh(me)
+        return
     bm = bmesh.new()
     bm.from_mesh(me)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
@@ -68,12 +75,18 @@ def mesh_health(obj):
     `degenerate` (near-zero-area faces), `loose` (vertices with no edge). Pure
     bmesh, no scene side effects -- used to explain *why* a cut failed."""
     import bmesh
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
+    me = obj.data
+    editmode = me.is_editmode
+    # In Edit Mode read the live edit-mesh bmesh (from_mesh would see stale data);
+    # in Object Mode use a disposable copy.
+    bm = bmesh.from_edit_mesh(me) if editmode else bmesh.new()
+    if not editmode:
+        bm.from_mesh(me)
     non_manifold = sum(1 for e in bm.edges if not e.is_manifold)
     degenerate = sum(1 for f in bm.faces if f.calc_area() < 1e-9)
     loose = sum(1 for v in bm.verts if not v.link_edges)
-    bm.free()
+    if not editmode:
+        bm.free()  # never free a bmesh owned by the edit-mesh
     return {'non_manifold': non_manifold, 'degenerate': degenerate,
             'loose': loose}
 

@@ -311,14 +311,18 @@ def bake_image_node(material, image):
     active+selected node of the material -- Cycles writes the bake there."""
     tree = material.node_tree
     node = next((n for n in tree.nodes
-                 if n.type == 'TEX_IMAGE' and n.image is image), None)
+                 if n.type == 'TEX_IMAGE' and n.image == image), None)
     if node is None:
         node = tree.nodes.new('ShaderNodeTexImage')
         node.image = image
         node.location = (-500, -350)
     tree.nodes.active = node
+    # Compare by name, not `is`: bpy hands out a fresh Python wrapper per access,
+    # so `other is node` can be False even for the same node -- which would leave
+    # the bake-target node unselected and misdirect the Cycles bake. Node names
+    # are unique within a node tree.
     for other in tree.nodes:
-        other.select = (other is node)
+        other.select = (other.name == node.name)
     return node
 
 

@@ -62,7 +62,7 @@ class HARDFLOW_OT_draw(Operator):
         self.snap = prefs.snap_enabled
         self.geo = prefs.geo_snap        # vertex/edge snap (overrides grid)
         self.nd = prefs.non_destructive  # non-destructive: leave a live modifier
-        self.plane = 'VIEW'              # projection plane: VIEW / X / Y / Z
+        self.plane = prefs.default_plane  # saved projection plane (S saves it)
         self.plane_spin = 0.0            # live in-plane grid rotation (Shift+arrows)
         self.sides = prefs.ngon_sides    # N-gon side count (adjust live with [ ])
         # In-draw operations (v1.4): all baked into one cutter at commit.
@@ -74,7 +74,10 @@ class HARDFLOW_OT_draw(Operator):
         self.bevel_cut = False    # add an angle-limited bevel to the cut; B toggles
         self.grid_size = prefs.grid_world  # live grid spacing (Ctrl+Wheel adjusts)
         self.depth = 0.0          # explicit cutter depth (0 = auto pierce); PgUp/Dn
-        self.points = []          # confirmed screen points
+        self.points = []          # confirmed screen points (current view)
+        self.world_points = []    # anchored 3D point per click; keeps a fixed
+        #                           plane's shape locked in space when the view
+        #                           changes mid-draw (parallel to self.points)
         self.cursor = (0, 0)      # current (snapped) mouse point
         self._snap_hit = None     # (screen_point, kind) -- for visual marker
         self._surface_basis = None  # locked (origin,right,up,normal) in SURFACE
@@ -104,6 +107,9 @@ class HARDFLOW_OT_draw(Operator):
 
     def modal(self, context, event):
         context.area.tag_redraw()
+        # Re-anchor placed points to the current view before doing anything, so an
+        # orbit/zoom on a fixed plane leaves the shape where it was drawn.
+        self._sync_points_from_world(context)
 
         if event.type == 'MOUSEMOVE':
             co = self._snap_screen(
@@ -123,14 +129,10 @@ class HARDFLOW_OT_draw(Operator):
             if (self.plane == 'SURFACE' and not self.points
                     and self._surface_basis is None):
                 self._lock_surface_basis(context, p)
-            if self.shape == 'POLY':
-                self.points.append(p)
-            else:  # BOX / CIRCLE: two clicks
-                if not self.points:
-                    self.points.append(p)
-                else:
-                    self.points.append(p)
-                    return self._commit(context)
+            self._place_point(context, p)
+            # BOX / CIRCLE / NGON finish on the second click; POLY keeps going.
+            if self.shape != 'POLY' and len(self.points) >= 2:
+                return self._commit(context)
 
         elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
             if self.shape == 'POLY' and len(self.points) >= 3:
@@ -144,11 +146,14 @@ class HARDFLOW_OT_draw(Operator):
         elif event.type == 'BACK_SPACE' and event.value == 'PRESS':
             if self.points:
                 self.points.pop()
+                if self.world_points:
+                    self.world_points.pop()
 
         elif event.type in {'Q', 'W', 'E', 'R'} and event.value == 'PRESS':
             self.shape = {'Q': 'BOX', 'W': 'CIRCLE', 'E': 'POLY',
                           'R': 'NGON'}[event.type]
             self.points = []
+            self.world_points = []
 
         elif (event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}
               and event.value == 'PRESS'):
@@ -194,6 +199,11 @@ class HARDFLOW_OT_draw(Operator):
         elif event.type == 'V' and event.value == 'PRESS':
             self.geo = not self.geo
 
+        # S: persist the live HUD settings (snap/geo/ND, grid, sides, plane) as
+        # the defaults for the next draw session.
+        elif event.type == 'S' and event.value == 'PRESS':
+            self._save_settings(context)
+
         elif event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and event.value == 'PRESS':
             direction = 1 if event.type == 'RIGHT_ARROW' else -1
             if event.shift:
@@ -206,6 +216,7 @@ class HARDFLOW_OT_draw(Operator):
                 self.plane = order[(order.index(self.plane) + direction)
                                    % len(order)]
                 self.points = []  # plane changed -> reset the half-drawn shape
+                self.world_points = []
                 self._surface_basis = None  # re-pick the surface on next click
                 self._edges_basis = None    # re-read the selected edges for EDGES
 
@@ -254,7 +265,8 @@ class HARDFLOW_OT_draw(Operator):
         (origin, right, up, normal) from the surface hit, or None if the ray
         misses geometry."""
         region, rv3d = context.region, context.region_data
-        hit = raycast.ray_cast_surface_ex(context, region, rv3d, screen_co)
+        ignore = [self._preview] if self._preview else None
+        hit = raycast.ray_cast_surface_ex(context, region, rv3d, screen_co, ignore)
         if hit is None:
             return None
         location, normal, obj, index, matrix = hit
@@ -345,6 +357,32 @@ class HARDFLOW_OT_draw(Operator):
         origin, right, up, normal = basis
         rot = Matrix.Rotation(self.plane_spin, 3, normal)
         return origin, rot @ right, rot @ up, normal
+
+    def _place_point(self, context, screen_co):
+        """Record a clicked point as both its screen position and its anchored 3D
+        world position on the current construction plane. The world anchor lets a
+        fixed plane (SURFACE/EDGES/X/Y/Z) keep the shape locked in space when the
+        view changes mid-draw; VIEW plane ignores it and follows the camera."""
+        self.points.append((screen_co[0], screen_co[1]))
+        region, rv3d = context.region, context.region_data
+        origin, right, up, normal = self._plane_basis(context)
+        self.world_points.append(
+            raycast.ray_to_plane(region, rv3d, screen_co, origin, normal))
+
+    def _sync_points_from_world(self, context):
+        """Re-project the anchored 3D points back to screen for the *current*
+        view, so a shape on a fixed plane stays put when the user orbits/zooms
+        mid-draw. VIEW plane intentionally tracks the camera, so it is left
+        alone. A point that projects off-screen keeps its last screen value."""
+        if self.plane == 'VIEW' or not self.world_points:
+            return
+        region, rv3d = context.region, context.region_data
+        for i, w in enumerate(self.world_points):
+            if w is None or i >= len(self.points):
+                continue
+            s = raycast.world_to_screen(region, rv3d, w)
+            if s is not None:
+                self.points[i] = (s[0], s[1])
 
     def _snap_screen(self, context, screen_co):
         """Snap the cursor in order: 1) vertex/edge geometry, 2) world grid,
@@ -486,6 +524,7 @@ class HARDFLOW_OT_draw(Operator):
     def _draw_px(self, context):
         prefs = get_prefs(context)
         region = context.region
+        self._sync_points_from_world(context)  # keep a fixed-plane shape anchored
 
         if self.snap:
             hud.draw_grid(self._grid_screen_verts(context),
@@ -522,7 +561,8 @@ class HARDFLOW_OT_draw(Operator):
             ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
              "B bevel    G stamp", dim),
             ("Ctrl+Wheel grid    PgUp/Dn depth    X grid    V vertex    "
-             "N non-destructive    Enter apply    Esc cancel", dim),
+             "N non-destructive    S save settings    Enter apply    "
+             "Esc cancel", dim),
         ]
         # Surface the in-draw operation state only when something is active.
         import math
@@ -803,6 +843,9 @@ class HARDFLOW_OT_draw(Operator):
         for key in self._STAMP_KEYS:
             setattr(self, key, last[key])
         self.points = list(last['points'])
+        # Stamp replays the stored screen points in the current view and commits
+        # immediately, so there are no live anchors to keep in sync.
+        self.world_points = []
         self._clear_preview()
         try:
             self._build_and_apply(context)
@@ -810,6 +853,20 @@ class HARDFLOW_OT_draw(Operator):
             self.report({'ERROR'}, f"Hardflow: {ex}")
         self._cleanup(context)
         return {'FINISHED'}
+
+    def _save_settings(self, context):
+        """Write the live HUD toggles back to the addon preferences so the next
+        draw session starts with them. Saves the session-level settings shown in
+        the status line (snap/geo/ND, grid spacing, N-gon sides, plane); shape
+        and mode stay per-entry-point (driven by the menu/pie item)."""
+        prefs = get_prefs(context)
+        prefs.snap_enabled = self.snap
+        prefs.geo_snap = self.geo
+        prefs.non_destructive = self.nd
+        prefs.grid_world = self.grid_size
+        prefs.ngon_sides = self.sides
+        prefs.default_plane = self.plane
+        self.report({'INFO'}, "Hardflow: draw settings saved as default")
 
     def _targets(self, context):
         """If multi-object mode is on, all selected meshes (CUT/MAKE); otherwise

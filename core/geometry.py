@@ -40,9 +40,17 @@ def _add_prism(bm, corners, view_dir, thickness):
     vf = [bm.verts.new(c - half) for c in corners]
     vb = [bm.verts.new(c + half) for c in corners]
     try:
-        bm.faces.new(vf)                   # front cap
-        bm.faces.new(list(reversed(vb)))   # back cap
+        f_front = bm.faces.new(vf)                   # front cap
+        f_back = bm.faces.new(list(reversed(vb)))    # back cap
     except ValueError:
+        bmesh.ops.delete(bm, geom=vf + vb, context='VERTS')
+        return False
+    # bmesh builds a face from colocated-but-distinct verts without raising, so
+    # an all-identical / zero-area footprint slips past faces.new. Reject it by
+    # area, cleaning up the geometry already added (matters for build_prisms,
+    # which keeps appending to the same bmesh).
+    if f_front.calc_area() <= 1e-12:
+        bmesh.ops.delete(bm, geom=vf + vb, context='VERTS')
         return False
     n = len(vf)
     for i in range(n):
@@ -467,6 +475,10 @@ def symmetrize_mesh(obj, direction='+X'):
     +X half and mirrors it to -X. Object Mode, no bpy.ops."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
+    # bmesh.ops.symmetrize wants the positive side as a bare axis ('X','Y','Z')
+    # and the negative side prefixed ('-X'). Normalize '+X' -> 'X' so callers may
+    # pass either convention (the operator UI still labels them '+X to -X').
+    direction = direction.lstrip('+')
     bmesh.ops.symmetrize(bm, input=bm.verts[:] + bm.edges[:] + bm.faces[:],
                          direction=direction)
     bm.to_mesh(obj.data)
@@ -632,6 +644,11 @@ def edit_bevel_edges(obj, width, segments=2, profile=0.5):
         return 0
     bm = bmesh.from_edit_mesh(obj.data)
     edges = [e for e in bm.edges if e.select]
+    if not edges:
+        # Vertex select mode may not flush selection up to the edge flag; treat
+        # an edge as selected when both of its endpoints are.
+        edges = [e for e in bm.edges
+                 if e.verts[0].select and e.verts[1].select]
     if not edges:
         return 0
     n = len(edges)

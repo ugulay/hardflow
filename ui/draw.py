@@ -3,7 +3,18 @@ import gpu
 import blf
 from gpu_extras.batch import batch_for_shader
 
-_shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+# Created lazily on first draw. gpu.shader.from_builtin() raises a SystemError
+# in --background mode (no GPU), and doing it at import time would break headless
+# import of the whole add-on (e.g. tests/test_blender.py). Drawing only happens
+# in a real viewport, where the GPU module is always available.
+_shader = None
+
+
+def _get_shader():
+    global _shader
+    if _shader is None:
+        _shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+    return _shader
 
 # Snap-marker colors shared by every draw tool (kind -> RGBA) so the cursor hint
 # means the same thing everywhere: yellow vertex, green midpoint, blue edge,
@@ -25,10 +36,11 @@ def _draw_lines(points, color, primitive='LINE_STRIP', width=2.0):
     # The UNIFORM_COLOR shader expects vec3 for pos (2D_UNIFORM_COLOR removed);
     # lift screen-space 2D points to 3D with z=0.
     coords = [(p[0], p[1], 0.0) for p in points]
-    batch = batch_for_shader(_shader, primitive, {"pos": coords})
-    _shader.bind()
-    _shader.uniform_float("color", color)
-    batch.draw(_shader)
+    shader = _get_shader()
+    batch = batch_for_shader(shader, primitive, {"pos": coords})
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
     gpu.state.line_width_set(1.0)
     gpu.state.blend_set('NONE')
 
@@ -53,10 +65,11 @@ def draw_points(points, color, size=6.0):
     gpu.state.blend_set('ALPHA')
     gpu.state.point_size_set(size)
     coords = [(p[0], p[1], 0.0) for p in points]
-    batch = batch_for_shader(_shader, 'POINTS', {"pos": coords})
-    _shader.bind()
-    _shader.uniform_float("color", color)
-    batch.draw(_shader)
+    shader = _get_shader()
+    batch = batch_for_shader(shader, 'POINTS', {"pos": coords})
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
     gpu.state.point_size_set(1.0)
     gpu.state.blend_set('NONE')
 
@@ -78,10 +91,11 @@ def draw_face_fill(points, color):
         verts.append((a[0], a[1], 0.0))
         verts.append((b[0], b[1], 0.0))
     gpu.state.blend_set('ALPHA')
-    batch = batch_for_shader(_shader, 'TRIS', {"pos": verts})
-    _shader.bind()
-    _shader.uniform_float("color", color)
-    batch.draw(_shader)
+    shader = _get_shader()
+    batch = batch_for_shader(shader, 'TRIS', {"pos": verts})
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
     gpu.state.blend_set('NONE')
 
 
@@ -90,10 +104,11 @@ def _draw_rect(x, y, w, h, color):
     gpu.state.blend_set('ALPHA')
     verts = [(x, y, 0.0), (x + w, y, 0.0), (x + w, y + h, 0.0),
              (x, y, 0.0), (x + w, y + h, 0.0), (x, y + h, 0.0)]
-    batch = batch_for_shader(_shader, 'TRIS', {"pos": verts})
-    _shader.bind()
-    _shader.uniform_float("color", color)
-    batch.draw(_shader)
+    shader = _get_shader()
+    batch = batch_for_shader(shader, 'TRIS', {"pos": verts})
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
     gpu.state.blend_set('NONE')
 
 

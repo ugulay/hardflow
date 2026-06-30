@@ -8,9 +8,36 @@ from bpy.props import (BoolProperty, IntProperty, FloatProperty,
 def get_prefs(context=None):
     """This module's __package__ is the base addon package (e.g. 'hardflow' or
     'bl_ext.user_default.hardflow'), so it gives the correct key even when
-    called from submodules."""
+    called from submodules.
+
+    When the package is registered but not an *enabled* add-on (it is imported
+    directly, e.g. by the headless test harness), there is no entry in
+    ``preferences.addons``; fall back to a stand-in carrying the declared
+    property defaults so operators don't hard-crash."""
     context = context or bpy.context
-    return context.preferences.addons[__package__].preferences
+    addon = context.preferences.addons.get(__package__)
+    if addon is not None:
+        return addon.preferences
+    return _default_prefs()
+
+
+def _default_prefs():
+    """A throwaway object exposing each preference at its declared default,
+    read from the registered class's RNA so the defaults never drift."""
+    import types
+    ns = types.SimpleNamespace()
+    rna = getattr(HARDFLOW_Preferences, "bl_rna", None)
+    if rna is None:
+        # Not even registered: re-raise the original lookup error for clarity.
+        return bpy.context.preferences.addons[__package__].preferences
+    for prop in rna.properties:
+        if prop.identifier == "rna_type":
+            continue
+        if getattr(prop, "is_array", False):
+            setattr(ns, prop.identifier, tuple(prop.default_array))
+        else:
+            setattr(ns, prop.identifier, getattr(prop, "default", None))
+    return ns
 
 
 class HARDFLOW_Preferences(AddonPreferences):
@@ -44,6 +71,20 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "the ADD tool can also align its whole cut plane to that "
                     "face (Surface plane mode)",
         default=True,
+    )
+    default_plane: EnumProperty(
+        name="Default Plane",
+        description="Projection/construction plane the Draw tool starts on; "
+                    "save the live plane as the default with S while drawing",
+        items=[
+            ('VIEW', "View", "Perpendicular to the view (screen-aligned)"),
+            ('SURFACE', "Surface", "Aligned to the face under the first click"),
+            ('EDGES', "Edges", "Aligned to the selected edit-mesh edge(s)"),
+            ('X', "X", "World X-axis aligned grid"),
+            ('Y', "Y", "World Y-axis aligned grid"),
+            ('Z', "Z", "World Z-axis aligned grid"),
+        ],
+        default='VIEW',
     )
     snap_target: EnumProperty(
         name="Snap Target",
@@ -268,6 +309,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "grid_world")
         col.prop(self, "geo_snap")
         col.prop(self, "surface_snap")
+        col.prop(self, "default_plane")
         col.prop(self, "snap_target")
         col.prop(self, "snap_pixels")
         col.prop(self, "angle_step")

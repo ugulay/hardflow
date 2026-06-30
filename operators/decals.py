@@ -344,7 +344,10 @@ class HARDFLOW_OT_bake_decal(Operator):
             self.report({'WARNING'}, "Decal has no mesh target to bake into")
             return {'CANCELLED'}
         if not target.data.uv_layers:
-            self.report({'ERROR'}, "Target has no UV map -- unwrap it first")
+            # WARNING (not ERROR) so this is a clean rejection: an ERROR report
+            # makes bpy.ops raise for script callers instead of returning
+            # CANCELLED, and the sibling guards above already use WARNING.
+            self.report({'WARNING'}, "Target has no UV map -- unwrap it first")
             return {'CANCELLED'}
 
         scene = context.scene
