@@ -396,6 +396,28 @@ def test_bake_helpers():
     assert decal.bake_image_node(mat, norm) == node     # reused
 
 
+def test_discard_bake_image_rolls_back():
+    # The bake error path must undo only what it created: drop the image-texture
+    # node it wired in and the image datablock, but never a reused prior result.
+    _reset()
+    target = _add_cube("BakeRollback", size=2.0)
+    mat = decal.ensure_material(target)
+    img = decal.bake_image("HF_T_Discard", 64, is_data=True)
+    decal.bake_image_node(mat, img)
+    assert any(n.type == 'TEX_IMAGE' and n.image == img
+               for n in mat.node_tree.nodes)
+
+    # remove_*=False (a re-bake reusing a prior image/node) keeps everything.
+    decal.discard_bake_image(mat, img, remove_node=False, remove_image=False)
+    assert "HF_T_Discard" in bpy.data.images
+    assert any(n.type == 'TEX_IMAGE' for n in mat.node_tree.nodes)
+
+    # Full rollback drops the node and the now-unused image.
+    decal.discard_bake_image(mat, img, remove_node=True, remove_image=True)
+    assert not any(n.type == 'TEX_IMAGE' for n in mat.node_tree.nodes)
+    assert "HF_T_Discard" not in bpy.data.images
+
+
 def test_bake_decal_guards():
     _reset()
     hardflow.register()
