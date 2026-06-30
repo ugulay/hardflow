@@ -36,6 +36,9 @@ class _CurveDraw:
     _has_sag = False
     _can_follow = True
     _has_profile = False   # pipe overrides: square/rect swept cross-sections
+    # Cross-sections the P key cycles through (subclasses override). ROUND falls
+    # back to the curve bevel; the rest sweep a mesh section (build_pipe_mesh).
+    _PROFILE_CYCLE = ('ROUND', 'SQUARE', 'RECT')
 
     @classmethod
     def poll(cls, context):
@@ -249,8 +252,9 @@ class _CurveDraw:
             dirty = True
 
         elif (event.type == 'P' and event.value == 'PRESS' and self._has_profile):
-            self._profile = {'ROUND': 'SQUARE', 'SQUARE': 'RECT',
-                             'RECT': 'ROUND'}[self._profile]
+            cyc = self._PROFILE_CYCLE
+            i = cyc.index(self._profile) if self._profile in cyc else -1
+            self._profile = cyc[(i + 1) % len(cyc)]
             dirty = True
 
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
@@ -398,3 +402,26 @@ class HARDFLOW_OT_cable(_CurveDraw, Operator):
         return transform.cable_chain(
             [(p[0], p[1], p[2]) for p in anchors],
             segments=self._segments, sag=self._sag, axis=2)
+
+
+class HARDFLOW_OT_sweep(_CurveDraw, Operator):
+    bl_idname = "mesh.hardflow_sweep"
+    bl_label = "Hardflow Sweep"
+    bl_description = ("Draw a path and sweep a structural profile along it "
+                      "(SketchUp Follow Me): L / U / T / I / box cross-sections, "
+                      "P cycles")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    _title = "Sweep"
+    _has_sag = False
+    _can_follow = True
+    _has_profile = True
+    # Structural sections (no ROUND -- a sweep is always a meshed cross-section).
+    _PROFILE_CYCLE = ('L', 'U', 'T', 'I', 'SQUARE', 'RECT')
+
+    def _init_params(self, prefs):
+        self._radius = prefs.pipe_radius
+        self._offset = prefs.pipe_offset
+        self._sag = 0.0
+        self._segments = 12
+        self._profile = 'L'      # a structural section, not the round curve

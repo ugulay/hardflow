@@ -159,21 +159,6 @@ def test_adaptive_dimension():
     assert transform.adaptive_dimension(0.0, min_value=0.002) == 0.002
 
 
-def test_bevel_segments():
-    # a tiny chamfer relative to the object -> minimum segments
-    assert transform.bevel_segments(0.005, 2.0) == 2
-    # a wide chamfer -> more segments, but clamped
-    assert transform.bevel_segments(0.2, 2.0) > 2
-    assert transform.bevel_segments(10.0, 2.0) == 12       # clamp to max
-    # degenerate inputs -> minimum
-    assert transform.bevel_segments(0.1, 0.0) == 2
-    assert transform.bevel_segments(0.0, 2.0) == 2
-    # bigger relative width -> at least as many segments (monotonic)
-    a = transform.bevel_segments(0.05, 2.0)
-    b = transform.bevel_segments(0.1, 2.0)
-    assert b >= a
-
-
 # --- offset: 2D polygon inset (SketchUp Offset) ------------------------------
 
 def test_signed_area_winding():
@@ -250,6 +235,47 @@ def test_ngon_points():
     # sides < 3 is clamped to a triangle; sides count is respected otherwise
     assert len(grid.ngon_points((0, 0), (2, 0), 1)) == 3
     assert len(grid.ngon_points((0, 0), (2, 0), 6)) == 6
+
+
+def test_slot_points():
+    # a wide stadium: caps on the short (vertical) ends, straight long sides.
+    pts = grid.slot_points((0.0, 0.0), (4.0, 2.0), segments=8)
+    assert len(pts) == 2 * (8 + 1)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    # the outline stays inside the bounding box defined by the two corners
+    assert math.isclose(min(xs), 0.0, abs_tol=1e-9)
+    assert math.isclose(max(xs), 4.0, abs_tol=1e-9)
+    assert min(ys) >= -1e-9 and max(ys) <= 2.0 + 1e-9
+    # a tall slot rotates the caps onto the top / bottom
+    tall = grid.slot_points((0.0, 0.0), (2.0, 6.0), segments=4)
+    assert len(tall) == 2 * (4 + 1)
+
+
+def test_star_points():
+    # a 5-point star -> 10 vertices alternating outer / inner radius.
+    pts = grid.star_points((0.0, 0.0), (1.0, 0.0), 5, inner_ratio=0.5)
+    assert len(pts) == 10
+    radii = [math.hypot(x, y) for x, y in pts]
+    assert math.isclose(radii[0], 1.0, abs_tol=1e-9)          # outer spike
+    assert math.isclose(radii[1], 0.5, abs_tol=1e-9)          # inner valley
+    # first spike aims at the edge point
+    assert math.isclose(pts[0][0], 1.0, abs_tol=1e-9)
+    assert math.isclose(pts[0][1], 0.0, abs_tol=1e-9)
+    # spikes < 2 clamp to 2 (4 verts); ratio is clamped into (0, 1)
+    assert len(grid.star_points((0, 0), (1, 0), 1)) == 4
+
+
+def test_arc_points():
+    # a quarter sector: center + (segments + 1) arc samples, all on the radius.
+    pts = grid.arc_points((0.0, 0.0), (1.0, 0.0), segments=8, sweep=math.pi / 2)
+    assert len(pts) == 1 + (8 + 1)
+    assert pts[0] == (0.0, 0.0)                               # the wedge apex
+    for x, y in pts[1:]:
+        assert math.isclose(math.hypot(x, y), 1.0, abs_tol=1e-9)
+    # arc spans from the edge angle (0) through the sweep (90 deg)
+    assert math.isclose(pts[1][0], 1.0, abs_tol=1e-9)        # start on +x
+    assert math.isclose(pts[-1][1], 1.0, abs_tol=1e-9)       # end on +y
 
 
 # --- grid: angle lock --------------------------------------------------------

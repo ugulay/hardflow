@@ -126,64 +126,6 @@ def test_transfer_decal_retargets():
         hardflow.unregister()
 
 
-def test_curve_array_modifiers():
-    # Array along a curve: an Array (fit-curve) + a Curve deform pointing at the
-    # selected curve land on the active mesh.
-    _reset()
-    hardflow.register()
-    try:
-        cd = bpy.data.curves.new("Path", 'CURVE')
-        cd.dimensions = '3D'
-        sp = cd.splines.new('POLY')
-        sp.points.add(1)
-        sp.points[0].co = (0.0, 0.0, 0.0, 1.0)
-        sp.points[1].co = (5.0, 0.0, 0.0, 1.0)
-        cobj = bpy.data.objects.new("Path", cd)
-        bpy.context.collection.objects.link(cobj)
-        mesh = _add_cube("Body", size=1.0)
-        for o in bpy.context.selected_objects:
-            o.select_set(False)
-        cobj.select_set(True)
-        mesh.select_set(True)
-        bpy.context.view_layer.objects.active = mesh
-        res = bpy.ops.object.hardflow_curve_array(count=0, axis='POS_X')
-        assert res == {'FINISHED'}, res
-        arr = mesh.modifiers.get("HF_CurveArray")
-        deform = mesh.modifiers.get("HF_CurveDeform")
-        assert arr is not None and arr.fit_type == 'FIT_CURVE' and arr.curve is cobj
-        assert deform is not None and deform.object is cobj
-    finally:
-        hardflow.unregister()
-
-
-def test_mirror_pivot_cursor_and_active():
-    # Mirror across the 3D cursor (an empty pivot) and across the active object.
-    _reset()
-    hardflow.register()
-    try:
-        a = _add_cube("A", size=2.0)
-        bpy.context.scene.cursor.location = (1.0, 0.0, 0.0)
-        _activate(a)
-        res = bpy.ops.object.hardflow_mirror(axis='X', pivot='CURSOR')
-        assert res == {'FINISHED'}, res
-        m = a.modifiers.get("HF_Mirror")
-        assert m is not None and m.mirror_object is not None
-        assert m.mirror_object.name.startswith("HF_MirrorPivot")
-
-        b = _add_cube("B", size=2.0, location=(3, 0, 0))
-        for o in bpy.context.selected_objects:
-            o.select_set(False)
-        b.select_set(True)
-        a.select_set(True)
-        bpy.context.view_layer.objects.active = a   # active = mirror plane
-        res = bpy.ops.object.hardflow_mirror(axis='X', pivot='ACTIVE')
-        assert res == {'FINISHED'}, res
-        bm = b.modifiers.get("HF_Mirror")
-        assert bm is not None and bm.mirror_object is a
-    finally:
-        hardflow.unregister()
-
-
 def test_robust_boolean_intersect():
     # The draw tool's Intersect mode (and the menu entry) route to an INTERSECT
     # boolean: keep only the volume inside the cutter. Verify against real Blender.
@@ -215,43 +157,6 @@ def test_add_boolean_nondestructive():
     assert cutter.display_type == 'WIRE'
 
 
-def test_bevel_and_mirror_operators():
-    _reset()
-    hardflow.register()
-    try:
-        ob = _add_cube("Obj")
-        _activate(ob)
-        # EXEC_DEFAULT -> execute() (redo path); modal invoke is skipped.
-        # adaptive=False so the explicit width is honoured (adaptive would scale
-        # the width to the object's size instead).
-        bpy.ops.object.hardflow_bevel(width=0.03, segments=3, weighted_normal=True,
-                                      adaptive=False)
-        assert any(m.type == 'BEVEL' for m in ob.modifiers), "bevel not added"
-        assert any(m.type == 'WEIGHTED_NORMAL' for m in ob.modifiers), \
-            "weighted normal not added"
-        bev = next(m for m in ob.modifiers if m.type == 'BEVEL')
-        assert bev.segments == 3 and abs(bev.width - 0.03) < 1e-6
-        bpy.ops.object.hardflow_mirror(axis='X')
-        assert any(m.type == 'MIRROR' for m in ob.modifiers), "mirror not added"
-    finally:
-        hardflow.unregister()
-
-
-def test_adaptive_bevel_scales_to_object():
-    # with adaptive on (default), the bevel width is derived from the object's
-    # size: a 2 m cube -> 2% of 2.0 = 0.04, not the fixed 0.02 default.
-    _reset()
-    hardflow.register()
-    try:
-        ob = _add_cube("Big", size=2.0)            # 2 m across
-        _activate(ob)
-        bpy.ops.object.hardflow_bevel(adaptive=True)
-        bev = next(m for m in ob.modifiers if m.type == 'BEVEL')
-        assert abs(bev.width - 0.04) < 1e-6, bev.width
-    finally:
-        hardflow.unregister()
-
-
 def test_build_face_and_cleanup():
     _reset()
     # build_face: a single n-gon from 4 corners
@@ -271,6 +176,87 @@ def test_build_face_and_cleanup():
     assert len(cube.data.vertices) <= before  # cleanup must not increase vertices
 
 
+def test_build_primitives():
+    # New starter primitives: cylinder / cone / sphere / tube builders + the
+    # add_primitive operator that places + selects each one.
+    import bmesh
+    _reset()
+    cyl = geometry.build_cylinder(radius=0.5, depth=1.0, segments=12)
+    assert cyl is not None and len(cyl.vertices) == 24        # 12 top + 12 bottom
+    assert len(cyl.polygons) == 14                            # 12 walls + 2 caps
+
+    cone = geometry.build_cone(radius=0.5, depth=1.0, segments=12)
+    assert cone is not None and len(cone.vertices) == 13      # base ring + apex
+
+    sphere = geometry.build_uv_sphere(radius=0.5, segments=16, rings=8)
+    assert sphere is not None and len(sphere.polygons) > 0
+
+    tube = geometry.build_tube(radius=0.5, inner_radius=0.3, depth=1.0, segments=12)
+    assert tube is not None and len(tube.vertices) == 48      # 4 rings x 12
+    bm = bmesh.new()
+    bm.from_mesh(tube)
+    assert all(len(e.link_faces) == 2 for e in bm.edges), "tube not a closed solid"
+    bm.free()
+
+    hardflow.register()
+    try:
+        for kind, prefix in (('CYLINDER', 'Hardflow_Cylinder'),
+                             ('CONE', 'Hardflow_Cone'),
+                             ('SPHERE', 'Hardflow_Sphere'),
+                             ('TUBE', 'Hardflow_Tube')):
+            res = bpy.ops.object.hardflow_add_primitive(kind=kind)
+            assert res == {'FINISHED'}, (kind, res)
+            ob = bpy.context.active_object
+            assert ob is not None and ob.name.startswith(prefix), (kind, ob)
+            assert ob.select_get()
+    finally:
+        hardflow.unregister()
+
+
+def test_new_cutter_shapes_build():
+    # The new draw shapes (slot / star / arc) lift to valid prism cutters, so the
+    # draw tool's commit path builds real boolean cutters from them.
+    import math
+    _reset()
+    vd = Vector((0, 0, 1))
+    for label, pts2d in (
+            ("slot", grid.slot_points((0, 0), (4, 2), segments=6)),
+            ("star", grid.star_points((0, 0), (1, 0), 5)),
+            ("arc", grid.arc_points((0, 0), (1, 0), segments=8, sweep=math.pi / 2))):
+        corners = [Vector((x, y, 0.0)) for x, y in pts2d]
+        mesh = geometry.build_prisms([(corners, vd)], 1.0)
+        assert mesh is not None, label
+        assert len(mesh.polygons) > 0, label
+
+
+def test_live_boolean_preview_and_cutter_options():
+    # The cutter-option / live-preview preferences exist with their defaults, and
+    # the live-preview mechanism (a temp Boolean modifier on the target pointing
+    # at the cutter) shows the real result in the evaluated mesh before commit.
+    _reset()
+    hardflow.register()
+    try:
+        from hardflow.preferences import get_prefs
+        prefs = get_prefs(bpy.context)
+        for attr in ("live_boolean_preview", "draw_inset", "draw_bevel_cut",
+                     "draw_cutter_bevel", "draw_array_count", "draw_array_axis"):
+            assert hasattr(prefs, attr), attr
+        assert prefs.live_boolean_preview is False and prefs.draw_array_count == 1
+
+        target = _add_cube("Target", size=2.0)
+        cutter = _add_cube("Cutter", size=1.0, location=(1, 0, 0))
+        mod = target.modifiers.new("HF_LivePreview", 'BOOLEAN')
+        mod.operation = 'DIFFERENCE'
+        mod.object = cutter
+        deps = bpy.context.evaluated_depsgraph_get()
+        ev = target.evaluated_get(deps)
+        assert len(ev.data.polygons) != 6, "live boolean modifier showed no result"
+        target.modifiers.remove(mod)
+        assert target.modifiers.get("HF_LivePreview") is None
+    finally:
+        hardflow.unregister()
+
+
 def test_build_pipe():
     _reset()
     pts = [Vector((0, 0, 0)), Vector((1, 0, 0)), Vector((1, 1, 0))]
@@ -281,20 +267,6 @@ def test_build_pipe():
     assert sp.type == 'POLY' and len(sp.points) == 3
     # single point -> None
     assert geometry.build_pipe([Vector((0, 0, 0))]) is None
-
-
-def test_clean_operator():
-    _reset()
-    hardflow.register()
-    try:
-        ob = _add_cube("Obj", size=2.0)
-        _activate(ob)
-        before = len(ob.data.vertices)
-        bpy.ops.object.hardflow_clean()
-        # a clean cube should not change (8 vertices preserved)
-        assert len(ob.data.vertices) == before == 8
-    finally:
-        hardflow.unregister()
 
 
 def test_apply_cutters_operator():
@@ -563,53 +535,6 @@ def test_bake_decal_guards():
         hardflow.unregister()
 
 
-def test_symmetrize_mesh():
-    _reset()
-    # Blender's symmetrize bisects at the symmetry plane then mirrors, so a
-    # centered cube gains the X=0 mid-loop (12 verts / 10 faces). Assert it stays
-    # a valid closed manifold rather than a brittle exact vertex count.
-    cube = _add_cube("Sym", size=2.0)
-    geometry.symmetrize_mesh(cube, '+X')
-    import bmesh
-    bm = bmesh.new()
-    bm.from_mesh(cube.data)
-    assert all(len(e.link_faces) == 2 for e in bm.edges), "open mesh after symmetrize"
-    bm.free()
-    assert len(cube.data.polygons) >= 6, len(cube.data.polygons)
-
-
-def test_mark_sharp_by_angle():
-    _reset()
-    import math
-    cube = _add_cube("Sharp", size=2.0)
-    # every cube edge is a 90 degree crease -> all 12 are sharp at a 30 deg limit
-    n = geometry.mark_sharp_by_angle(cube, math.radians(30))
-    assert n == 12, n
-    assert all(p.use_smooth for p in cube.data.polygons)
-    assert any(not e.use_edge_sharp for e in cube.data.edges) is False  # all sharp
-    # a very high limit marks nothing sharp
-    n2 = geometry.mark_sharp_by_angle(cube, math.radians(170))
-    assert n2 == 0
-
-
-def test_symmetrize_and_sharpen_operators():
-    _reset()
-    hardflow.register()
-    try:
-        ob = _add_cube("Obj", size=2.0)
-        _activate(ob)
-        res = bpy.ops.object.hardflow_symmetrize(direction='+X')
-        assert res == {'FINISHED'}, res
-        # The default 'WN' preset deliberately overrides add_bevel; use the
-        # SSharp preset (sharp + bevel weight + angle-limited bevel) to get one.
-        res = bpy.ops.object.hardflow_sharpen(preset='SSHARP', angle_deg=30.0)
-        assert res == {'FINISHED'}, res
-        assert any(m.type == 'BEVEL' for m in ob.modifiers)
-        assert any(m.type == 'WEIGHTED_NORMAL' for m in ob.modifiers)
-    finally:
-        hardflow.unregister()
-
-
 def test_boolean_from_selection():
     _reset()
     hardflow.register()
@@ -625,27 +550,6 @@ def test_boolean_from_selection():
         # destructive by default: target changed, cutter removed
         assert len(target.data.polygons) != before
         assert bpy.data.objects.get("Cutter") is None
-    finally:
-        hardflow.unregister()
-
-
-def test_array_operators():
-    _reset()
-    hardflow.register()
-    try:
-        ob = _add_cube("Obj", size=1.0)
-        _activate(ob)
-        bpy.ops.object.hardflow_array(count=4, axis='X', factor=1.5)
-        arr = next((m for m in ob.modifiers if m.type == 'ARRAY'), None)
-        assert arr is not None and arr.count == 4
-        assert arr.use_relative_offset
-
-        ob2 = _add_cube("Obj2", size=1.0, location=(3, 0, 0))
-        _activate(ob2)
-        bpy.ops.object.hardflow_radial_array(count=6, axis='Z')
-        rad = next((m for m in ob2.modifiers if m.name == "HF_RadialArray"), None)
-        assert rad is not None and rad.count == 6
-        assert rad.use_object_offset and rad.offset_object is not None
     finally:
         hardflow.unregister()
 
@@ -1081,26 +985,6 @@ def test_build_box_and_plane():
     assert all(abs(v.co.z) < 1e-9 for v in plane.vertices)
 
 
-def test_edit_bevel_edges():
-    _reset()
-    cube = _add_cube("BevelEdit", size=2.0)
-    _edit_select_faces(cube, [0])            # selects that face's 4 edges too
-    import bmesh
-    bm = bmesh.from_edit_mesh(cube.data)
-    bm.edges.ensure_lookup_table()
-    sel_edges = sum(1 for e in bm.edges if e.select)
-    assert sel_edges >= 1
-    before = len(cube.data.polygons)
-    n = geometry.edit_bevel_edges(cube, width=0.1, segments=2)
-    bpy.ops.object.mode_set(mode='OBJECT')
-    assert n == sel_edges
-    assert len(cube.data.polygons) > before, "edge bevel added no geometry"
-    # nothing selected -> no-op
-    _edit_select_faces(cube, [])
-    assert geometry.edit_bevel_edges(cube, width=0.1) == 0
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-
 def test_build_line_guide():
     _reset()
     me = geometry.build_line(4.0, 'X')
@@ -1483,39 +1367,15 @@ def test_build_prism_project_taper():
 
 # --- v1.5 Hard Ops parity ----------------------------------------------------
 
-def test_dice_mesh():
-    _reset()
-    cube = _add_cube("Dice", size=2.0)
-    before = len(cube.data.polygons)
-    passes = geometry.dice_mesh(cube, (2, 2, 1), mark_sharp=True)
-    assert passes == 2                       # one cut per axis with count 2
-    assert len(cube.data.polygons) > before
-
-
 def test_edge_weights():
+    # Edit-Mode edge bevel-weight / crease on the selected edges (the surviving
+    # weighting workflow that feeds a weight-limited Bevel or creased Subdiv).
     _reset()
-    import math
     cube = _add_cube("Weights", size=2.0)
-    geometry.mark_sharp_by_angle(cube, math.radians(30))   # all 12 edges sharp
-    n = geometry.set_sharp_edge_weights(cube, bevel_weight=1.0, crease=0.5)
-    assert n == 12
-
     _edit_select_faces(cube, [0])
     m = geometry.edit_set_edge_weights(cube, bevel_weight=1.0, only_selected=True)
     bpy.ops.object.mode_set(mode='OBJECT')
     assert m == 4                            # one quad face = 4 edges
-
-
-def test_greeble_builders():
-    _reset()
-    steps = geometry.build_steps(count=4, rise=0.1, run=0.1, width=1.0)
-    assert steps is not None and len(steps.polygons) > 0
-    taper = geometry.build_taper(1.0, 0.5, 1.0)
-    assert taper is not None and len(taper.vertices) == 8
-    pyr = geometry.build_taper(1.0, 0.0, 1.0)         # top=0 -> pyramid (5 verts)
-    assert len(pyr.vertices) == 5
-    knurl = geometry.build_knurl(0.5, 1.0, teeth=8)
-    assert knurl is not None and len(knurl.vertices) == 8 * 2 * 2
 
 
 # --- v1.6 Grid Modeler extras ------------------------------------------------
@@ -1528,6 +1388,24 @@ def test_pipe_mesh_and_profile():
     me = geometry.build_pipe_mesh(pts, sq)
     assert me is not None and len(me.polygons) > 0
     assert geometry.build_pipe_mesh([Vector((0, 0, 0))], sq) is None
+
+
+def test_sweep_profiles():
+    # The Sweep tool's structural cross-sections produce valid swept solids and
+    # the operator registers (the modal itself is in the manual checklist).
+    expected = {'L': 6, 'U': 8, 'T': 8, 'I': 12}
+    pts = [Vector((0, 0, 0)), Vector((0, 0, 1)), Vector((0, 0, 2))]
+    for profile, count in expected.items():
+        prof = geometry.profile_points(profile, 0.2)
+        assert prof is not None and len(prof) == count, profile
+        me = geometry.build_pipe_mesh(pts, prof)
+        assert me is not None and len(me.polygons) > 0, profile
+    _reset()
+    hardflow.register()
+    try:
+        assert hasattr(bpy.ops.mesh, "hardflow_sweep")
+    finally:
+        hardflow.unregister()
 
 
 def test_build_loft():
@@ -1746,10 +1624,8 @@ def test_new_operators_registered():
     _reset()
     hardflow.register()
     try:
-        for name in ("hardflow_dice",
-                     "hardflow_display_toggle", "hardflow_random_color",
-                     "hardflow_copy_material", "hardflow_add_step",
-                     "hardflow_add_taper", "hardflow_add_knurl",
+        for name in ("hardflow_display_toggle", "hardflow_random_color",
+                     "hardflow_copy_material", "hardflow_recalc_normals",
                      "hardflow_loft", "hardflow_match_decal",
                      "hardflow_retrim_decal", "hardflow_conform_decal",
                      "hardflow_create_decal", "hardflow_library_rename",
@@ -1757,6 +1633,32 @@ def test_new_operators_registered():
                      "hardflow_export_asset"):
             assert hasattr(bpy.ops.object, name), "missing operator: %s" % name
         assert hasattr(bpy.ops.mesh, "hardflow_edge_weight")
+    finally:
+        hardflow.unregister()
+
+
+def test_menu_items_resolve():
+    # Every operator + icon referenced by the header-menu tables resolves, so the
+    # menus (and the panel rows that share the same operators/icons) draw without
+    # a bad-idname or bad-icon error -- the class of failure headless can't click.
+    _reset()
+    hardflow.register()
+    try:
+        from hardflow.ui import menu
+        icons = {e.identifier for e in
+                 bpy.types.UILayout.bl_rna.functions['operator']
+                 .parameters['icon'].enum_items}
+        tables = (menu._BUILD_ITEMS, menu._BOOLEAN_ITEMS, menu._DISPLAY_ITEMS,
+                  menu._CURVE_ITEMS, menu._ASSET_ITEMS)
+        for table in tables:
+            for entry in table:
+                if entry is None:
+                    continue
+                idname, _text, icon, _props = entry
+                area, op = idname.split(".", 1)
+                root = getattr(bpy.ops, area)
+                assert hasattr(root, op), "unregistered operator: %s" % idname
+                assert icon in icons, "bad icon: %s" % icon
     finally:
         hardflow.unregister()
 

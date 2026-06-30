@@ -276,6 +276,44 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "merge coplanar faces)",
         default=False,
     )
+    live_boolean_preview: BoolProperty(
+        name="Live Boolean Preview",
+        description="While drawing a Cut/Make/Intersect, show the actual boolean "
+                    "RESULT live on the target (a temporary modifier, removed on "
+                    "commit/cancel) instead of only the wire cutter cage. Toggle "
+                    "with J while drawing; skipped on heavy targets for speed",
+        default=False,
+    )
+    draw_inset: FloatProperty(
+        name="Cutter Inset (m)",
+        description="Default amount the drawn loop is offset in (-) / out (+) "
+                    "before the cut; adjust live with - and = while drawing",
+        default=0.0, soft_min=-1.0, soft_max=1.0,
+    )
+    draw_bevel_cut: BoolProperty(
+        name="Bevel On Cut",
+        description="Default: add a small angle-limited bevel to the target's cut "
+                    "edge so it reads chamfered; toggle live with B",
+        default=False,
+    )
+    draw_cutter_bevel: BoolProperty(
+        name="Bevelled Cutter",
+        description="Default: chamfer the cutter walls so the recess has bevelled "
+                    "sides; toggle live with C",
+        default=False,
+    )
+    draw_array_count: IntProperty(
+        name="Cutter Array",
+        description="Default number of array copies stamped into one cutter; "
+                    "cycle live with A (axis with D)",
+        default=1, min=1, max=64,
+    )
+    draw_array_axis: EnumProperty(
+        name="Array Axis",
+        description="World axis the cutter array repeats along",
+        items=[('X', "X", ""), ('Y', "Y", ""), ('Z', "Z", "")],
+        default='X',
+    )
     default_solver: EnumProperty(
         name="Boolean Solver",
         items=[
@@ -341,6 +379,13 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "non_destructive")
         col.prop(self, "multi_object")
         col.prop(self, "cleanup_after_cut")
+        col.prop(self, "live_boolean_preview")
+        col.prop(self, "draw_inset")
+        col.prop(self, "draw_bevel_cut")
+        col.prop(self, "draw_cutter_bevel")
+        row = col.row(align=True)
+        row.prop(self, "draw_array_count")
+        row.prop(self, "draw_array_axis", text="")
         col.prop(self, "default_solver")
         row = col.row(align=True)
         row.prop(self, "line_color")

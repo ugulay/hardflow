@@ -164,6 +164,80 @@ def ngon_points(center, edge, sides, rotation=0.0):
     return pts
 
 
+def slot_points(a, b, segments=8):
+    """Stadium / slot outline (a rectangle with two semicircular caps) from two
+    diagonal points a, b. The caps sit on the SHORTER pair of sides; the straight
+    sides span the longer axis. `segments` points per cap. Returns the closed
+    outline in whatever 2D space a and b live in (screen pixels or plane u, v
+    meters), like box_points. A square (equal extents) degenerates to a circle."""
+    segments = max(1, int(segments))
+    x0, x1 = sorted((a[0], b[0]))
+    y0, y1 = sorted((a[1], b[1]))
+    w, h = x1 - x0, y1 - y0
+    pts = []
+    if w >= h:                       # horizontal slot -> caps on left / right
+        r = h / 2.0
+        cy = (y0 + y1) / 2.0
+        cxr, cxl = x1 - r, x0 + r
+        for i in range(segments + 1):           # right cap: +90deg down to -90deg
+            ang = math.pi / 2 - math.pi * (i / segments)
+            pts.append((cxr + math.cos(ang) * r, cy + math.sin(ang) * r))
+        for i in range(segments + 1):           # left cap: -90deg round to +90deg
+            ang = -math.pi / 2 - math.pi * (i / segments)
+            pts.append((cxl + math.cos(ang) * r, cy + math.sin(ang) * r))
+    else:                            # vertical slot -> caps on top / bottom
+        r = w / 2.0
+        cx = (x0 + x1) / 2.0
+        cyt, cyb = y1 - r, y0 + r
+        for i in range(segments + 1):           # top cap: 0deg round to 180deg
+            ang = math.pi * (i / segments)
+            pts.append((cx + math.cos(ang) * r, cyt + math.sin(ang) * r))
+        for i in range(segments + 1):           # bottom cap: 180deg round to 360
+            ang = math.pi + math.pi * (i / segments)
+            pts.append((cx + math.cos(ang) * r, cyb + math.sin(ang) * r))
+    return pts
+
+
+def star_points(center, edge, points, inner_ratio=0.5, rotation=0.0):
+    """Regular n-pointed star outline from a center and an edge point. The edge
+    point sets the outer radius + the orientation of the first spike (so dragging
+    rotates the star); inner vertices sit at `inner_ratio` of that radius.
+    `points` is the spike count (clamped to >= 2), so the polygon has 2*points
+    vertices. `rotation` adds an angular offset in radians. Pure 2D, like
+    ngon_points."""
+    points = max(2, int(points))
+    dx = edge[0] - center[0]
+    dy = edge[1] - center[1]
+    r_out = math.hypot(dx, dy)
+    r_in = r_out * max(0.01, min(0.99, inner_ratio))
+    base = math.atan2(dy, dx) + rotation
+    n = points * 2
+    pts = []
+    for i in range(n):
+        ang = base + (i / n) * math.tau
+        r = r_out if i % 2 == 0 else r_in
+        pts.append((center[0] + math.cos(ang) * r, center[1] + math.sin(ang) * r))
+    return pts
+
+
+def arc_points(center, edge, segments=16, sweep=math.pi / 2, rotation=0.0):
+    """Filled circular sector (pie wedge) outline: the `center`, then an arc of
+    `segments` spans sampled from the edge point's angle through `sweep` radians.
+    The edge point sets the radius + start angle (so dragging aims the wedge);
+    `rotation` adds an offset. Returns a closed polygon (center + arc) in 2D, like
+    ngon_points. A `sweep` of tau is a full disc."""
+    segments = max(1, int(segments))
+    dx = edge[0] - center[0]
+    dy = edge[1] - center[1]
+    r = math.hypot(dx, dy)
+    base = math.atan2(dy, dx) + rotation
+    pts = [(center[0], center[1])]
+    for i in range(segments + 1):
+        ang = base + sweep * (i / segments)
+        pts.append((center[0] + math.cos(ang) * r, center[1] + math.sin(ang) * r))
+    return pts
+
+
 def centroid(points):
     """Average of a list of 2D points (the shape's in-plane center). Returns
     (0, 0) for an empty list. Pure 2D."""

@@ -1,13 +1,14 @@
 # Main draw operator: draw a shape on screen, project to 3D, apply boolean.
 #
-# SHAPE: BOX / CIRCLE / POLY / NGON   MODE: CUT / SLICE / MAKE / INTERSECT / FACE / KNIFE
+# SHAPE: BOX / CIRCLE / POLY / NGON / SLOT / STAR / ARC
+# MODE: CUT / SLICE / MAKE / JOIN / INTERSECT / FACE / KNIFE
 # Shortcuts (inside modal):
 #   Left click    place point / start-finish shape
 #   Enter         close POLY and apply
 #   0-9 . (type)  lock the shape to an exact size (radius / extent / segment, m)
 #   Backspace     edit a typed size, else delete last POLY point
-#   Q/W/E/R       shape = BOX / CIRCLE / POLY / NGON
-#   [ / ]         decrease / increase N-gon side count
+#   Q/W/E/R/T/Y/U shape = BOX / CIRCLE / POLY / NGON / SLOT / STAR / ARC
+#   [ / ]         decrease / increase N-gon sides (ARC: sweep angle)
 #   Tab / Shift+Tab   cycle the mode (Cut/Slice/Make/Intersect/Face/Knife)
 #   X             toggle snap
 #   Right click / ESC  cancel
@@ -26,6 +27,9 @@ _SHAPES = [
     ('CIRCLE', "Circle", "Circle"),
     ('POLY', "Polygon", "Freeform polygon"),
     ('NGON', "N-gon", "Regular polygon (side count from preferences / [ ])"),
+    ('SLOT', "Slot", "Rounded-rectangle / stadium (cap segments from [ ])"),
+    ('STAR', "Star", "N-pointed star (point count from [ ])"),
+    ('ARC', "Arc", "Filled circular sector / pie wedge (sweep from [ ])"),
 ]
 _MODES = [
     ('CUT', "Cut", "Boolean DIFFERENCE"),
@@ -90,14 +94,19 @@ class HARDFLOW_OT_draw(Operator):
         self.plane = prefs.default_plane  # saved projection plane (S saves it)
         self.plane_spin = 0.0            # live in-plane grid rotation (Shift+arrows)
         self.sides = prefs.ngon_sides    # N-gon side count (adjust live with [ ])
-        # In-draw operations (v1.4): all baked into one cutter at commit.
-        self.inset = 0.0          # offset the drawn loop in/out (m); -/= adjust
+        self.arc_sweep = 1.5707963267948966  # ARC sector sweep (rad); [ ] adjusts
+        # In-draw operations (v1.4): all baked into one cutter at commit. The
+        # defaults are seeded from the "Cutter Options" preferences so they can be
+        # preset from the N-panel, then live-tweaked with the modal keys.
+        self.inset = prefs.draw_inset       # offset the drawn loop in/out; -/= adjust
         self.rotation = 0.0       # in-plane shape rotation (rad); , / . adjust
-        self.array_count = 1      # stamp N copies along an axis; A adjusts
-        self.array_axis = 'X'     # array world axis; D cycles
+        self.array_count = prefs.draw_array_count   # stamp N copies; A adjusts
+        self.array_axis = prefs.draw_array_axis     # array world axis; D cycles
         self.mirror_axis = ''     # live mirror across a world axis; M cycles
-        self.bevel_cut = False    # add an angle-limited bevel to the cut; B toggles
-        self.cutter_bevel = False  # chamfer the cutter itself (bevelled cut); C toggles
+        self.bevel_cut = prefs.draw_bevel_cut       # bevel the cut edge; B toggles
+        self.cutter_bevel = prefs.draw_cutter_bevel  # chamfer the cutter; C toggles
+        self.live_bool = prefs.live_boolean_preview  # live boolean result; J toggles
+        self._bool_targets = []   # targets carrying the live-preview boolean mod
         self.grid_size = prefs.grid_world  # live grid spacing (Ctrl+Wheel adjusts)
         self.depth = 0.0          # explicit cutter depth (0 = auto pierce); PgUp/Dn
         self.points = []          # confirmed screen points (current view)
@@ -202,9 +211,10 @@ class HARDFLOW_OT_draw(Operator):
                 if self.world_points:
                     self.world_points.pop()
 
-        elif event.type in {'Q', 'W', 'E', 'R'} and event.value == 'PRESS':
-            self.shape = {'Q': 'BOX', 'W': 'CIRCLE', 'E': 'POLY',
-                          'R': 'NGON'}[event.type]
+        elif event.type in {'Q', 'W', 'E', 'R', 'T', 'Y', 'U'} \
+                and event.value == 'PRESS':
+            self.shape = {'Q': 'BOX', 'W': 'CIRCLE', 'E': 'POLY', 'R': 'NGON',
+                          'T': 'SLOT', 'Y': 'STAR', 'U': 'ARC'}[event.type]
             self.points = []
             self.world_points = []
             self.typed = ""
@@ -212,7 +222,16 @@ class HARDFLOW_OT_draw(Operator):
         elif (event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}
               and event.value == 'PRESS'):
             step = 1 if event.type == 'RIGHT_BRACKET' else -1
-            self.sides = max(3, min(64, self.sides + step))
+            # On ARC the bracket keys grow / shrink the sector sweep (15deg steps,
+            # clamped to a full turn); for the other shapes they set the side /
+            # point / cap-segment count.
+            if self.shape == 'ARC':
+                import math
+                self.arc_sweep = max(math.radians(15),
+                                     min(math.tau,
+                                         self.arc_sweep + step * math.radians(15)))
+            else:
+                self.sides = max(3, min(64, self.sides + step))
 
         # Tab / Shift+Tab cycle the boolean mode (the number row now types an
         # exact size -- Grid Modeler / Boxcutter precision entry).
@@ -277,6 +296,12 @@ class HARDFLOW_OT_draw(Operator):
 
         elif event.type == 'N' and event.value == 'PRESS':
             self.nd = not self.nd
+
+        elif event.type == 'J' and event.value == 'PRESS':
+            # Toggle the live boolean RESULT preview (temp modifier on the target).
+            self.live_bool = not self.live_bool
+            if not self.live_bool:
+                self._clear_live_boolean(context)
 
         elif event.type == 'V' and event.value == 'PRESS':
             self.geo = not self.geo
@@ -688,7 +713,25 @@ class HARDFLOW_OT_draw(Operator):
 
     # --- visual feedback ------------------------------------------------
 
-    def _shape_screen_points(self):
+    def _shape_corners(self, a, b):
+        """The two-point shape (BOX/CIRCLE/NGON) corners from diagonal/center a
+        and edge b, in whatever 2D space a and b live in (screen pixels or plane
+        u,v meters). POLY is handled by the caller."""
+        if self.shape == 'BOX':
+            return grid.box_points(a, b)
+        if self.shape == 'CIRCLE':
+            return grid.circle_points(a, b)
+        if self.shape == 'NGON':
+            return grid.ngon_points(a, b, self.sides)
+        if self.shape == 'SLOT':
+            return grid.slot_points(a, b, self.sides)
+        if self.shape == 'STAR':
+            return grid.star_points(a, b, self.sides)
+        if self.shape == 'ARC':
+            return grid.arc_points(a, b, self.sides, self.arc_sweep)
+        return []
+
+    def _shape_screen_points(self, context):
         if self.shape == 'POLY':
             pts = list(self.points)
             if pts:
@@ -698,13 +741,37 @@ class HARDFLOW_OT_draw(Operator):
             return []
         a = self.points[0]
         b = self.points[1] if len(self.points) > 1 else self.cursor
-        if self.shape == 'BOX':
-            return grid.box_points(a, b)
-        if self.shape == 'CIRCLE':
-            return grid.circle_points(a, b)
-        if self.shape == 'NGON':
-            return grid.ngon_points(a, b, self.sides)
-        return []
+        # VIEW faces the camera -> a screen-aligned outline is correct. On a
+        # fixed plane (SURFACE/EDGES/X/Y/Z) build the shape in the plane's (u, v)
+        # meter space instead, so its edges line up with the surface grid and the
+        # preview foreshortens onto the plane (Grid Modeler / Boxcutter feel)
+        # rather than reading as a flat screen overlay.
+        if self.plane == 'VIEW':
+            return self._shape_corners(a, b)
+        return self._plane_shape_screen(context, a, b)
+
+    def _plane_shape_screen(self, context, a, b):
+        """Build a two-point shape on the active fixed plane: convert the two
+        screen anchors to the plane's (u, v) meters, lay out the box/circle/n-gon
+        there (so it is plane-axis-aligned), then project each corner back to
+        screen for display. Falls back to a screen-space outline if the plane is
+        edge-on or a corner projects off-screen."""
+        region, rv3d = context.region, context.region_data
+        origin, right, up, normal = self._plane_basis(context)
+        a3 = raycast.ray_to_plane(region, rv3d, a, origin, normal)
+        b3 = raycast.ray_to_plane(region, rv3d, b, origin, normal)
+        if a3 is None or b3 is None:
+            return self._shape_corners(a, b)
+        a_uv = raycast.world_to_plane_uv(a3, origin, right, up)
+        b_uv = raycast.world_to_plane_uv(b3, origin, right, up)
+        out = []
+        for u, v in self._shape_corners(a_uv, b_uv):
+            w = raycast.plane_uv_to_world(u, v, origin, right, up)
+            s = raycast.world_to_screen(region, rv3d, w)
+            if s is None:
+                return self._shape_corners(a, b)
+            out.append((s[0], s[1]))
+        return out
 
     def _draw_px(self, context):
         prefs = get_prefs(context)
@@ -715,7 +782,7 @@ class HARDFLOW_OT_draw(Operator):
             hud.draw_grid(self._grid_screen_verts(context),
                           tuple(prefs.grid_color))
 
-        pts = self._shape_screen_points()
+        pts = self._shape_screen_points(context)
         closed = self.shape != 'POLY' or len(self.points) >= 2
         width = prefs.line_width * context.preferences.system.ui_scale
         hud.draw_shape(pts, tuple(prefs.line_color), closed=closed, width=width)
@@ -743,10 +810,11 @@ class HARDFLOW_OT_draw(Operator):
         # Hints split into short lines -> roomier than one long line.
         lines = [
             status,
-            ("Q/W/E/R shape    [ ] sides    Tab mode    type = exact size    "
-             "< > plane    Shift+< > rotate grid    Z close", dim),
+            ("Q/W/E/R/T/Y/U shape    [ ] sides/arc    Tab mode    "
+             "type = exact size    < > plane    Shift+< > rotate grid    Z close",
+             dim),
             ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
-             "B bevel    O orient    G stamp", dim),
+             "B bevel    O orient    G stamp    J live-bool", dim),
             ("Ctrl+Wheel grid    PgUp/Dn depth    H grid origin    X grid    "
              "V vertex    N non-destructive    S save settings    Enter apply    "
              "Esc cancel", dim),
@@ -772,6 +840,8 @@ class HARDFLOW_OT_draw(Operator):
             bits.append("bevel-on-cut")
         if self.cutter_bevel:
             bits.append("cutter bevel")
+        if self.live_bool:
+            bits.append("live boolean")
         if self.orientation == 'PROJECT':
             bits.append("project")
         if self.depth > 1e-6:
@@ -811,6 +881,16 @@ class HARDFLOW_OT_draw(Operator):
         if self.shape == 'NGON':
             r = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
             return "Sides:  %d   Radius:  %.3f m" % (self.sides, r)
+        if self.shape == 'SLOT':
+            return "Slot:  %.3f x %.3f m" % (abs(b[0] - a[0]), abs(b[1] - a[1]))
+        if self.shape == 'STAR':
+            r = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+            return "Star:  %d points   Radius:  %.3f m" % (self.sides, r)
+        if self.shape == 'ARC':
+            import math
+            r = ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+            return "Arc:  %.0f deg   Radius:  %.3f m" % (
+                math.degrees(self.arc_sweep), r)
         # POLY: point count + last segment length
         last = uv(self.points[-1])
         cur = uv(self.cursor)
@@ -822,7 +902,7 @@ class HARDFLOW_OT_draw(Operator):
 
     # --- live 3D preview -------------------------------------------------
 
-    def _preview_screen_points(self):
+    def _preview_screen_points(self, context):
         """Screen points defining the in-progress shape, including the hovering
         cursor (so the volume previews the segment being drawn)."""
         if self.shape == 'POLY':
@@ -830,7 +910,7 @@ class HARDFLOW_OT_draw(Operator):
             if self.points:
                 pts = pts + [self.cursor]
             return pts
-        return self._shape_screen_points()
+        return self._shape_screen_points(context)
 
     _AXIS_VEC = {
         'X': Vector((1.0, 0.0, 0.0)),
@@ -891,7 +971,7 @@ class HARDFLOW_OT_draw(Operator):
         """Build the real 3D cutter volume (or FACE mesh) for the shape currently
         on screen, in world space. Returns mesh data or None when the shape is not
         yet valid (too few points, edge-on plane, self-intersecting, ...)."""
-        screen_pts = self._preview_screen_points()
+        screen_pts = self._preview_screen_points(context)
         if len(screen_pts) < 3:
             return None
         if self.shape == 'POLY' and grid.is_self_intersecting(screen_pts):
@@ -928,7 +1008,8 @@ class HARDFLOW_OT_draw(Operator):
     def _update_preview(self, context):
         """Refresh the live preview object. Shown as a wireframe drawn in front,
         non-selectable, so it reads as a cutter cage over the model and never
-        interferes with picking."""
+        interferes with picking. When the live boolean preview is on, a temporary
+        Boolean modifier on the target then shows the actual cut result."""
         if self.edit:
             return  # Edit Mode: the 2D shape outline is the preview (no cage)
         try:
@@ -937,8 +1018,7 @@ class HARDFLOW_OT_draw(Operator):
             mesh = None
         if mesh is None:
             self._clear_preview()
-            return
-        if self._preview is None:
+        elif self._preview is None:
             self._preview = bpy.data.objects.new("hf_preview", mesh)
             context.collection.objects.link(self._preview)
             self._preview.display_type = 'WIRE'
@@ -949,6 +1029,7 @@ class HARDFLOW_OT_draw(Operator):
             self._preview.data = mesh
             if old is not None and old.users == 0:
                 bpy.data.meshes.remove(old)
+        self._sync_live_boolean(context)
 
     def _clear_preview(self):
         if self._preview is not None and self._preview.name in bpy.data.objects:
@@ -958,9 +1039,68 @@ class HARDFLOW_OT_draw(Operator):
                 bpy.data.meshes.remove(data)
         self._preview = None
 
+    # --- live boolean preview (the actual cut result, drawn before commit) ----
+
+    # Above this target vertex count the live boolean is skipped (only the wire
+    # cutter cage is shown), so a heavy mesh stays responsive while drawing.
+    _LIVE_BOOL_MAX_VERTS = 8000
+
+    @staticmethod
+    def _remove_live_mod(obj):
+        """Strip the temporary HF_LivePreview boolean modifier from obj, ignoring
+        a deleted object / missing modifier."""
+        try:
+            mod = obj.modifiers.get("HF_LivePreview")
+            if mod is not None:
+                obj.modifiers.remove(mod)
+        except (ReferenceError, RuntimeError, AttributeError):
+            pass
+
+    def _clear_live_boolean(self, context):
+        """Remove every live-preview boolean modifier this draw added. Idempotent;
+        called before the real cut on commit and on cancel."""
+        for t in getattr(self, "_bool_targets", []):
+            self._remove_live_mod(t)
+        self._bool_targets = []
+
+    def _sync_live_boolean(self, context):
+        """Show the actual boolean RESULT on the target(s) while drawing: add a
+        temporary Boolean modifier pointing at the live cutter cage, so Blender's
+        viewport evaluates the real subtraction/union as the shape changes. Active
+        only for the boolean modes (Cut/Make/Intersect) with a valid cutter, the
+        live preview on, and the target light enough; removed otherwise. The temp
+        modifier is always stripped before the real cut (see `_commit`)."""
+        op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION',
+              'INTERSECT': 'INTERSECT'}.get(self.mode)
+        if not (self.live_bool and op is not None and self._preview is not None):
+            self._clear_live_boolean(context)
+            return
+        targets = [t for t in self._targets(context)
+                   if t is not None and t.type == 'MESH'
+                   and len(t.data.vertices) <= self._LIVE_BOOL_MAX_VERTS]
+        wanted = set(targets)
+        for t in list(self._bool_targets):
+            if t not in wanted:
+                self._remove_live_mod(t)
+                self._bool_targets.remove(t)
+        for t in targets:
+            mod = t.modifiers.get("HF_LivePreview")
+            if mod is None:
+                mod = t.modifiers.new("HF_LivePreview", 'BOOLEAN')
+                mod.show_render = False
+                if t not in self._bool_targets:
+                    self._bool_targets.append(t)
+            mod.operation = op
+            mod.object = self._preview
+            try:
+                mod.solver = 'FAST'  # snappy preview; commit uses the real solver
+            except (TypeError, AttributeError):
+                pass
+
     # --- geometry application -------------------------------------------
 
     def _commit(self, context):
+        self._clear_live_boolean(context)  # strip temp preview mods before the cut
         self._clear_preview()  # drop the visual cage before building the real one
         try:
             self._build_and_apply(context)
@@ -977,7 +1117,7 @@ class HARDFLOW_OT_draw(Operator):
         if self.shape == 'POLY':
             screen_pts = list(self.points)
         else:
-            screen_pts = self._shape_screen_points()
+            screen_pts = self._shape_screen_points(context)
         if len(screen_pts) < 3:
             return
 
@@ -1066,6 +1206,7 @@ class HARDFLOW_OT_draw(Operator):
         # Stamp replays the stored screen points in the current view and commits
         # immediately, so there are no live anchors to keep in sync.
         self.world_points = []
+        self._clear_live_boolean(context)
         self._clear_preview()
         try:
             self._build_and_apply(context)
@@ -1336,6 +1477,7 @@ class HARDFLOW_OT_draw(Operator):
         boolean.stash_cutter(context, cutter, targets[0])
 
     def _cleanup(self, context):
+        self._clear_live_boolean(context)  # strip any temp preview mods first
         self._clear_preview()  # discards the cage on cancel; no-op after commit
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')

@@ -537,6 +537,37 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       (the base face can sit away from the visible copy). Headless
       `test_nearest_face_to_point`.
 
+## v1.13 — Build/Boolean expansion + tool-set trim
+Refocus the toolkit on its boolean / direct-modeling core: drop the secondary
+Hard Ops modifier wrappers and greeble, and deepen the Build and Boolean draw
+tools instead. All pure math is unit-tested; the bpy paths add headless coverage
+(64 pure + 84 headless), live-verified in Blender 5.1.2; modal feel in
+`tests/manual_checklist.md` §19.
+- [x] **Removed the Greeble + Modifier tool sets** — `HARDFLOW_OT_add_step`/
+      `add_taper`/`add_knurl` and `HARDFLOW_OT_bevel`/`mirror`/`clean`/`symmetrize`/
+      `sharpen`/`array`/`radial_array`/`curve_array`/`dice`, plus their now-dead core
+      builders. `operators/modifiers.py` + `operators/array.py` deleted;
+      `recalc_normals` moved to `operators/hardops.py`. **Pipe/Cable kept** (moved to
+      a "Curves" N-panel section). The Object-Mode Edge Bevel / Loop Cut and
+      Blender's own modifiers cover the gap.
+- [x] **Build primitives** — Cylinder / Cone / Sphere / Tube join Cube / Plane
+      (`core/geometry.build_cylinder`/`build_cone`/`build_uv_sphere`/`build_tube`,
+      `HARDFLOW_OT_add_primitive`). Headless `test_build_primitives`.
+- [x] **New boolean draw shapes** — Slot (stadium) / Star (n-pointed) / Arc (filled
+      pie sector), keys `T`/`Y`/`U`, with `[ ]` count or ARC sweep
+      (`core/grid.slot_points`/`star_points`/`arc_points`, pure-tested). Intersect /
+      Join / Knife and the shape rows surfaced as N-panel buttons.
+- [x] **Sweep / Follow-Me** — `HARDFLOW_OT_sweep` sweeps an L/U/T/I/box structural
+      section along a drawn path (`core/geometry.profile_points` sections, `P`
+      cycles via `_CurveDraw._PROFILE_CYCLE`). Headless `test_sweep_profiles`.
+- [x] **Live boolean preview** — `J` shows the real Cut/Make/Intersect result on the
+      target via a temporary `HF_LivePreview` modifier (stripped before the real cut /
+      on cancel, vertex-capped). Preference `live_boolean_preview`. Headless
+      `test_live_boolean_preview_and_cutter_options`.
+- [x] **Cutter Options in the N-panel** — prefs-backed inset / bevel-on-cut /
+      bevelled-cutter / array defaults (`HARDFLOW_PT_cutter_options`) that seed the
+      next draw, then live-tweak with the modal keys.
+
 ## Reference-tool gap pass (pre-publish)
 A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /
 KitOps. Closed in this pass:

@@ -1,55 +1,15 @@
-# Hard Ops parity operators (v1.5): dice/panel, edge bevel-weight/crease,
-# viewport display toggles, material/color helpers, and parametric greeble
-# generators (step / taper / knurl). All thin wrappers over pure-ish core builders
-# in core/geometry.py; the modifier stack manager lives in ui/panel.py (it only
-# drives Blender's built-in modifier operators).
+# Hard Ops parity operators (v1.5): edge bevel-weight/crease, viewport display
+# toggles, material/color helpers, and the boolean-health normal recalc. All thin
+# wrappers over pure-ish core helpers in core/geometry.py + core/boolean.py; the
+# modifier stack manager lives in ui/panel.py (it only drives Blender's built-in
+# modifier operators).
 import random
 
 import bpy
 from bpy.types import Operator
-from bpy.props import (IntProperty, FloatProperty, EnumProperty, BoolProperty,
-                       FloatVectorProperty)
-from mathutils import Matrix
+from bpy.props import FloatProperty, EnumProperty, BoolProperty
 
 from ..core import geometry, boolean
-
-
-def _place_at_cursor(context, obj):
-    """Link a freshly built object, drop it at the 3D cursor, make it the
-    active selection (shared by the greeble generators)."""
-    context.collection.objects.link(obj)
-    obj.matrix_world = Matrix.Translation(context.scene.cursor.location)
-    for o in list(context.selected_objects):
-        o.select_set(False)
-    obj.select_set(True)
-    context.view_layer.objects.active = obj
-
-
-class HARDFLOW_OT_dice(Operator):
-    bl_idname = "object.hardflow_dice"
-    bl_label = "Hardflow Dice"
-    bl_description = ("Grid-slice the mesh into panels along its local axes "
-                      "(Hard Ops dice / panel break)")
-    bl_options = {'REGISTER', 'UNDO'}
-
-    count_x: IntProperty(name="X", default=2, min=1, max=64)
-    count_y: IntProperty(name="Y", default=2, min=1, max=64)
-    count_z: IntProperty(name="Z", default=1, min=1, max=64)
-    mark_sharp: BoolProperty(name="Mark Cuts Sharp", default=True)
-
-    @classmethod
-    def poll(cls, context):
-        obj = context.active_object
-        return (obj is not None and obj.type == 'MESH'
-                and context.mode == 'OBJECT')
-
-    def execute(self, context):
-        passes = geometry.dice_mesh(
-            context.active_object,
-            (self.count_x, self.count_y, self.count_z),
-            mark_sharp=self.mark_sharp)
-        self.report({'INFO'}, "Dice: %d cut plane(s)" % passes)
-        return {'FINISHED'}
 
 
 class HARDFLOW_OT_edge_weight(Operator):
@@ -168,57 +128,26 @@ class HARDFLOW_OT_copy_material(Operator):
         return {'FINISHED'}
 
 
-class _GreebleBase(Operator):
+class HARDFLOW_OT_recalc_normals(Operator):
+    bl_idname = "object.hardflow_recalc_normals"
+    bl_label = "Recalculate Normals"
+    bl_description = ("Make the active mesh's normals point consistently outward "
+                      "(the common fix for booleans that won't cut)")
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'OBJECT'
-
-
-class HARDFLOW_OT_add_step(_GreebleBase):
-    bl_idname = "object.hardflow_add_step"
-    bl_label = "Add Steps"
-    bl_description = "Add a stepped block (staircase greeble) at the 3D cursor"
-
-    count: IntProperty(name="Steps", default=5, min=1, max=128)
-    rise: FloatProperty(name="Rise", default=0.1, min=0.001, soft_max=2.0)
-    run: FloatProperty(name="Run", default=0.1, min=0.001, soft_max=2.0)
-    width: FloatProperty(name="Width", default=1.0, min=0.001, soft_max=10.0)
+        obj = context.active_object
+        return obj is not None and obj.type == 'MESH'
 
     def execute(self, context):
-        mesh = geometry.build_steps(self.count, self.rise, self.run, self.width)
-        _place_at_cursor(context, bpy.data.objects.new("Hardflow_Steps", mesh))
-        return {'FINISHED'}
-
-
-class HARDFLOW_OT_add_taper(_GreebleBase):
-    bl_idname = "object.hardflow_add_taper"
-    bl_label = "Add Taper"
-    bl_description = "Add a tapered box / frustum at the 3D cursor (top=0 = pyramid)"
-
-    bottom: FloatProperty(name="Bottom", default=1.0, min=0.001, soft_max=10.0)
-    top: FloatProperty(name="Top", default=0.5, min=0.0, soft_max=10.0)
-    height: FloatProperty(name="Height", default=1.0, min=0.001, soft_max=10.0)
-
-    def execute(self, context):
-        mesh = geometry.build_taper(self.bottom, self.top, self.height)
-        _place_at_cursor(context, bpy.data.objects.new("Hardflow_Taper", mesh))
-        return {'FINISHED'}
-
-
-class HARDFLOW_OT_add_knurl(_GreebleBase):
-    bl_idname = "object.hardflow_add_knurl"
-    bl_label = "Add Knurl"
-    bl_description = "Add a knurled cylinder at the 3D cursor"
-
-    radius: FloatProperty(name="Radius", default=0.5, min=0.001, soft_max=10.0)
-    height: FloatProperty(name="Height", default=1.0, min=0.001, soft_max=10.0)
-    teeth: IntProperty(name="Teeth", default=16, min=3, max=128)
-    depth: FloatProperty(name="Tooth Depth", default=0.05, min=0.001, soft_max=1.0)
-
-    def execute(self, context):
-        mesh = geometry.build_knurl(self.radius, self.height, self.teeth,
-                                    self.depth)
-        _place_at_cursor(context, bpy.data.objects.new("Hardflow_Knurl", mesh))
+        obj = context.active_object
+        boolean.recalc_normals(obj)
+        h = boolean.mesh_health(obj)
+        if h['non_manifold'] or h['degenerate']:
+            self.report({'WARNING'},
+                        "Normals recalculated, but %s remain"
+                        % (boolean._health_summary(obj),))
+        else:
+            self.report({'INFO'}, "Normals recalculated; mesh looks boolean-ready")
         return {'FINISHED'}

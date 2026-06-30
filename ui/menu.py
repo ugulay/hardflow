@@ -15,6 +15,15 @@ from ..core import decal
 
 # Each item is (operator_idname, label, icon, {properties}); None = separator.
 _BUILD_ITEMS = (
+    ("object.hardflow_add_primitive", "Cube", 'MESH_CUBE', {'kind': 'CUBE'}),
+    ("object.hardflow_add_primitive", "Plane", 'MESH_PLANE', {'kind': 'PLANE'}),
+    ("object.hardflow_add_primitive", "Cylinder", 'MESH_CYLINDER',
+     {'kind': 'CYLINDER'}),
+    ("object.hardflow_add_primitive", "Cone", 'CONE', {'kind': 'CONE'}),
+    ("object.hardflow_add_primitive", "Sphere", 'MESH_UVSPHERE',
+     {'kind': 'SPHERE'}),
+    ("object.hardflow_add_primitive", "Tube", 'MESH_CYLINDER', {'kind': 'TUBE'}),
+    None,
     ("mesh.hardflow_draw", "Rectangle", 'MESH_PLANE', {'shape': 'BOX', 'mode': 'FACE'}),
     ("mesh.hardflow_draw", "Line", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'FACE'}),
     ("mesh.hardflow_draw", "Circle", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'FACE'}),
@@ -41,36 +50,33 @@ _BOOLEAN_ITEMS = (
     ("mesh.hardflow_draw", "Knife (Score)", 'MOD_LINEART', {'mode': 'KNIFE'}),
     ("mesh.hardflow_draw", "Circle Cut", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'CUT'}),
     ("mesh.hardflow_draw", "N-gon Cut", 'MESH_CYLINDER', {'shape': 'NGON', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Slot Cut", 'MESH_CAPSULE', {'shape': 'SLOT', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Star Cut", 'SOLO_ON', {'shape': 'STAR', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Arc Cut", 'MOD_SIMPLEDEFORM', {'shape': 'ARC', 'mode': 'CUT'}),
     None,
     ("object.hardflow_boolean", "Boolean (Selected)", 'MOD_BOOLEAN', {}),
     ("object.hardflow_apply_cutters", "Apply Cutters", 'CHECKMARK', {}),
 )
 
-_MODIFY_ITEMS = (
-    ("object.hardflow_bevel", "Bevel", 'MOD_BEVEL', {}),
-    ("object.hardflow_mirror", "Mirror", 'MOD_MIRROR', {}),
-    ("object.hardflow_array", "Array", 'MOD_ARRAY', {}),
-    ("object.hardflow_radial_array", "Radial Array", 'MOD_ARRAY', {}),
-    ("object.hardflow_curve_array", "Array Along Curve", 'MOD_ARRAY', {}),
-    ("object.hardflow_symmetrize", "Symmetrize", 'MOD_MIRROR', {}),
-    ("object.hardflow_sharpen", "Sharpen", 'MOD_BEVEL', {}),
-    ("object.hardflow_clean", "Clean", 'BRUSH_DATA', {}),
-    ("object.hardflow_dice", "Dice / Panel", 'MOD_LATTICE', {}),
-    ("mesh.hardflow_edge_weight", "Edge Weight (Edit)", 'MOD_BEVEL', {}),
+_DISPLAY_ITEMS = (
+    ("object.hardflow_display_toggle", "Wireframe", 'SHADING_WIRE',
+     {'mode': 'WIRE'}),
+    ("object.hardflow_display_toggle", "Sharp Edges", 'SNAP_EDGE',
+     {'mode': 'SHARP'}),
+    ("object.hardflow_display_toggle", "Cutters", 'MOD_BOOLEAN',
+     {'mode': 'CUTTERS'}),
     None,
     ("object.hardflow_random_color", "Random Colors", 'COLOR', {}),
     ("object.hardflow_copy_material", "Copy Material", 'MATERIAL', {}),
-)
-
-_GREEBLE_ITEMS = (
-    ("object.hardflow_add_step", "Steps", 'MOD_ARRAY', {}),
-    ("object.hardflow_add_taper", "Taper", 'CONE', {}),
-    ("object.hardflow_add_knurl", "Knurl", 'MESH_CYLINDER', {}),
+    ("mesh.hardflow_edge_weight", "Edge Weight (Edit)", 'MOD_BEVEL', {}),
+    None,
+    ("object.hardflow_recalc_normals", "Recalculate Normals", 'NORMALS_FACE', {}),
 )
 
 _CURVE_ITEMS = (
     ("mesh.hardflow_pipe", "Pipe", 'MOD_SCREW', {}),
     ("mesh.hardflow_cable", "Cable / Rope", 'FORCE_CURVE', {}),
+    ("mesh.hardflow_sweep", "Sweep (Follow Me)", 'MOD_SIMPLEDEFORM', {}),
 )
 
 _ASSET_ITEMS = (
@@ -108,13 +114,6 @@ class HARDFLOW_MT_menu_boolean(Menu):
         _render(self.layout, _BOOLEAN_ITEMS)
 
 
-class HARDFLOW_MT_menu_modify(Menu):
-    bl_label = "Modify"
-
-    def draw(self, context):
-        _render(self.layout, _MODIFY_ITEMS)
-
-
 class HARDFLOW_MT_menu_curves(Menu):
     bl_label = "Curves"
 
@@ -122,11 +121,11 @@ class HARDFLOW_MT_menu_curves(Menu):
         _render(self.layout, _CURVE_ITEMS)
 
 
-class HARDFLOW_MT_menu_greeble(Menu):
-    bl_label = "Greeble"
+class HARDFLOW_MT_menu_display(Menu):
+    bl_label = "Display & Mesh"
 
     def draw(self, context):
-        _render(self.layout, _GREEBLE_ITEMS)
+        _render(self.layout, _DISPLAY_ITEMS)
 
 
 class HARDFLOW_MT_menu_decals(Menu):
@@ -169,9 +168,8 @@ class HARDFLOW_MT_menu(Menu):
         layout = self.layout
         layout.menu("HARDFLOW_MT_menu_build", icon='MESH_GRID')
         layout.menu("HARDFLOW_MT_menu_boolean", icon='MOD_BOOLEAN')
-        layout.menu("HARDFLOW_MT_menu_modify", icon='MODIFIER')
         layout.menu("HARDFLOW_MT_menu_curves", icon='MOD_SCREW')
-        layout.menu("HARDFLOW_MT_menu_greeble", icon='MESH_ICOSPHERE')
+        layout.menu("HARDFLOW_MT_menu_display", icon='OVERLAY')
         layout.separator()
         layout.menu("HARDFLOW_MT_menu_decals", icon='TEXTURE')
         layout.menu("HARDFLOW_MT_menu_assets", icon='FILE_BLEND')

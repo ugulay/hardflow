@@ -4,8 +4,6 @@ import math
 import bpy
 import bmesh
 
-from . import transform
-
 
 def snapshot_mesh(obj, name="hf_snapshot"):
     """Return an unlinked copy of obj's mesh data, for restoring it after a live
@@ -299,6 +297,87 @@ def build_line(length=2.0, axis='X', name="Hardflow_Guide"):
     return mesh
 
 
+def build_cylinder(radius=0.5, depth=1.0, segments=32, name="Hardflow_Cylinder"):
+    """A capped cylinder of `radius` and `depth` (height along +/-Z), centred on
+    the origin -- a starter primitive for the SketchUp-style tools. `segments` is
+    the number of sides. Returns mesh data; the caller positions the object."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False,
+                          segments=max(3, int(segments)),
+                          radius1=max(1e-4, radius), radius2=max(1e-4, radius),
+                          depth=max(1e-4, depth))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def build_cone(radius=0.5, depth=1.0, segments=32, name="Hardflow_Cone"):
+    """A cone: a `radius`-wide base tapering to a point over `depth` (+/-Z),
+    centred on the origin. `segments` sides. Returns mesh data."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False,
+                          segments=max(3, int(segments)),
+                          radius1=max(1e-4, radius), radius2=0.0,
+                          depth=max(1e-4, depth))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def build_uv_sphere(radius=0.5, segments=32, rings=16, name="Hardflow_Sphere"):
+    """A UV sphere of `radius`, centred on the origin. `segments` = longitudinal
+    divisions, `rings` = latitudinal. Returns mesh data."""
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=max(3, int(segments)),
+                              v_segments=max(2, int(rings)),
+                              radius=max(1e-4, radius))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
+def build_tube(radius=0.5, inner_radius=0.3, depth=1.0, segments=32,
+               name="Hardflow_Tube"):
+    """A hollow tube (a cylinder with a concentric bore): `radius` outer,
+    `inner_radius` inner, `depth` tall (+/-Z), centred on the origin. `segments`
+    sides. The inner radius is clamped below the outer. Returns mesh data. Pure
+    bmesh built by hand (no create_cone bore primitive)."""
+    segments = max(3, int(segments))
+    outer = max(1e-4, radius)
+    inner = max(1e-5, min(inner_radius, outer - 1e-4))
+    h = max(1e-4, depth) * 0.5
+    bm = bmesh.new()
+    ob, ot, ib, it = [], [], [], []   # outer/inner bottom/top rings
+    for i in range(segments):
+        a = (i / segments) * math.tau
+        c, s = math.cos(a), math.sin(a)
+        ob.append(bm.verts.new((c * outer, s * outer, -h)))
+        ot.append(bm.verts.new((c * outer, s * outer, h)))
+        ib.append(bm.verts.new((c * inner, s * inner, -h)))
+        it.append(bm.verts.new((c * inner, s * inner, h)))
+    for i in range(segments):
+        j = (i + 1) % segments
+        for ring in ((ob[i], ob[j], ot[j], ot[i]),    # outer wall
+                     (it[i], it[j], ib[j], ib[i]),     # inner wall
+                     (ot[i], ot[j], it[j], it[i]),     # top annulus
+                     (ib[i], ib[j], ob[j], ob[i])):    # bottom annulus
+            try:
+                bm.faces.new(ring)
+            except ValueError:
+                pass
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    return mesh
+
+
 def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
     """Build a round-section pipe curve from a list of 3D points (Grid Modeler
     'pipes'). At least 2 points. Returns curve data; the caller links it to an
@@ -318,14 +397,33 @@ def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
 
 
 def profile_points(profile, radius):
-    """2D cross-section offsets for build_pipe_mesh. 'SQUARE' -> a radius x radius
-    box, 'RECT' -> 2*radius x radius, otherwise a `max(3, ...)`-sided ring is left
-    to the round curve path. Returns a list of (u, v) tuples or None for round."""
+    """2D cross-section outline for build_pipe_mesh / the Sweep tool. The box
+    profiles ('SQUARE' -> radius x radius, 'RECT' -> 2*radius x radius) and the
+    structural sections ('L' angle, 'U' channel, 'T' tee, 'I' I-beam, all sized to
+    a ~2*radius envelope) return a closed list of (u, v) corners traced once
+    around; 'ROUND' (or anything unknown) returns None so the round curve bevel
+    path is used instead. The sections are concave but build_pipe_mesh sweeps them
+    fine. Pure arithmetic."""
     r = radius
+    t = r * 0.5            # flange / wall thickness for the structural sections
     if profile == 'SQUARE':
         return [(-r, -r), (r, -r), (r, r), (-r, r)]
     if profile == 'RECT':
         return [(-2 * r, -r), (2 * r, -r), (2 * r, r), (-2 * r, r)]
+    if profile == 'L':     # angle: a bottom leg + a left leg
+        return [(-r, -r), (r, -r), (r, -r + t), (-r + t, -r + t),
+                (-r + t, r), (-r, r)]
+    if profile == 'U':     # channel, open at the top
+        return [(-r, -r), (r, -r), (r, r), (r - t, r), (r - t, -r + t),
+                (-r + t, -r + t), (-r + t, r), (-r, r)]
+    if profile == 'T':     # tee: a top flange + a centred stem
+        return [(-r, r), (r, r), (r, r - t), (t * 0.5, r - t),
+                (t * 0.5, -r), (-t * 0.5, -r), (-t * 0.5, r - t), (-r, r - t)]
+    if profile == 'I':     # I-beam: top + bottom flange joined by a web
+        w = r * 0.35       # half web width
+        return [(-r, -r), (r, -r), (r, -r + t), (w, -r + t), (w, r - t),
+                (r, r - t), (r, r), (-r, r), (-r, r - t), (-w, r - t),
+                (-w, -r + t), (-r, -r + t)]
     return None
 
 
@@ -536,47 +634,6 @@ def inset_extrude_faces(obj, face_indices, thickness, local_vec):
     return True
 
 
-def symmetrize_mesh(obj, direction='+X'):
-    """Symmetrize the mesh in place: keep one side and mirror it onto the other
-    across the object-local axis plane (Hard Ops symmetrize). `direction` is a
-    bmesh axis-and-side string ('-X','+X','-Y','+Y','-Z','+Z'); '+X' keeps the
-    +X half and mirrors it to -X. Object Mode, no bpy.ops."""
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    # bmesh.ops.symmetrize wants the positive side as a bare axis ('X','Y','Z')
-    # and the negative side prefixed ('-X'). Normalize '+X' -> 'X' so callers may
-    # pass either convention (the operator UI still labels them '+X to -X').
-    direction = direction.lstrip('+')
-    bmesh.ops.symmetrize(bm, input=bm.verts[:] + bm.edges[:] + bm.faces[:],
-                         direction=direction)
-    bm.to_mesh(obj.data)
-    obj.data.update()
-    bm.free()
-
-
-def mark_sharp_by_angle(obj, angle):
-    """Mark edges sharp where the angle between their two faces exceeds `angle`
-    (radians) and smooth the rest -- the basis of the Hard Ops "sharpen" flow.
-    All faces are set to smooth shading so the sharp edges read as hard creases.
-    Boundary / non-manifold edges are left smooth. Returns the sharp-edge count."""
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    for face in bm.faces:
-        face.smooth = True
-    sharp = 0
-    for edge in bm.edges:
-        if len(edge.link_faces) == 2:
-            if edge.calc_face_angle() > angle:
-                edge.smooth = False
-                sharp += 1
-            else:
-                edge.smooth = True
-    bm.to_mesh(obj.data)
-    obj.data.update()
-    bm.free()
-    return sharp
-
-
 # --- Edit Mode bridge (v1.3) --------------------------------------------
 #
 # These read/write the active edit-mesh via bmesh.from_edit_mesh /
@@ -726,33 +783,6 @@ def edit_add_face(obj, local_corners, select=True, weld=True, weld_dist=1e-4):
         bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=weld_dist)
     bmesh.update_edit_mesh(obj.data, destructive=weld)
     return True
-
-
-def edit_bevel_edges(obj, width, segments=2, profile=0.5):
-    """Edit Mode real edge bevel: bevel obj's selected edit-mesh edges
-    (bmesh.ops.bevel, affecting EDGES) into actual chamfer geometry. Returns the
-    number of selected edges beveled, 0 when none are selected or the width is
-    non-positive. The destructive on-selection counterpart of the whole-object
-    Bevel *modifier* -- this is the Hard Ops / SketchUp edge bevel users expect in
-    Edit Mode."""
-    if width <= 0.0:
-        return 0
-    bm = bmesh.from_edit_mesh(obj.data)
-    edges = [e for e in bm.edges if e.select]
-    if not edges:
-        # Vertex select mode may not flush selection up to the edge flag; treat
-        # an edge as selected when both of its endpoints are.
-        edges = [e for e in bm.edges
-                 if e.verts[0].select and e.verts[1].select]
-    if not edges:
-        return 0
-    n = len(edges)
-    bmesh.ops.bevel(bm, geom=edges, offset=width, offset_type='OFFSET',
-                    segments=max(1, int(segments)), profile=profile,
-                    affect='EDGES', clamp_overlap=True)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    bmesh.update_edit_mesh(obj.data, destructive=True)
-    return n
 
 
 def nearest_edge_on_face(obj, face_index, local_point):
@@ -1065,43 +1095,7 @@ def edit_knife_polygon(obj, local_corners, view_dir):
     return scored
 
 
-# --- Hard Ops parity: dice / panel, edge weights, presets (v1.5) --------
-
-
-def dice_mesh(obj, counts, mark_sharp=False):
-    """Hard Ops dice / panel: bisect obj's mesh on a regular grid -- `counts` is
-    an (nx, ny, nz) tuple of pieces per object-local axis. Cut planes are placed
-    across the mesh's local bounding box (transform.dice_coordinates), splitting
-    the faces they cross into a grid (the basis for greeble / panel breaks). With
-    mark_sharp the new cut edges are flagged sharp. Returns the number of bisect
-    passes run. Object Mode, no bpy.ops."""
-    from mathutils import Vector
-    verts = obj.data.vertices
-    if not verts:
-        return 0
-    mins = [min(v.co[i] for v in verts) for i in range(3)]
-    maxs = [max(v.co[i] for v in verts) for i in range(3)]
-    axes = (Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    passes = 0
-    for i, count in enumerate(counts):
-        for coord in transform.dice_coordinates(mins[i], maxs[i], count):
-            plane_co = Vector((0.0, 0.0, 0.0))
-            plane_co[i] = coord
-            ret = bmesh.ops.bisect_plane(
-                bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-6,
-                plane_co=plane_co, plane_no=axes[i],
-                clear_inner=False, clear_outer=False)
-            if mark_sharp:
-                for e in ret.get('geom_cut', []):
-                    if isinstance(e, bmesh.types.BMEdge):
-                        e.smooth = False
-            passes += 1
-    bm.to_mesh(obj.data)
-    obj.data.update()
-    bm.free()
-    return passes
+# --- Hard Ops parity: edge weights (v1.5) -------------------------------
 
 
 def _edge_weight_layers(bm, want_bevel, want_crease):
@@ -1119,28 +1113,6 @@ def _edge_weight_layers(bm, want_bevel, want_crease):
     except (AttributeError, ValueError):
         pass
     return bw, cr
-
-
-def set_sharp_edge_weights(obj, bevel_weight=0.0, crease=0.0):
-    """Set bevel weight + crease on edges already flagged sharp (run after
-    mark_sharp_by_angle) so a weight-limited bevel / subsurf crease can act on
-    them -- the Hard Ops SSharp/CSharp weighting tiers. Returns the edge count
-    weighted. Object Mode."""
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bw, cr = _edge_weight_layers(bm, bevel_weight != 0.0, crease != 0.0)
-    n = 0
-    for e in bm.edges:
-        if not e.smooth:                 # smooth == False -> sharp
-            if bw is not None:
-                e[bw] = bevel_weight
-            if cr is not None:
-                e[cr] = crease
-            n += 1
-    bm.to_mesh(obj.data)
-    obj.data.update()
-    bm.free()
-    return n
 
 
 def edit_set_edge_weights(obj, bevel_weight=None, crease=None, only_selected=True):
@@ -1161,107 +1133,6 @@ def edit_set_edge_weights(obj, bevel_weight=None, crease=None, only_selected=Tru
         n += 1
     bmesh.update_edit_mesh(obj.data)
     return n
-
-
-# Sharpen tiers (Hard Ops SSharp / CSharp): each combines mark-sharp with a
-# bevel-weight / crease weighting + which clean-up modifiers to add.
-SHARPEN_PRESETS = {
-    'WN': dict(bevel_weight=0.0, crease=0.0, add_bevel=False, weighted_normal=True),
-    'SSHARP': dict(bevel_weight=1.0, crease=0.0, add_bevel=True,
-                   weighted_normal=True),
-    'CSHARP': dict(bevel_weight=0.0, crease=1.0, add_bevel=False,
-                   weighted_normal=True),
-}
-
-
-# --- parametric greeble builders (v1.5 step / taper / knurl) -------------
-
-
-def build_steps(count=5, rise=0.1, run=0.1, width=1.0, name="Hardflow_Steps"):
-    """Build a stepped block (a staircase greeble) of `count` steps, each `rise`
-    tall and `run` deep, `width` wide, climbing +Z from the origin. Pure bmesh;
-    returns mesh data. The caller positions the object."""
-    count = max(1, int(count))
-    bm = bmesh.new()
-    for i in range(count):
-        z0 = 0.0
-        z1 = (i + 1) * rise
-        y0 = i * run
-        y1 = count * run
-        verts = [
-            bm.verts.new((0.0, y0, z0)), bm.verts.new((width, y0, z0)),
-            bm.verts.new((width, y1, z0)), bm.verts.new((0.0, y1, z0)),
-            bm.verts.new((0.0, y0, z1)), bm.verts.new((width, y0, z1)),
-            bm.verts.new((width, y1, z1)), bm.verts.new((0.0, y1, z1)),
-        ]
-        f = [(0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1),
-             (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)]
-        for a, b, c, d in f:
-            try:
-                bm.faces.new((verts[a], verts[b], verts[c], verts[d]))
-            except ValueError:
-                pass
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    return mesh
-
-
-def build_taper(bottom=1.0, top=0.5, height=1.0, name="Hardflow_Taper"):
-    """Build a tapered box / frustum: a `bottom`-wide square base tapering to a
-    `top`-wide square cap over `height` (+Z). top=0 yields a pyramid. Pure bmesh;
-    returns mesh data."""
-    b, t, h = bottom * 0.5, top * 0.5, height
-    bm = bmesh.new()
-    base = [bm.verts.new(c) for c in
-            ((-b, -b, 0.0), (b, -b, 0.0), (b, b, 0.0), (-b, b, 0.0))]
-    if t <= 1e-6:
-        apex = bm.verts.new((0.0, 0.0, h))
-        bm.faces.new(list(reversed(base)))
-        for i in range(4):
-            bm.faces.new((base[i], base[(i + 1) % 4], apex))
-    else:
-        cap = [bm.verts.new(c) for c in
-               ((-t, -t, h), (t, -t, h), (t, t, h), (-t, t, h))]
-        bm.faces.new(list(reversed(base)))
-        bm.faces.new(cap)
-        for i in range(4):
-            j = (i + 1) % 4
-            bm.faces.new((base[i], base[j], cap[j], cap[i]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    return mesh
-
-
-def build_knurl(radius=0.5, height=1.0, teeth=16, depth=0.05,
-                name="Hardflow_Knurl"):
-    """Build a knurled cylinder: a `teeth`-sided cylinder whose rim alternates
-    between `radius` and `radius - depth` to read as a grippy knurl, `height`
-    tall (+Z). Pure bmesh; returns mesh data."""
-    teeth = max(3, int(teeth))
-    bm = bmesh.new()
-    bottom, top = [], []
-    n = teeth * 2
-    for i in range(n):
-        a = (i / n) * math.tau
-        r = radius if i % 2 == 0 else max(1e-4, radius - depth)
-        x, y = math.cos(a) * r, math.sin(a) * r
-        bottom.append(bm.verts.new((x, y, 0.0)))
-        top.append(bm.verts.new((x, y, height)))
-    bm.faces.new(list(reversed(bottom)))
-    bm.faces.new(top)
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new((bottom[i], bottom[j], top[j], top[i]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    return mesh
 
 
 def cleanup_mesh(obj, merge_dist=1e-4, dissolve_angle=0.0873, remove_loose=True):

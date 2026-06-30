@@ -7,6 +7,64 @@ logic: minor versions add features, patch versions fix bugs.
 
 _Nothing yet._
 
+## [1.13.0] — 2026-06-30
+
+Tool-set trim plus a Build/Boolean expansion. The **Greeble** (step/taper/knurl)
+and the **Modifier** tool set (bevel, mirror, array, radial, symmetrize, sharpen,
+clean, dice) were removed to refocus on the boolean / direct-modeling core; the
+**Pipe** and **Cable** curve tools were kept (relocated to a "Curves" N-panel
+section). In their place: new build primitives, new boolean draw shapes, a
+Sweep / Follow-Me tool, and a live boolean preview. Pure logic is unit-tested
+(`64/64`); the new bpy paths add headless coverage (`84/84`, live-verified in
+Blender 5.1.2). Modal/interactive feel is in
+[tests/manual_checklist.md](tests/manual_checklist.md) §18.
+
+### Added
+- **Build primitives** — Cylinder / Cone / Sphere / Tube join Cube / Plane on the
+  `HARDFLOW_OT_add_primitive` operator and the N-panel Build section
+  (`core/geometry.build_cylinder` / `build_cone` / `build_uv_sphere` /
+  `build_tube`; radius / height / segments / inner-radius params).
+- **Boolean draw shapes** — **Slot** (stadium), **Star** (n-pointed), and **Arc**
+  (filled pie sector) join Box / Circle / Polygon / N-gon in the draw tool (keys
+  `T` / `Y` / `U`; `[ ]` sets the segment / point count, or the ARC sweep angle).
+  Pure math `core/grid.slot_points` / `star_points` / `arc_points`.
+- **Surfaced boolean modes** — Intersect / Join / Knife are now first-class
+  buttons in the N-panel Boolean Draw section (alongside Cut / Slice / Make), plus
+  a Slot / Star / Arc shape row, and Slot/Star/Arc-cut entries in the header menu.
+- **Sweep / Follow-Me** — `HARDFLOW_OT_sweep` (`operators/pipe.py`, on the shared
+  `_CurveDraw` base): draw a path and sweep an **L / U / T / I / box** structural
+  cross-section along it (`P` cycles the profile). New
+  `core/geometry.profile_points` sections; `_CurveDraw._PROFILE_CYCLE`.
+- **Live boolean preview** — toggle `J` while drawing a Cut / Make / Intersect to
+  see the **actual boolean result** on the target (a temporary `HF_LivePreview`
+  modifier evaluated by the viewport, stripped before the real cut and on cancel;
+  skipped on heavy targets). Preference `live_boolean_preview`
+  (`draw_cut._sync_live_boolean` / `_clear_live_boolean`).
+- **Cutter Options** — an N-panel section (`HARDFLOW_PT_cutter_options`) +
+  preferences (`draw_inset` / `draw_bevel_cut` / `draw_cutter_bevel` /
+  `draw_array_count` / `draw_array_axis`) that preset the next boolean draw's
+  inset / bevel-on-cut / bevelled-cutter / array, then live-tweak with the modal
+  keys.
+
+### Removed
+- The **Greeble** generators (`HARDFLOW_OT_add_step` / `add_taper` / `add_knurl`,
+  `core/geometry.build_steps` / `build_taper` / `build_knurl`).
+- The **Modifier** tool set: `HARDFLOW_OT_bevel`, `HARDFLOW_OT_mirror`,
+  `HARDFLOW_OT_clean`, `HARDFLOW_OT_symmetrize`, `HARDFLOW_OT_sharpen`,
+  `HARDFLOW_OT_array`, `HARDFLOW_OT_radial_array`, `HARDFLOW_OT_curve_array`,
+  `HARDFLOW_OT_dice` — and the now-dead core helpers (`symmetrize_mesh`,
+  `mark_sharp_by_angle`, `set_sharp_edge_weights`, `SHARPEN_PRESETS`,
+  `edit_bevel_edges`, `dice_mesh`, `transform.bevel_segments`). `operators/
+  modifiers.py` and `operators/array.py` were deleted; `recalc_normals` moved to
+  `operators/hardops.py`. Object-Mode **Edge Bevel** / **Loop Cut** and Blender's
+  own modifiers cover the gap.
+
+### Changed
+- N-panel, header menu, and pie restructured: the "Modify" sub-pie/menu and the
+  "Greeble" menu are gone; a "Curves" panel section hosts Pipe / Cable / Sweep,
+  and a "Display & Mesh" menu hosts the surviving edge-weight / display / material
+  / recalc-normals helpers.
+
 ## [1.11.0] — 2026-06-30
 
 Direct-modeling depth: the SketchUp-style tools were consolidated onto a shared

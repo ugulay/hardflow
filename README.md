@@ -40,36 +40,31 @@ SketchUp-style direct modeling — all without a price tag.
 
 ## Features
 
-- **Boolean via modal drawing** — Box / Circle / Polygon / N-gon shapes; Cut,
-  Slice (split in two), Make (add), Intersect (keep the overlap), Face (create a
-  surface), and Knife (score) modes (`Tab` cycles mode).
+- **Boolean via modal drawing** — Box / Circle / Polygon / N-gon / Slot / Star /
+  Arc shapes; Cut, Slice (split in two), Make (add), Join (add as a separate
+  solid), Intersect (keep the overlap), Face (create a surface), and Knife
+  (score) modes (`Tab` cycles mode). Toggle `J` for a **live boolean preview** of
+  the real result while you draw.
 - **Numeric precision** — type an exact dimension while drawing to lock the
   shape's size (radius / extent / segment), Grid Modeler / Boxcutter style.
 - **World-scale grid snap** — a camera-independent grid that stays consistent in
   meters (Grid Modeler's "absolute size" logic); plane switches with `←/→`
   between VIEW / SURFACE / EDGES / X / Y / Z, and `Shift+←/→` rotates the grid.
 - **Multi-object** — apply CUT/MAKE to all selected meshes with a single cutter.
-- **Pipe & Cable** — a round-profile pipe from a drawn line, or a sagging
-  cable/rope that drapes between its points; mesh cleanup via **Clean** (Hard Ops
-  style).
+- **Pipe, Cable & Sweep** — a round-profile pipe from a drawn line, a sagging
+  cable/rope that drapes between its points, or a **Sweep / Follow-Me** that
+  pushes an L / U / T / I / box structural section along the drawn path.
 - **Vertex / edge snap** — lock the drawing point to the corner / edge / edge
   midpoint of existing geometry; colored cursor feedback.
 - **Angle lock** — hold Shift to lock the drawing direction to 15° (adjustable)
   steps.
 - **Non-destructive mode** — instead of applying the boolean, leave a live
   modifier; keep cutters in a separate collection (the Boxcutter spirit).
-- **Advanced bevel** — interactive (drag = width, wheel = segments), with profile
-  + angle limit + width-type + **Weighted Normal** (clean shading); mirror
-  (bisect + clip) across the object, the 3D cursor, or the active object. The
-  Hard Ops spirit.
 - **Boolean from selection** — boolean the selected meshes using the active
   object as the cutter (Difference / Union / Intersect / Slice), no drawing
   needed; respects the non-destructive flow.
-- **Array, Radial & Curve array** — a linear Array along a world axis, a radial
-  array of N copies around the 3D cursor (a rotated offset empty drives the
-  modifier), or an array deformed along a selected curve.
-- **Symmetrize & Sharpen** — mirror one half of the mesh onto the other, and
-  mark sharp edges by angle + Weighted Normal (Hard Ops SSharp).
+- **Build primitives** — drop a Cube / Plane / Cylinder / Cone / Sphere / Tube at
+  the 3D cursor to model on with the SketchUp-style tools.
 - **Push/Pull (SketchUp spirit)** — raycast a face, then drag it along its normal
   to extrude in or out, with world-grid snap, numeric entry and **vertex/edge
   inference**; `C` keeps the starting face (copy/stack), `R` repeats the last
@@ -109,14 +104,14 @@ SketchUp-style direct modeling — all without a price tag.
 
 ## Feature matrix
 
-Every roadmap feature through **v1.10**, grouped by the paid tool whose workflow
+Every roadmap feature through **v1.13**, grouped by the paid tool whose workflow
 it brings to Blender for free. The right column points at the implementing module.
 
 ### Boolean & drawing (Grid Modeler · Boxcutter)
 
 | Feature | What it does | Where |
 |---------|--------------|-------|
-| Modal draw-to-cut | Box / Circle / Polygon / N-gon shapes, drawn directly in the viewport | `operators/draw_cut.py` |
+| Modal draw-to-cut | Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes (Slot/Star/Arc v1.13), drawn directly in the viewport; keys `Q/W/E/R/T/Y/U` | `operators/draw_cut.py`, `core/grid.py slot_points/star_points/arc_points` |
 | Cut / Slice / Make / Join / Intersect / Face | DIFFERENCE · split-in-two · UNION · add-as-separate-solid (v1.11) · keep-overlap · create an n-gon surface; `Tab` cycles mode | `operators/draw_cut.py` |
 | Polyline Trim parity (v1.11) | Point-to-point polygon → boolean: **double-click** closes; per-cut **Solver** (Exact / Fast / Manifold); **Project / Fixed** extrude orientation (`O`, perspective taper) | `operators/draw_cut.py`, `core/geometry.py build_prism` |
 | Numeric size entry (v1.10) | Type an exact dimension while drawing to lock the shape's size (radius / extent / segment) | `core/grid.py lock_distance` |
@@ -129,6 +124,8 @@ it brings to Blender for free. The right column points at the implementing modul
 | Angle lock | Hold Shift to lock the draw direction to angle steps | `core/grid.py snap_angle` |
 | Self-intersection guard | A broken polygon is rejected before the cut | `core/grid.py is_self_intersecting` |
 | Multi-object cut | Apply CUT/MAKE to all selected meshes with one cutter | `operators/draw_cut.py` |
+| Live boolean preview (v1.13) | Toggle `J` to see the actual Cut/Make/Intersect RESULT on the target while drawing (a temporary modifier, removed on commit/cancel; vertex-capped) | `operators/draw_cut.py` |
+| Cutter options (v1.13) | N-panel "Cutter Options" presets the next draw's inset / bevel-on-cut / bevelled cutter / array | `ui/panel.py`, `preferences.py` |
 
 ### In-draw operations (Boxcutter — v1.4)
 
@@ -153,22 +150,20 @@ it brings to Blender for free. The right column points at the implementing modul
 
 ### Hard Ops tools (Hard Ops — v1.0 / v1.5)
 
+> **v1.13** removed the bevel / mirror / array / radial / symmetrize / sharpen /
+> dice / clean modifier operators and the step / taper / knurl greeble. The
+> Object-Mode **Edge Bevel** and **Loop Cut** (SketchUp section) cover edge work
+> without Edit Mode; Blender's own Bevel / Mirror / Array / Symmetrize modifiers
+> cover the rest. The remaining mesh-management helpers:
+
 | Feature | What it does | Where |
 |---------|--------------|-------|
-| Advanced bevel | Interactive (drag = width, wheel = segments) + Weighted Normal; adaptive width + segment count scale to the object (v1.9) | `operators/modifiers.py` |
-| Edit-Mode edge bevel (v1.9) | A real on-selection edge bevel when run in Edit Mode, not just a modifier | `core/geometry.py edit_bevel_edges` |
-| Mirror | Bisect + clip across the object, the 3D cursor, or the active object (v1.10) | `operators/modifiers.py` |
-| Array / Radial / Curve array | Linear array on an axis; N copies around the 3D cursor; array deformed along a selected curve (v1.10) | `operators/array.py`, `core/transform.py` |
-| Symmetrize | Mirror one half of the mesh onto the other | `core/geometry.py symmetrize_mesh` |
-| Sharpen + presets | Mark sharp by angle + WN; SSharp / CSharp preset tiers | `core/geometry.py SHARPEN_PRESETS` |
 | Boolean from selection | Boolean selected meshes with the active object as cutter | `operators/boolean_ops.py` |
-| Dice / panel | Grid-slice an object into N pieces along axes | `core/geometry.py dice_mesh` |
 | Edge weights / crease | Set/clear bevel-weight + crease on selected edges (Edit Mode) | `operators/hardops.py` |
 | Display toggles | Wireframe / sharp-edge / cutter-visibility viewport toggles | `operators/hardops.py` |
 | Material helpers | Random viewport colors, copy active material to selection | `operators/hardops.py` |
-| Step / taper / knurl | Parametric greeble generators | `core/geometry.py build_steps/build_taper/build_knurl` |
+| Recalculate normals | One-click outward-normal fix for booleans that won't cut | `operators/hardops.py recalc_normals` |
 | Modifier-stack manager | N-panel list with move / toggle / apply / remove | `ui/panel.py` |
-| Clean | Remove doubles + limited dissolve + delete loose | `core/geometry.py cleanup_mesh` |
 
 ### Decals (DECALmachine — v0.7–v0.9 / v1.7)
 
@@ -211,11 +206,12 @@ it brings to Blender for free. The right column points at the implementing modul
 | Loop Cut (v1.11) | Object-Mode: pick an edge, insert an edge loop by subdividing its ring; `[ ]` sets how many | `operators/edge_tool.py`, `core/geometry.py edge_ring/loop_cut` |
 | Pick through modifiers (v1.11) | The face/edge tools map an evaluated-mesh hit (subdivision / array / mirror) back to a base face | `core/geometry.py nearest_face_to_point` |
 | Shared modal base (v1.11) | One mixin owns the hover / lock / drag / preview / numeric / inference / HUD shell for every face-drag tool | `operators/face_tool.py _FaceDragModal` |
-| Starter primitives (v1.9) | Add a Cube / Plane at the 3D cursor to model on | `operators/construction.py`, `core/geometry.py build_box/build_plane` |
+| Starter primitives (v1.9 / v1.13) | Add a Cube / Plane / Cylinder / Cone / Sphere / Tube at the 3D cursor to model on | `operators/construction.py`, `core/geometry.py build_box/build_plane/build_cylinder/build_cone/build_uv_sphere/build_tube` |
 | Construction grid | Drop a wire reference grid at the 3D cursor on XY / XZ / YZ | `operators/construction.py` |
 | Guide line (v1.9) | Drop a snappable wire guide line at the cursor (SketchUp guides) | `operators/construction.py`, `core/geometry.py build_line` |
 | Loft / bridge (v1.6) | Bridge two drawn profiles into a solid | `core/geometry.py build_loft` |
 | Pipe + profiles (v1.6) | Surface-draping pipe; round / square / rect cross-section (`P`) | `operators/pipe.py`, `core/geometry.py build_pipe` |
+| Sweep / Follow-Me (v1.13) | Draw a path and sweep an L / U / T / I / box structural section along it (`P` cycles) | `operators/pipe.py HARDFLOW_OT_sweep`, `core/geometry.py profile_points` |
 | Sagging cable / rope | A cable that drapes between its points (catenary sag) | `core/transform.py cable_points` |
 
 ### Edit Mode (v1.3)
@@ -232,8 +228,8 @@ it brings to Blender for free. The right column points at the implementing modul
 | Feature | What it does | Where |
 |---------|--------------|-------|
 | Self-diagnosing booleans | Auto-solver + retries; on failure says which geometry is broken | `core/boolean.py robust_boolean/mesh_health` |
-| Pre-cut health warning | N-panel flags broken geometry before you draw + one-click normal fix | `ui/panel.py`, `operators/modifiers.py recalc_normals` |
-| Adaptive sizing | Bevel width + segments, cut chamfer, decal offset, drag speed scale to the object | `core/transform.py adaptive_dimension/bevel_segments`, `core/decal.py adaptive_decal_offset` |
+| Pre-cut health warning | N-panel flags broken geometry before you draw + one-click normal fix | `ui/panel.py`, `operators/hardops.py recalc_normals` |
+| Adaptive sizing | Cut chamfer, decal offset, bevel-drag speed scale to the object | `core/transform.py adaptive_dimension`, `core/decal.py adaptive_decal_offset` |
 | Smart snapping | Nearest-wins vertex/edge disambiguation; raycast skips the live preview | `core/snap.py resolve_snap`, `core/raycast.py` |
 | Edge-aligned orientation | Drawing / INSERTs align to the hit face's dominant edge | `core/raycast.py face_edge_tangent`, `core/decal_math.py dominant_tangent` |
 | Connected faces | Drawn faces weld onto coincident existing vertices | `core/geometry.py edit_add_face` |
@@ -245,7 +241,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Live placement preview | Decal/asset tools show the real object under the cursor pre-click | `operators/decals.py`, `operators/assets.py` |
 | Pie menu | Categorized main pie + Build/Boolean/Modify/Curves sub-pies (Alt+Q) | `ui/pie.py` |
 | Header dropdown | 3D-View header menu covering every tool incl. Decals/Assets | `ui/menu.py` |
-| N-panel | Tools, snap settings, modifier stack, cutter list, greeble/display rows | `ui/panel.py` |
+| N-panel | Tools, snap settings, cutter options, modifier stack, cutter list, display rows | `ui/panel.py` |
 | HUD measurement | Drawn shape size in meters (Box W×H, Circle r/d, Poly segments) | `ui/draw.py` |
 | Customizable keymap | Rebind shortcuts from the standard Blender keymap editor | `keymaps.py` |
 
@@ -268,8 +264,8 @@ In drawing mode:
 | Left click | Place point / start-finish shape |
 | Enter / double-click | Close the POLY shape and apply |
 | Backspace | Delete the last POLY point |
-| Q / W / E / R | Shape: Box / Circle / Polygon / N-gon |
-| [ / ] | Decrease / increase N-gon side count |
+| Q / W / E / R / T / Y / U | Shape: Box / Circle / Polygon / N-gon / Slot / Star / Arc |
+| [ / ] | N-gon / star / slot segment count (ARC: sweep angle) |
 | **Tab / Shift+Tab** | Cycle mode (Cut / Slice / Make / Join / Intersect / Face / Knife) |
 | 0–9 / . / - | Type an exact size (radius / extent / segment) |
 | ← / → | Drawing plane: VIEW / SURFACE / EDGES / X / Y / Z |
@@ -282,7 +278,8 @@ In drawing mode:
 | **, / .** | In-draw in-plane rotation |
 | **A / D** | In-draw array count / array axis |
 | **M** | In-draw mirror across a world axis |
-| **B** | Toggle bevel-on-cut |
+| **B** / **C** | Toggle bevel-on-cut / bevelled cutter |
+| **J** | Toggle live boolean preview (real result on the target) |
 | **G** | Stamp / repeat the previous shape |
 | **Ctrl+Wheel** | Live grid density |
 | **PgUp / PgDn** | Live cutter / extrude depth |
@@ -293,14 +290,17 @@ add geometry (UNION) · Join = add the drawn shape as a separate solid (no boole
 · Intersect = keep only the overlap · Face = create a surface from the drawn shape
 (not a boolean) · Knife = score the surface without extruding (zero-depth cut).
 
-**Other tools:** Bevel · Mirror · **Array** · **Radial** · **Symmetrize** ·
-**Sharpen** (+ SSharp/CSharp presets) · **Boolean (Selected)** · **Dice/Panel** ·
-**Edge Weights** · **Display Toggles** · **Step/Taper/Knurl** greeble ·
-**Push/Pull** · **Offset** · **Edge Bevel** · **Loop Cut** · **Construction
-Grid** · **Loft** · **Clean** (mesh cleanup) · **Pipe** (round/square/rect) /
-**Cable** (from a line) · **Apply Cutters** · a **modifier-stack manager** — all
-in the N-panel. Push/Pull, Offset, the draw tool, and snapping also work in **Edit
-Mode** (v1.3).
+**Other tools:** **Build primitives** (Cube / Plane / Cylinder / Cone / Sphere /
+Tube) · **Boolean (Selected)** · **Edge Weights** · **Display Toggles** ·
+**Random Colors / Copy Material** · **Recalculate Normals** · **Push/Pull** ·
+**Offset** · **Edge Bevel** · **Loop Cut** · **Construction Grid** · **Loft** ·
+**Pipe** (round/square/rect) / **Cable** / **Sweep** (L/U/T/I/box sections) ·
+**Apply Cutters** · a **modifier-stack manager** — all in the N-panel. Push/Pull,
+Offset, the draw tool, and snapping also work in **Edit Mode** (v1.3).
+
+> **v1.13** removed the bevel / mirror / array / radial / symmetrize / sharpen /
+> dice / clean modifier tools and the step / taper / knurl greeble; use the
+> Object-Mode Edge Bevel / Loop Cut and Blender's own modifiers instead.
 
 **Assets:** N-panel "Assets" → "Asset from .blend" (or the "Asset Library" grid)
 starts the placement tool: wheel = scale, `[ ]` = roll, left click = place, Esc =
@@ -324,20 +324,18 @@ hardflow/
 │   ├── snap.py             # vertex/edge geometry snap (pure 2D)
 │   ├── snapping.py         # unified 3D snapping for every draw tool (bpy-data)
 │   ├── offset.py           # polygon inset/offset math, SketchUp Offset (pure 2D)
-│   ├── geometry.py         # bmesh build/dice/greeble/loft + Edit-Mode bridge
+│   ├── geometry.py         # bmesh build (primitives/prisms/pipe/loft) + Edit-Mode bridge
 │   ├── boolean.py          # destructive + non-destructive boolean + fallbacks
-│   ├── transform.py        # array / radial / cable-sag / dice / fit math (pure)
+│   ├── transform.py        # array / radial / cable-sag / fit math (pure)
 │   ├── decal*.py / atlas.py# decal orientation, image library, trim/atlas math
 │   ├── asset_lib.py        # .blend kit-library scan (pure)
 │   └── asset.py            # append / orient / bind INSERTs + KitOps extras
 ├── operators/              # user actions
-│   ├── draw_cut.py         # main modal draw (cut/slice/make/join/intersect/face/knife)
-│   ├── modifiers.py        # bevel + mirror + clean + symmetrize + sharpen
-│   ├── hardops.py          # dice / edge-weight / display / greeble (Hard Ops v1.5)
+│   ├── draw_cut.py         # main modal draw (box/circle/poly/ngon/slot/star/arc; live boolean)
+│   ├── hardops.py          # edge-weight / display / material / recalc-normals helpers
 │   ├── boolean_ops.py      # boolean from selected objects
-│   ├── array.py            # linear + radial array
 │   ├── cutters.py          # non-destructive cutter management (apply/select/remove)
-│   ├── pipe.py             # pipe (round/square/rect) + sagging cable/rope
+│   ├── pipe.py             # pipe (round/square/rect) + cable/rope + sweep (L/U/T/I)
 │   ├── face_tool.py        # shared modal base for the face-drag tools (_FaceDragModal)
 │   ├── push_pull.py        # SketchUp Push/Pull — copy/repeat/inference (Object + Edit)
 │   ├── offset.py           # SketchUp Offset — repeat + recess/panel chain (Object + Edit)
@@ -347,9 +345,9 @@ hardflow/
 │   └── assets.py           # INSERT placement + library + mark + material + export
 ├── ui/                     # GPU drawing, HUD, menus
 │   ├── draw.py             # gpu + blf helpers
-│   ├── pie.py              # categorized pie (main + Build/Boolean/Modify/Curves)
+│   ├── pie.py              # categorized pie (main + Build/Boolean/Curves)
 │   ├── menu.py             # 3D-View header dropdown covering every tool
-│   ├── panel.py            # N-panel: tools, settings, modifier stack, cutters
+│   ├── panel.py            # N-panel: tools, settings, cutter options, modifier stack, cutters
 │   ├── decal_panel.py / decal_library.py   # decal sections
 │   └── asset_panel.py      # asset + asset-library sections
 └── tests/                  # tests

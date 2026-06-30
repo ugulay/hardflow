@@ -450,6 +450,47 @@ once then Offset again so the prior inset edge is a coplanar reference):
 - [ ] Draw with the plane **edge-on** to the view (or in a context with no region) →
       it **falls back** to the footprint knife without error.
 
+## 19. v1.13 build/boolean expansion ⭐ (new)
+
+**Build primitives** (Object Mode, N-panel ▸ Build):
+- [ ] **Cylinder / Cone / Sphere / Tube** each drop a clean solid at the 3D cursor,
+      selected + active. The redo panel exposes radius / height / segments (Tube also
+      inner-radius); changing them rebuilds the primitive.
+
+**Draw tool ▸ new shapes** (`Q/W/E/R/T/Y/U`):
+- [ ] **`T` Slot** draws a stadium (rounded-rectangle) from two corners; the caps sit
+      on the short sides; HUD reads `Slot: W x H m`.
+- [ ] **`Y` Star** draws an n-pointed star from a center drag; `[ ]` changes the point
+      count; HUD reads `Star: N points`.
+- [ ] **`U` Arc** draws a filled pie sector; `[ ]` grows/shrinks the **sweep angle**
+      (15° steps); HUD reads `Arc: D deg`. Each shape commits a valid boolean cutter.
+
+**N-panel ▸ Boolean Draw** — Intersect / Join / Knife buttons and the
+Circle / N-gon / Slot / Star / Arc shape rows each launch the draw tool in the
+right mode/shape.
+
+**Live boolean preview** (`J`, Cut/Make/Intersect):
+- [ ] Enable **Cutter Options ▸ Live Boolean Preview** (or press **`J`** while drawing)
+      → the target shows the **actual cut result** live as you move/draw, not just the
+      wire cage (HUD bit `live boolean`).
+- [ ] **Commit** → the temporary `HF_LivePreview` modifier is gone and the real cut is
+      applied exactly once (no double boolean). **Cancel (Esc)** → the target is back to
+      its original mesh, no leftover modifier.
+- [ ] On a **heavy** target (> ~8k verts) the live boolean is skipped (only the wire
+      cage shows), staying responsive.
+
+**Cutter Options** (N-panel section): presetting inset / bevel-on-cut / bevelled
+cutter / array there seeds the next draw (then `-`/`=`, `B`, `C`, `A`/`D` live-tweak).
+
+**Sweep / Follow-Me** (N-panel ▸ Curves ▸ Sweep):
+- [ ] Draw a path on a surface → an **L** section is swept along it; **`P`** cycles
+      L → U → T → I → Square → Rect; Enter commits the swept solid, Esc discards.
+
+**Removed tools** — confirm the N-panel no longer shows the **Modifier** (bevel/
+mirror/array/radial/symmetrize/sharpen/clean/dice) or **Greeble** (steps/taper/
+knurl) sections, the pie has no **Modify** slice, and the header menu has no
+**Greeble** submenu; **Pipe/Cable** still work (now under "Curves").
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

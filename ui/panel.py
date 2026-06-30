@@ -22,41 +22,44 @@ class HARDFLOW_PT_tools(Panel):
         row.operator("mesh.hardflow_draw", text="Cut").mode = 'CUT'
         row.operator("mesh.hardflow_draw", text="Slice").mode = 'SLICE'
         row.operator("mesh.hardflow_draw", text="Make").mode = 'MAKE'
-        circle = col.operator("mesh.hardflow_draw", text="Circle Cut",
+        row = col.row(align=True)
+        row.operator("mesh.hardflow_draw", text="Intersect").mode = 'INTERSECT'
+        row.operator("mesh.hardflow_draw", text="Join").mode = 'JOIN'
+        row.operator("mesh.hardflow_draw", text="Knife").mode = 'KNIFE'
+        # Cutter shape: each draws a CUT by default; the mode buttons above set
+        # the operation, the shape buttons set the outline.
+        col.label(text="Shape (cut)")
+        row = col.row(align=True)
+        circle = row.operator("mesh.hardflow_draw", text="Circle",
                               icon='MESH_CIRCLE')
         circle.shape = 'CIRCLE'
         circle.mode = 'CUT'
+        ngon = row.operator("mesh.hardflow_draw", text="N-gon",
+                            icon='MESH_CYLINDER')
+        ngon.shape = 'NGON'
+        ngon.mode = 'CUT'
+        row = col.row(align=True)
+        slot = row.operator("mesh.hardflow_draw", text="Slot",
+                            icon='MESH_CAPSULE')
+        slot.shape = 'SLOT'
+        slot.mode = 'CUT'
+        star = row.operator("mesh.hardflow_draw", text="Star", icon='SOLO_ON')
+        star.shape = 'STAR'
+        star.mode = 'CUT'
+        arc = row.operator("mesh.hardflow_draw", text="Arc",
+                           icon='MOD_SIMPLEDEFORM')
+        arc.shape = 'ARC'
+        arc.mode = 'CUT'
         col.operator("object.hardflow_boolean", text="Boolean (Selected)",
                      icon='MOD_BOOLEAN')
         self._draw_health(context, col)
 
         col = layout.column(align=True)
-        col.label(text="Modifier", icon='MODIFIER')
-        row = col.row(align=True)
-        row.operator("object.hardflow_bevel", text="Bevel", icon='MOD_BEVEL')
-        row.operator("object.hardflow_mirror", text="Mirror", icon='MOD_MIRROR')
-        row = col.row(align=True)
-        row.operator("object.hardflow_array", text="Array", icon='MOD_ARRAY')
-        row.operator("object.hardflow_radial_array", text="Radial",
-                     icon='MOD_ARRAY')
-        row = col.row(align=True)
-        row.operator("object.hardflow_symmetrize", text="Symmetrize",
-                     icon='MOD_MIRROR')
-        row.operator("object.hardflow_sharpen", text="Sharpen", icon='MOD_BEVEL')
-        row = col.row(align=True)
-        row.operator("object.hardflow_clean", text="Clean", icon='BRUSH_DATA')
-        row.operator("object.hardflow_dice", text="Dice", icon='MOD_LATTICE')
+        col.label(text="Curves", icon='MOD_SCREW')
         row = col.row(align=True)
         row.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
         row.operator("mesh.hardflow_cable", text="Cable", icon='FORCE_CURVE')
-
-        col = layout.column(align=True)
-        col.label(text="Greeble", icon='MESH_ICOSPHERE')
-        row = col.row(align=True)
-        row.operator("object.hardflow_add_step", text="Steps", icon='MOD_ARRAY')
-        row.operator("object.hardflow_add_taper", text="Taper", icon='CONE')
-        row.operator("object.hardflow_add_knurl", text="Knurl",
-                     icon='MESH_CYLINDER')
+        row.operator("mesh.hardflow_sweep", text="Sweep", icon='MOD_SIMPLEDEFORM')
 
         col = layout.column(align=True)
         col.label(text="Display", icon='OVERLAY')
@@ -81,6 +84,16 @@ class HARDFLOW_PT_tools(Panel):
                      icon='MESH_CUBE').kind = 'CUBE'
         row.operator("object.hardflow_add_primitive", text="Plane",
                      icon='MESH_PLANE').kind = 'PLANE'
+        row = col.row(align=True)
+        row.operator("object.hardflow_add_primitive", text="Cylinder",
+                     icon='MESH_CYLINDER').kind = 'CYLINDER'
+        row.operator("object.hardflow_add_primitive", text="Cone",
+                     icon='CONE').kind = 'CONE'
+        row = col.row(align=True)
+        row.operator("object.hardflow_add_primitive", text="Sphere",
+                     icon='MESH_UVSPHERE').kind = 'SPHERE'
+        row.operator("object.hardflow_add_primitive", text="Tube",
+                     icon='MESH_CYLINDER').kind = 'TUBE'
         # Sketch with the draw tool in FACE mode: a rectangle or freeform polygon
         # that becomes real geometry, ready to Push/Pull.
         row = col.row(align=True)
@@ -198,6 +211,31 @@ class HARDFLOW_PT_snap(Panel):
         row = col.row(align=True)
         row.prop(prefs, "line_color", text="")
         row.prop(prefs, "grid_color", text="")
+
+
+class HARDFLOW_PT_cutter_options(Panel):
+    bl_label = "Cutter Options"
+    bl_idname = "HARDFLOW_PT_cutter_options"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        prefs = get_prefs(context)
+        col = layout.column()
+        col.label(text="Defaults for the next boolean draw")
+        col.prop(prefs, "live_boolean_preview")
+        col.prop(prefs, "draw_inset")
+        col.prop(prefs, "draw_bevel_cut")
+        col.prop(prefs, "draw_cutter_bevel")
+        row = col.row(align=True)
+        row.prop(prefs, "draw_array_count")
+        row.prop(prefs, "draw_array_axis", text="")
+        col.label(text="Live keys while drawing: -/= , . A D B C J",
+                  icon='INFO')
 
 
 class HARDFLOW_PT_modifiers(Panel):

@@ -2,7 +2,7 @@
 #
 # The toolset outgrew a single 8-slot ring, so the pie is now categorized: a
 # MAIN pie (Alt+Q) whose slots either fire the most-common operator directly or
-# open a focused SUB-pie (Build / Boolean / Modify / Curves). Every tool is
+# open a focused SUB-pie (Build / Boolean / Curves). Every tool is
 # reachable in at most two clicks, and adding a tool is a one-line edit in the
 # relevant sub-pie.
 #
@@ -33,13 +33,13 @@ class HARDFLOW_MT_pie(Menu):
         # W / E / S / N
         _draw(pie, "mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', mode='CUT')
         _open(pie, "HARDFLOW_MT_pie_build", "Build ▸", 'MESH_GRID')
-        _open(pie, "HARDFLOW_MT_pie_modify", "Modify ▸", 'MODIFIER')
         _open(pie, "HARDFLOW_MT_pie_boolean", "Boolean ▸", 'MOD_BOOLEAN')
-        # Corners: NW / NE / SW / SE
-        _draw(pie, "object.hardflow_bevel", "Bevel", 'MOD_BEVEL')
-        _draw(pie, "object.hardflow_mirror", "Mirror", 'MOD_MIRROR')
         _open(pie, "HARDFLOW_MT_pie_curves", "Curves ▸", 'MOD_SCREW')
-        _draw(pie, "object.hardflow_clean", "Clean", 'BRUSH_DATA')
+        # Corners: NW / NE / SW / SE
+        _draw(pie, "mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW')
+        _draw(pie, "mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY')
+        _draw(pie, "object.hardflow_apply_cutters", "Apply Cutters", 'CHECKMARK')
+        _draw(pie, "mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL')
 
 
 class HARDFLOW_MT_pie_build(Menu):
@@ -79,21 +79,6 @@ class HARDFLOW_MT_pie_boolean(Menu):
         _draw(pie, "object.hardflow_apply_cutters", "Apply Cutters", 'CHECKMARK')
 
 
-class HARDFLOW_MT_pie_modify(Menu):
-    bl_label = "Modify"
-
-    def draw(self, context):
-        pie = self.layout.menu_pie()
-        _draw(pie, "object.hardflow_bevel", "Bevel", 'MOD_BEVEL')
-        _draw(pie, "object.hardflow_mirror", "Mirror", 'MOD_MIRROR')
-        _draw(pie, "object.hardflow_array", "Array", 'MOD_ARRAY')
-        _draw(pie, "object.hardflow_radial_array", "Radial", 'MOD_ARRAY')
-        _draw(pie, "object.hardflow_symmetrize", "Symmetrize", 'MOD_MIRROR')
-        _draw(pie, "object.hardflow_sharpen", "Sharpen", 'MOD_BEVEL')
-        _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')
-        _draw(pie, "object.hardflow_clean", "Clean", 'BRUSH_DATA')
-
-
 class HARDFLOW_MT_pie_curves(Menu):
     bl_label = "Curves"
 
@@ -101,4 +86,5 @@ class HARDFLOW_MT_pie_curves(Menu):
         pie = self.layout.menu_pie()
         _draw(pie, "mesh.hardflow_pipe", "Pipe", 'MOD_SCREW')
         _draw(pie, "mesh.hardflow_cable", "Cable", 'FORCE_CURVE')
+        _draw(pie, "mesh.hardflow_sweep", "Sweep", 'MOD_SIMPLEDEFORM')
         _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')

@@ -7,7 +7,7 @@
 # a reference. Spacing follows the same grid size as the draw/snap tools.
 import bpy
 from bpy.types import Operator
-from bpy.props import EnumProperty, FloatProperty, BoolProperty
+from bpy.props import EnumProperty, FloatProperty, BoolProperty, IntProperty
 from mathutils import Matrix
 
 from ..core import grid, geometry
@@ -78,17 +78,26 @@ class HARDFLOW_OT_loft(Operator):
 class HARDFLOW_OT_add_primitive(Operator):
     bl_idname = "object.hardflow_add_primitive"
     bl_label = "Add Primitive"
-    bl_description = ("Create a starter cube or plane at the 3D cursor to model on "
+    bl_description = ("Create a starter primitive at the 3D cursor to model on "
                       "with the SketchUp-style tools (Push/Pull, Offset, draw)")
     bl_options = {'REGISTER', 'UNDO'}
 
     kind: EnumProperty(
         name="Type",
         items=[('CUBE', "Cube", "A solid cube"),
-               ('PLANE', "Plane", "A flat square face")],
+               ('PLANE', "Plane", "A flat square face"),
+               ('CYLINDER', "Cylinder", "A capped cylinder"),
+               ('CONE', "Cone", "A cone"),
+               ('SPHERE', "Sphere", "A UV sphere"),
+               ('TUBE', "Tube", "A hollow tube (cylinder with a bore)")],
         default='CUBE',
     )
     size: FloatProperty(name="Size (m)", default=1.0, min=1e-4, soft_max=50.0)
+    radius: FloatProperty(name="Radius (m)", default=0.5, min=1e-4, soft_max=50.0)
+    inner_radius: FloatProperty(name="Inner Radius (m)", default=0.3, min=1e-5,
+                                soft_max=50.0)
+    depth: FloatProperty(name="Height (m)", default=1.0, min=1e-4, soft_max=50.0)
+    segments: IntProperty(name="Segments", default=32, min=3, max=256)
 
     @classmethod
     def poll(cls, context):
@@ -96,11 +105,22 @@ class HARDFLOW_OT_add_primitive(Operator):
 
     def execute(self, context):
         if self.kind == 'CUBE':
-            mesh = geometry.build_box(self.size, name="Hardflow_Cube")
-            name = "Hardflow_Cube"
-        else:
-            mesh = geometry.build_plane(self.size, name="Hardflow_Plane")
-            name = "Hardflow_Plane"
+            mesh, name = geometry.build_box(self.size), "Hardflow_Cube"
+        elif self.kind == 'PLANE':
+            mesh, name = geometry.build_plane(self.size), "Hardflow_Plane"
+        elif self.kind == 'CYLINDER':
+            mesh = geometry.build_cylinder(self.radius, self.depth, self.segments)
+            name = "Hardflow_Cylinder"
+        elif self.kind == 'CONE':
+            mesh = geometry.build_cone(self.radius, self.depth, self.segments)
+            name = "Hardflow_Cone"
+        elif self.kind == 'SPHERE':
+            mesh = geometry.build_uv_sphere(self.radius, self.segments)
+            name = "Hardflow_Sphere"
+        else:  # TUBE
+            mesh = geometry.build_tube(self.radius, self.inner_radius,
+                                       self.depth, self.segments)
+            name = "Hardflow_Tube"
         if mesh is None:
             self.report({'WARNING'}, "Could not build primitive")
             return {'CANCELLED'}
