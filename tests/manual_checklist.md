@@ -115,6 +115,12 @@ Setup: same as Push/Pull.
       `Ctrl+Z` reverts in one step.
 - [ ] **`R` repeat** ⭐ — after one offset, run the tool again, lock another face,
       press `R` → it re-applies the **last thickness** (HUD shows `R repeat <m>`).
+- [ ] **`E` → extrude (recess/panel)** ⭐ — with an inset set, press `E`: the HUD
+      switches to **Depth** and dragging now extrudes the **inner** face along the
+      normal — drag **in** for a recessed panel, **out** for a raised one (the
+      outer border stays put). Numeric + `X` snap work; `Enter` keeps both. `Esc`
+      before confirming rolls back to the original mesh. Headless:
+      `test_inset_extrude_faces_recess`.
 
 ---
 

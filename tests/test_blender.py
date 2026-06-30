@@ -801,6 +801,28 @@ def test_inset_faces_offset():
     assert geometry.inset_faces(cube, [9999], 0.3) is False   # bad index
 
 
+def test_inset_extrude_faces_recess():
+    # Offset -> Push/Pull combo: inset the top face, then extrude the INNER face
+    # up by 0.5. The inner panel rises to z=1.5 while the original outer corners
+    # stay at z=1.0 -- proving we extrude the inner region, not the border ring.
+    _reset()
+    cube = _add_cube("Recess", size=2.0)
+    top = max(range(len(cube.data.polygons)),
+              key=lambda i: cube.data.polygons[i].normal.z)
+    n = cube.data.polygons[top].normal.copy()           # ~ (0, 0, 1)
+    assert geometry.inset_extrude_faces(cube, [top], 0.3, n * 0.5) is True
+    zmax = max(v.co.z for v in cube.data.vertices)
+    assert abs(zmax - 1.5) < 1e-5, "inner panel not raised: %f" % zmax
+    outer = [v.co.z for v in cube.data.vertices
+             if abs(abs(v.co.x) - 1.0) < 1e-4 and abs(abs(v.co.y) - 1.0) < 1e-4]
+    assert any(abs(z - 1.0) < 1e-4 for z in outer), \
+        "outer corners moved -> extruded the wrong faces: %r" % outer
+    # guards
+    assert geometry.inset_extrude_faces(cube, [], 0.3, Vector((0, 0, 1))) is False
+    assert geometry.inset_extrude_faces(cube, [9999], 0.3,
+                                        Vector((0, 0, 1))) is False
+
+
 def test_snapshot_restore_mesh():
     # the live-preview backbone for Push/Pull + Offset: snapshot a mesh, mutate
     # it, then restore it back to the captured state.

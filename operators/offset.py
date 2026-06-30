@@ -24,7 +24,7 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
     _LOCK_FILL = (0.2, 1.0, 0.5, 0.20)     # green-tinted lock fill
     _snapshot_name = "hf_offset_base"
     _select_warning = "Select face(s) to offset"
-    allow_negative = False                 # inset thickness is never negative
+    allow_negative = True                  # the EXTRUDE phase can recess inward
 
     _LAST_THICKNESS = 0.0   # remembered across runs -> R repeats the last inset
 
@@ -32,6 +32,8 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
 
     def _init_tool(self, context, event):
         self.thickness = 0.0
+        self.distance = 0.0       # phase-2 extrude amount (recess/raise depth)
+        self.phase = 'OFFSET'     # OFFSET -> EXTRUDE (press E to chain)
         self.plane_co = None      # world face center (the inset's plane)
         self.plane_no = None      # world face normal
         self.pick0 = None         # world point where the drag started
@@ -75,32 +77,63 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
     # --- dragging / apply ------------------------------------------------
 
     def _refresh_preview(self):
-        """Show the real inset live: restore the snapshot, then re-inset the
-        locked face(s) by the current thickness. Routes through the edit-mesh in
-        Edit Mode, the object mesh otherwise."""
+        """Show the real inset (and, in the EXTRUDE phase, the extruded inner
+        face) live: restore the snapshot, then re-apply. Routes through the
+        edit-mesh in Edit Mode, the object mesh otherwise."""
         if self._base is None:
             return
         if self.edit:
             geometry.restore_edit_mesh(self.obj, self._base)
-            if self.thickness > 1e-6:
+            if self.phase == 'EXTRUDE' and self.thickness > 1e-6:
+                geometry.edit_inset_extrude_faces(self.obj, self.thickness,
+                                                  self._extrude_vec())
+            elif self.thickness > 1e-6:
                 geometry.edit_inset_faces(self.obj, self.thickness)
             return
         geometry.restore_mesh(self.obj, self._base)
-        if self.thickness > 1e-6:
+        if self.phase == 'EXTRUDE' and self.thickness > 1e-6:
+            geometry.inset_extrude_faces(self.obj, [self.face_index],
+                                         self.thickness, self._extrude_vec())
+        elif self.thickness > 1e-6:
             geometry.inset_faces(self.obj, [self.face_index], self.thickness)
+
+    def _extrude_vec(self):
+        """Object-local extrude vector for the inner face: the face normal scaled
+        by the (signed) recess/raise depth."""
+        world = self.plane_no * self.distance
+        return self.obj.matrix_world.inverted_safe().to_3x3() @ world
 
     def _update_drag(self, context, co):
         region, rv3d = context.region, context.region_data
-        p = raycast.ray_to_plane(region, rv3d, co, self.plane_co, self.plane_no)
-        if p is None or self.pick0 is None:
-            return
-        d = (p - self.pick0).length
-        self.thickness = grid.snap_scalar(d, get_prefs(context).grid_world,
-                                          self.snap)
+        prefs = get_prefs(context)
+        if self.phase == 'OFFSET':
+            p = raycast.ray_to_plane(region, rv3d, co,
+                                     self.plane_co, self.plane_no)
+            if p is None or self.pick0 is None:
+                return
+            d = (p - self.pick0).length
+            self.thickness = grid.snap_scalar(d, prefs.grid_world, self.snap)
+        else:  # EXTRUDE: drag along the face normal (signed)
+            d = raycast.closest_axis_distance(region, rv3d, co,
+                                              self.plane_co, self.plane_no)
+            self.distance = grid.snap_scalar(d, prefs.grid_world, self.snap)
         self.typed = ""
 
     def _set_value(self, v):
-        self.thickness = max(0.0, v)
+        if self.phase == 'OFFSET':
+            self.thickness = max(0.0, v)
+        else:
+            self.distance = v
+
+    def _handle_key(self, context, event):
+        # E: lock the current inset and chain into extruding the inner face
+        # (the recess / raised-panel combo). Only from a non-zero offset.
+        if (event.type == 'E' and self.locked and self.phase == 'OFFSET'
+                and self.thickness > 1e-6):
+            self.phase = 'EXTRUDE'
+            self.typed = ""
+            return True
+        return False
 
     def _repeat_last(self):
         self.thickness = HARDFLOW_OT_offset._LAST_THICKNESS
@@ -114,16 +147,24 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
     def _hud_lines(self, context, prefs):
         accent = tuple(prefs.line_color)[:3] + (1.0,)
         dim = (0.72, 0.72, 0.72, 1.0)
+        typed = ("  [typing %s]" % self.typed) if self.typed else ""
         if not self.locked:
             top = ("Hover a face, then click to offset", accent)
-        else:
-            typed = ("  [typing %s]" % self.typed) if self.typed else ""
+            line2 = ("Click face = lock    drag / type number = thickness    "
+                     "X snap %s" % ('ON' if self.snap else 'OFF'), dim)
+        elif self.phase == 'OFFSET':
             top = ("Thickness:  %.3f m%s" % (self.thickness, typed), accent)
+            line2 = ("drag / type = thickness    E = then extrude (recess/panel)"
+                     "    X snap %s" % ('ON' if self.snap else 'OFF'), dim)
+        else:  # EXTRUDE
+            top = ("Depth:  %+.3f m%s    (inset %.3f m)"
+                   % (self.distance, typed, self.thickness), accent)
+            line2 = ("drag / type = recess depth (- in / + out)    "
+                     "X snap %s" % ('ON' if self.snap else 'OFF'), dim)
         last = HARDFLOW_OT_offset._LAST_THICKNESS
         repeat = ("    R repeat %.3f m" % last) if last > 1e-6 else ""
         return [
             top,
-            ("Click face = lock    drag / type number = thickness    "
-             "X snap %s" % ('ON' if self.snap else 'OFF'), dim),
+            line2,
             ("Enter / click apply%s    Esc cancel" % repeat, dim),
         ]

@@ -507,6 +507,35 @@ def inset_faces(obj, face_indices, thickness, depth=0.0):
     return True
 
 
+def inset_extrude_faces(obj, face_indices, thickness, local_vec):
+    """Offset → Push/Pull combo: inset the given faces by `thickness`, then
+    extrude the resulting inner face(s) by `local_vec` (object-local) -- one
+    bmesh pass that makes a recess (negative vec) or raised panel (positive).
+    `inset_region` keeps the input faces as the inner region, so they are what we
+    extrude; the extrude is clean (drops the source face). Returns True on
+    success, False on empty / out-of-range input."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.faces.ensure_lookup_table()
+    faces = [bm.faces[i] for i in face_indices if 0 <= i < len(bm.faces)]
+    if not faces:
+        bm.free()
+        return False
+    if thickness > 0.0:
+        bmesh.ops.inset_region(bm, faces=faces, thickness=thickness,
+                               use_even_offset=True, use_boundary=True)
+    if local_vec.length > 1e-9:
+        res = bmesh.ops.extrude_face_region(bm, geom=faces)
+        moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+        bmesh.ops.translate(bm, vec=local_vec, verts=moved)
+        bmesh.ops.delete(bm, geom=faces, context='FACES')
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return True
+
+
 def symmetrize_mesh(obj, direction='+X'):
     """Symmetrize the mesh in place: keep one side and mirror it onto the other
     across the object-local axis plane (Hard Ops symmetrize). `direction` is a
@@ -635,6 +664,31 @@ def edit_inset_faces(obj, thickness, depth=0.0):
     if inner:
         for f in bm.faces:
             f.select_set(f in inner)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bmesh.update_edit_mesh(obj.data)
+    return True
+
+
+def edit_inset_extrude_faces(obj, thickness, local_vec):
+    """Edit Mode Offset → Push/Pull combo: inset the selected faces by
+    `thickness`, then extrude the inner faces by `local_vec` (object-local). The
+    new cap is left selected. Returns True on success, False when nothing is
+    selected."""
+    bm = bmesh.from_edit_mesh(obj.data)
+    faces = [f for f in bm.faces if f.select]
+    if not faces:
+        return False
+    if thickness > 0.0:
+        bmesh.ops.inset_region(bm, faces=faces, thickness=thickness,
+                               use_even_offset=True, use_boundary=True)
+    if local_vec.length > 1e-9:
+        res = bmesh.ops.extrude_face_region(bm, geom=faces)
+        moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+        bmesh.ops.translate(bm, vec=local_vec, verts=moved)
+        bmesh.ops.delete(bm, geom=faces, context='FACES')
+        new_faces = {f for v in moved for f in v.link_faces}
+        for f in bm.faces:
+            f.select_set(f in new_faces)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bmesh.update_edit_mesh(obj.data)
     return True

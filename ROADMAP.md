@@ -489,8 +489,10 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       grid is the fallback. Headless `test_snap_to_candidates`.
 - [ ] **Offset / edge inference** — extend inference to the Offset thickness
       (in-plane border alignment) and to edge mid-points, pending a live pass.
-- [ ] **Offset → auto Push/Pull** — chain the inset into an extrude of the inner
-      ring in one modal (the common recess/panel combo).
+- [x] **Offset → auto Push/Pull** — press `E` mid-Offset to lock the inset and
+      chain into extruding the inner face along its normal (recess for `-`, raised
+      panel for `+`), one bmesh pass `geometry.inset_extrude_faces` /
+      `edit_inset_extrude_faces`. Headless `test_inset_extrude_faces_recess`.
 - [ ] **Interactive edge tools** — Object-Mode edge/loop bevel + loop-cut modals
       (drag width / segments) so edge work doesn't require Edit Mode.
 - [ ] **Hover-pick through modifiers** — Object-Mode face pick still indexes the
