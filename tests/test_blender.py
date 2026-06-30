@@ -1115,7 +1115,8 @@ def test_menu_classes_registered():
     hardflow.register()
     try:
         for name in ("HARDFLOW_MT_pie", "HARDFLOW_MT_pie_build",
-                     "HARDFLOW_MT_menu", "HARDFLOW_MT_menu_build",
+                     "HARDFLOW_MT_pie_edit", "HARDFLOW_MT_menu",
+                     "HARDFLOW_MT_menu_build", "HARDFLOW_MT_menu_edit",
                      "HARDFLOW_MT_menu_decals", "HARDFLOW_MT_menu_assets"):
             assert hasattr(bpy.types, name), "menu not registered: %s" % name
     finally:
@@ -1566,11 +1567,37 @@ def test_recalc_normals_outward():
         tuple(top.normal),)
 
 
+def test_panel_health_cache():
+    # The N-panel pre-cut warning is cached so it does not rebuild a bmesh on every
+    # redraw; the cache must invalidate when the mesh's vert/poly count changes.
+    _reset()
+    from hardflow.ui import panel
+    panel._HEALTH_CACHE["key"] = None          # isolate from any prior test
+    cube = _add_cube("CacheClean", size=2.0)
+    assert panel._cached_health_summary(cube) == ""        # clean -> no warning
+    key1 = panel._HEALTH_CACHE["key"]
+    assert panel._cached_health_summary(cube) == ""        # served from cache
+    assert panel._HEALTH_CACHE["key"] == key1              # key unchanged
+
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(cube.data)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[0]], context='FACES_ONLY')
+    bm.to_mesh(cube.data)
+    bm.free()
+    summary = panel._cached_health_summary(cube)           # poly count changed
+    assert "non-manifold" in summary, summary
+    assert panel._HEALTH_CACHE["key"] != key1              # cache invalidated
+
+
 def test_choose_solver_from_health():
-    # a clean cube keeps the accurate EXACT solver
+    # a clean, closed manifold cube starts on the fast MANIFOLD solver where it
+    # exists (Blender 4.5+), else the accurate EXACT solver
     _reset()
     cube = _add_cube("Clean", size=2.0)
-    assert boolean.choose_solver(cube, 'EXACT') == 'EXACT'
+    clean_expected = 'MANIFOLD' if boolean._solver_available('MANIFOLD') else 'EXACT'
+    assert boolean.choose_solver(cube, 'EXACT') == clean_expected
     # a non-EXACT preference is passed through untouched
     assert boolean.choose_solver(cube, 'FAST') == 'FAST'
 
@@ -1589,6 +1616,65 @@ def test_choose_solver_from_health():
     assert boolean.choose_solver(cube, 'EXACT', max_verts=0) == 'EXACT'
 
 
+def test_choose_solver_cutter_gate():
+    # MANIFOLD needs BOTH operands watertight: a clean target paired with an open
+    # (non-manifold) cutter must fall back to EXACT, not pick MANIFOLD.
+    if not boolean._solver_available('MANIFOLD'):
+        return  # pre-4.5: no MANIFOLD solver to gate
+    _reset()
+    target = _add_cube("CleanTarget", size=2.0)
+    cutter = _add_cube("OpenCutter", size=1.0)
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(cutter.data)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.faces[0]], context='FACES_ONLY')   # open it
+    bm.to_mesh(cutter.data)
+    bm.free()
+    assert boolean.choose_solver(target, 'EXACT', cutter=cutter) == 'EXACT'
+    # a clean cutter restores the MANIFOLD fast path
+    clean_cutter = _add_cube("CleanCutter", size=1.0)
+    assert boolean.choose_solver(target, 'EXACT', cutter=clean_cutter) == 'MANIFOLD'
+
+
+def test_solver_fallback_chain_and_message():
+    # Manifold-first must escalate through EXACT before the lossy FAST; a broken
+    # mesh's FAST start must not waste a slow EXACT attempt; messages stay quiet on
+    # the happy path and warn only on a real downgrade / mid-chain fallback.
+    assert boolean._dedupe(['A', 'B', 'A', 'C', 'B']) == ['A', 'B', 'C']
+    assert boolean._fallback_chain('MANIFOLD', 'EXACT') == \
+        ['MANIFOLD', 'EXACT', 'FAST']
+    assert boolean._fallback_chain('FAST', 'EXACT') == ['FAST']
+    assert boolean._fallback_chain('EXACT', 'EXACT') == ['EXACT', 'FAST']
+    # planned solver worked -> quiet (incl. the Manifold clean-mesh fast path)
+    assert boolean._solver_message('MANIFOLD', 'EXACT', 'MANIFOLD') == "Cut done"
+    assert boolean._solver_message('EXACT', 'EXACT', 'EXACT') == "Cut done"
+    # health forced a FAST downgrade -> say which geometry is at fault
+    assert 'too broken' in boolean._solver_message('FAST', 'EXACT', 'FAST')
+    # a deliberate FAST preference is not a downgrade -> quiet
+    assert boolean._solver_message('FAST', 'FAST', 'FAST') == "Cut done"
+    # mid-chain fallback (start failed, a later solver won) -> name it
+    assert boolean._solver_message('EXACT', 'EXACT', 'MANIFOLD') == \
+        "Cut done (EXACT solver fallback)"
+
+
+def test_coerce_solver_fast_to_float():
+    # Blender 5.0 renamed the FAST solver to FLOAT; a FAST request must map to the
+    # available fast solver, not silently fall all the way back to the slow EXACT.
+    avail = {i.identifier for i in
+             bpy.types.BooleanModifier.bl_rna.properties['solver'].enum_items}
+    coerced = boolean._coerce_solver('FAST')
+    if 'FAST' in avail:
+        assert coerced == 'FAST'
+    elif 'FLOAT' in avail:
+        assert coerced == 'FLOAT', coerced      # 5.x rename, not EXACT
+    else:
+        assert coerced == 'EXACT'
+    # EXACT and an unknown solver are unaffected
+    assert boolean._coerce_solver('EXACT') == 'EXACT'
+    assert boolean._coerce_solver('NOPE') == 'EXACT'
+
+
 def test_robust_boolean_succeeds_and_reports():
     _reset()
     target = _add_cube("Target", size=2.0)
@@ -1597,7 +1683,7 @@ def test_robust_boolean_succeeds_and_reports():
     before = len(target.data.polygons)
     ok, used, msg = boolean.robust_boolean(bpy.context, target, cutter,
                                            'DIFFERENCE', 'EXACT')
-    assert ok and used in {'EXACT', 'FAST'}
+    assert ok and used in {'MANIFOLD', 'EXACT', 'FAST'}
     assert len(target.data.polygons) != before
     assert isinstance(msg, str) and msg
 

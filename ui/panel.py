@@ -6,6 +6,26 @@ from ..preferences import get_prefs
 from ..core import boolean
 
 
+# Single-slot cache for the pre-cut health summary. `mesh_health` rebuilds a
+# bmesh, and the N-panel redraws constantly (hover, selection, any UI poke), so
+# recomputing it every repaint is pure waste. Keyed on the cheap signals that a
+# boolean/delete/add changes (vert + poly count); an Object-Mode edit that keeps
+# both counts but alters manifoldness is rare and self-corrects on the next count
+# change. Edit Mode is never cached -- object data counts are stale mid-edit.
+_HEALTH_CACHE = {"key": None, "summary": ""}
+
+
+def _cached_health_summary(obj):
+    me = obj.data
+    if me.is_editmode:
+        return boolean._health_summary(obj)
+    key = (obj.name, len(me.vertices), len(me.polygons))
+    if _HEALTH_CACHE["key"] != key:
+        _HEALTH_CACHE["key"] = key
+        _HEALTH_CACHE["summary"] = boolean._health_summary(obj)
+    return _HEALTH_CACHE["summary"]
+
+
 class HARDFLOW_PT_tools(Panel):
     bl_label = "Hardflow"
     bl_idname = "HARDFLOW_PT_tools"
@@ -16,6 +36,7 @@ class HARDFLOW_PT_tools(Panel):
     def draw(self, context):
         layout = self.layout
 
+        # 1. Boolean -- the signature draw-to-cut workflow.
         col = layout.column(align=True)
         col.label(text="Boolean Draw", icon='MOD_BOOLEAN')
         row = col.row(align=True)
@@ -52,33 +73,13 @@ class HARDFLOW_PT_tools(Panel):
         arc.mode = 'CUT'
         col.operator("object.hardflow_boolean", text="Boolean (Selected)",
                      icon='MOD_BOOLEAN')
+        col.operator("object.hardflow_apply_cutters", text="Apply Cutters",
+                     icon='CHECKMARK')
         self._draw_health(context, col)
 
-        col = layout.column(align=True)
-        col.label(text="Curves", icon='MOD_SCREW')
-        row = col.row(align=True)
-        row.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
-        row.operator("mesh.hardflow_cable", text="Cable", icon='FORCE_CURVE')
-        row.operator("mesh.hardflow_sweep", text="Sweep", icon='MOD_SIMPLEDEFORM')
-
-        col = layout.column(align=True)
-        col.label(text="Display", icon='OVERLAY')
-        row = col.row(align=True)
-        row.operator("object.hardflow_display_toggle", text="Wire",
-                     icon='SHADING_WIRE').mode = 'WIRE'
-        row.operator("object.hardflow_display_toggle", text="Sharp",
-                     icon='SNAP_EDGE').mode = 'SHARP'
-        row.operator("object.hardflow_display_toggle", text="Cutters",
-                     icon='MOD_BOOLEAN').mode = 'CUTTERS'
-        row = col.row(align=True)
-        row.operator("object.hardflow_random_color", text="Random Colors",
-                     icon='COLOR')
-        row.operator("object.hardflow_copy_material", text="Copy Mat",
-                     icon='MATERIAL')
-
+        # 2. Build -- create geometry to model on.
         col = layout.column(align=True)
         col.label(text="Build", icon='MESH_GRID')
-        # Starter primitives to model on (Push/Pull / Offset need a mesh to act on).
         row = col.row(align=True)
         row.operator("object.hardflow_add_primitive", text="Cube",
                      icon='MESH_CUBE').kind = 'CUBE'
@@ -94,8 +95,8 @@ class HARDFLOW_PT_tools(Panel):
                      icon='MESH_UVSPHERE').kind = 'SPHERE'
         row.operator("object.hardflow_add_primitive", text="Tube",
                      icon='MESH_CYLINDER').kind = 'TUBE'
-        # Sketch with the draw tool in FACE mode: a rectangle or freeform polygon
-        # that becomes real geometry, ready to Push/Pull.
+        # Sketch a face in FACE mode: real geometry, ready to Push/Pull.
+        col.label(text="Sketch face")
         row = col.row(align=True)
         rect = row.operator("mesh.hardflow_draw", text="Rectangle",
                             icon='MESH_PLANE')
@@ -106,6 +107,23 @@ class HARDFLOW_PT_tools(Panel):
         poly.shape = 'POLY'
         poly.mode = 'FACE'
         row = col.row(align=True)
+        scircle = row.operator("mesh.hardflow_draw", text="Circle",
+                               icon='MESH_CIRCLE')
+        scircle.shape = 'CIRCLE'
+        scircle.mode = 'FACE'
+        sngon = row.operator("mesh.hardflow_draw", text="N-gon",
+                             icon='MESH_CYLINDER')
+        sngon.shape = 'NGON'
+        sngon.mode = 'FACE'
+        row = col.row(align=True)
+        row.operator("object.hardflow_add_grid", text="Grid", icon='MESH_GRID')
+        row.operator("object.hardflow_add_guide", text="Guide", icon='IPO_LINEAR')
+        row.operator("object.hardflow_loft", text="Loft", icon='MOD_SIMPLEDEFORM')
+
+        # 3. Edit -- direct-modeling tools that reshape existing geometry.
+        col = layout.column(align=True)
+        col.label(text="Edit", icon='TOOL_SETTINGS')
+        row = col.row(align=True)
         row.operator("mesh.hardflow_push_pull", text="Push/Pull",
                      icon='EMPTY_SINGLE_ARROW')
         row.operator("mesh.hardflow_offset", text="Offset", icon='MOD_SOLIDIFY')
@@ -115,10 +133,30 @@ class HARDFLOW_PT_tools(Panel):
                      icon='MOD_BEVEL')
         row.operator("mesh.hardflow_loop_cut", text="Loop Cut",
                      icon='MOD_MULTIRES')
+
+        # 4. Curves -- pipes, cables, swept profiles.
+        col = layout.column(align=True)
+        col.label(text="Curves", icon='MOD_SCREW')
         row = col.row(align=True)
-        row.operator("object.hardflow_add_grid", text="Grid", icon='MESH_GRID')
-        row.operator("object.hardflow_add_guide", text="Guide", icon='IPO_LINEAR')
-        row.operator("object.hardflow_loft", text="Loft", icon='MOD_SIMPLEDEFORM')
+        row.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
+        row.operator("mesh.hardflow_cable", text="Cable", icon='FORCE_CURVE')
+        row.operator("mesh.hardflow_sweep", text="Sweep", icon='MOD_SIMPLEDEFORM')
+
+        # 5. Display & mesh helpers.
+        col = layout.column(align=True)
+        col.label(text="Display", icon='OVERLAY')
+        row = col.row(align=True)
+        row.operator("object.hardflow_display_toggle", text="Wire",
+                     icon='SHADING_WIRE').mode = 'WIRE'
+        row.operator("object.hardflow_display_toggle", text="Sharp",
+                     icon='SNAP_EDGE').mode = 'SHARP'
+        row.operator("object.hardflow_display_toggle", text="Cutters",
+                     icon='MOD_BOOLEAN').mode = 'CUTTERS'
+        row = col.row(align=True)
+        row.operator("object.hardflow_random_color", text="Random Colors",
+                     icon='COLOR')
+        row.operator("object.hardflow_copy_material", text="Copy Mat",
+                     icon='MATERIAL')
 
     # Recomputing mesh health rebuilds a bmesh on every panel redraw; skip it on
     # heavy meshes so the sidebar stays responsive (mirrors the geo-snap cap).
@@ -132,7 +170,7 @@ class HARDFLOW_PT_tools(Panel):
         if (obj is None or obj.type != 'MESH'
                 or len(obj.data.vertices) > self._HEALTH_MAX_VERTS):
             return
-        summary = boolean._health_summary(obj)
+        summary = _cached_health_summary(obj)
         if not summary:
             return
         box = col.box().column(align=True)

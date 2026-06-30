@@ -3,16 +3,25 @@
 import bpy
 
 
-def _coerce_solver(solver):
-    """Return `solver` if the Boolean modifier supports it in this Blender, else
-    'EXACT'. The MANIFOLD solver only exists from Blender 4.5; assigning it on an
-    older build raises, so fall back to the always-present EXACT solver."""
+def _solver_available(solver):
+    """True when the Boolean modifier exposes `solver` in this Blender build. The
+    MANIFOLD solver only exists from Blender 4.5."""
     try:
         items = bpy.types.BooleanModifier.bl_rna.properties['solver'].enum_items
-        if solver in {i.identifier for i in items}:
-            return solver
+        return solver in {i.identifier for i in items}
     except (KeyError, AttributeError):
-        pass
+        return False
+
+
+def _coerce_solver(solver):
+    """Map a solver identifier to one this Blender supports. Blender 5.0 renamed
+    the FAST solver to FLOAT, so a 'FAST' request prefers 'FLOAT' before giving up
+    on the always-present 'EXACT' (assigning an unavailable solver raises). Without
+    this, every FAST fallback silently degrades to the slow EXACT solver on 5.x."""
+    if _solver_available(solver):
+        return solver
+    if solver == 'FAST' and _solver_available('FLOAT'):
+        return 'FLOAT'
     return 'EXACT'
 
 
@@ -43,21 +52,37 @@ def _remove_bool_mods(target):
         target.modifiers.remove(m)
 
 
+def _dedupe(seq):
+    """Order-preserving de-duplication."""
+    seen = set()
+    out = []
+    for x in seq:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def _apply_boolean_chain(context, target, cutter, operation, solvers):
+    """Try each solver in order until one applies, cleaning up the half-added
+    modifier between attempts. Returns the solver that succeeded, or None."""
+    for attempt in solvers:
+        try:
+            apply_boolean(context, target, cutter, operation, attempt)
+            return attempt
+        except RuntimeError:
+            _remove_bool_mods(target)
+    return None
+
+
 def apply_boolean_fallback(context, target, cutter, operation='DIFFERENCE',
                            solver='EXACT'):
     """Destructive apply that retries with the FAST solver when the preferred one
     raises -- boolean INSERTs / cutters on messy targets (robustness). Any
     half-added modifier is cleaned up between attempts. Returns the solver string
     that succeeded, or None when both fail."""
-    for attempt in (solver, 'FAST'):
-        try:
-            apply_boolean(context, target, cutter, operation, attempt)
-            return attempt
-        except RuntimeError:
-            _remove_bool_mods(target)
-        if attempt == 'FAST':
-            break
-    return None
+    return _apply_boolean_chain(context, target, cutter, operation,
+                                _dedupe([solver, 'FAST']))
 
 
 def recalc_normals(obj):
@@ -124,19 +149,65 @@ _SOLVER_NONMANIFOLD_LIMIT = 6
 _SOLVER_HEALTH_MAX_VERTS = 200000
 
 
-def choose_solver(target, preferred='EXACT', max_verts=_SOLVER_HEALTH_MAX_VERTS):
-    """Pick the solver to *try first* from the target's health. EXACT is accurate
-    but slow and brittle; on a badly non-manifold / degenerate target it will
-    almost always fail after a slow pass, so start with FAST instead and skip the
-    doomed attempt. Clean meshes keep the preferred (accurate) solver. Only acts
-    when `preferred` is EXACT and the mesh is light enough to scan cheaply;
-    `robust_boolean` still falls back, so this only changes the *order*."""
+def _is_watertight_manifold(obj):
+    """True when `obj` is fully closed-manifold with no degenerate / loose
+    geometry -- the precondition the MANIFOLD solver needs on each operand."""
+    h = mesh_health(obj)
+    return h['non_manifold'] == 0 and h['degenerate'] == 0 and h['loose'] == 0
+
+
+def choose_solver(target, preferred='EXACT', max_verts=_SOLVER_HEALTH_MAX_VERTS,
+                  cutter=None):
+    """Pick the solver to *try first* from the target's health. Only acts when
+    `preferred` is EXACT (the default) and the mesh is light enough to scan
+    cheaply; `robust_boolean` still falls back, so this only changes the *order*:
+
+      * badly non-manifold / degenerate target -> start with FAST and skip a slow,
+        doomed EXACT pass;
+      * fully clean, closed manifold target -> start with the MANIFOLD solver
+        (Blender 4.5+), which is far faster than EXACT and just as accurate on
+        watertight input (`non_manifold == 0` already implies closed manifold).
+        MANIFOLD needs *both* operands watertight, so it is only picked when the
+        `cutter` (when supplied and light enough to scan) is clean too -- a
+        non-manifold cutter could otherwise produce a silently-wrong result;
+      * otherwise keep the accurate EXACT solver.
+    """
     if preferred != 'EXACT' or len(target.data.vertices) > max_verts:
         return preferred
     h = mesh_health(target)
     if h['non_manifold'] >= _SOLVER_NONMANIFOLD_LIMIT or h['degenerate'] >= 1:
         return 'FAST'
+    target_clean = (h['non_manifold'] == 0 and h['degenerate'] == 0
+                    and h['loose'] == 0)
+    cutter_ok = (cutter is None
+                 or (len(cutter.data.vertices) <= max_verts
+                     and _is_watertight_manifold(cutter)))
+    if target_clean and cutter_ok and _solver_available('MANIFOLD'):
+        return 'MANIFOLD'
     return 'EXACT'
+
+
+def _fallback_chain(start, preferred):
+    """Ordered solvers `robust_boolean` tries. Manifold-first stays accurate by
+    escalating through EXACT before the lossy FAST pass; a health-forced FAST
+    start (broken target) skips a slow EXACT attempt that would just fail."""
+    if start == 'MANIFOLD':
+        return _dedupe(['MANIFOLD', 'EXACT', 'FAST'])
+    if start == 'FAST':
+        return ['FAST']
+    return _dedupe([start, 'FAST'])
+
+
+def _solver_message(used, preferred, start):
+    """Human-readable outcome. Quiet on the happy path (the planned solver worked,
+    including a Manifold clean-mesh fast-path); only narrate a health-forced FAST
+    downgrade or a genuine mid-chain fallback."""
+    if used == start:
+        if used == 'FAST' and preferred != 'FAST':
+            return ("Cut done (FAST solver: target geometry is too broken for %s)"
+                    % preferred)
+        return "Cut done"
+    return "Cut done (%s solver fallback)" % used
 
 
 def robust_boolean(context, target, cutter, operation='DIFFERENCE',
@@ -144,30 +215,25 @@ def robust_boolean(context, target, cutter, operation='DIFFERENCE',
     """Destructive boolean that tries hard to succeed and explains itself when it
     can't. Returns (ok, solver_used, message):
 
-      * pick the starting solver from the target's health (`choose_solver`) --
-        skip a doomed EXACT pass on visibly-broken geometry;
-      * try that solver, then FAST (`apply_boolean_fallback`);
-      * if both fail, recalculate the cutter's normals and retry once -- the
-        usual fix for the EXACT solver choking on an inverted cutter;
+      * pick the starting solver from the target's health (`choose_solver`):
+        Manifold on clean meshes, FAST on broken ones, else EXACT;
+      * try the ordered fallback chain (`_fallback_chain`) -- a Manifold start
+        escalates through EXACT before FAST, so the fast path never costs accuracy;
+      * if every solver fails, recalculate the cutter's normals and retry the
+        chain once -- the usual fix for a solver choking on an inverted cutter;
       * if it still fails, diagnose the *target* (non-manifold / degenerate /
         loose geometry) so the message tells the user what to repair.
 
     The target is never modified beyond the boolean itself; only the cutter's
     normals (it is disposable) may be rewritten."""
-    start = choose_solver(target, solver)
-    used = apply_boolean_fallback(context, target, cutter, operation, start)
+    start = choose_solver(target, solver, cutter=cutter)
+    chain = _fallback_chain(start, solver)
+    used = _apply_boolean_chain(context, target, cutter, operation, chain)
     if used is not None:
-        if used == solver:
-            msg = "Cut done"
-        elif start != solver and used == start:
-            msg = ("Cut done (%s solver: target geometry is too broken for %s)"
-                   % (used, solver))
-        else:
-            msg = "Cut done (%s solver fallback)" % used
-        return True, used, msg
+        return True, used, _solver_message(used, solver, start)
 
     recalc_normals(cutter)
-    used = apply_boolean_fallback(context, target, cutter, operation, start)
+    used = _apply_boolean_chain(context, target, cutter, operation, chain)
     if used is not None:
         return True, used, "Cut done (after cutter normal repair, %s solver)" % used
 

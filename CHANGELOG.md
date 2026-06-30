@@ -50,6 +50,38 @@ logic: minor versions add features, patch versions fix bugs.
 - **Apply Cutters** warns when a boolean sat below a non-Hardflow modifier (applied
   out of stack order, so the result can differ from the preview).
 - `snap_to_candidates` ties now resolve deterministically (first candidate wins).
+- **FAST solver fallback was dead on Blender 5.x** — Blender 5.0 renamed the
+  Boolean modifier's `FAST` solver to `FLOAT`, so every `FAST` request (the broken-
+  mesh fast path + the fallback after EXACT) silently coerced all the way back to
+  the slow EXACT solver. `_coerce_solver` now maps `FAST → FLOAT` when FLOAT is the
+  available fast solver, restoring the intended fast/fallback behaviour on 5.x while
+  staying correct on 4.x (real `FAST`). Headless `test_coerce_solver_fast_to_float`.
+
+### Performance
+- **Draw preview no longer rebuilds every frame** — the modal regenerated the live
+  cutter cage (a fresh bmesh) and re-evaluated the live-boolean modifier on *every*
+  event, mouse-move included. `_update_preview` now skips the rebuild when a cheap
+  signature of the build inputs (shape/mode/params + snapped cursor + placed points,
+  `draw_cut._preview_signature`) is unchanged, so cursor jitter within one snapped
+  grid cell costs nothing. Behaviour-preserving: view changes arrive as
+  pass-through events that already bypassed the rebuild, and re-anchored screen
+  points change the signature after an orbit/zoom.
+- **Pre-cut health check is cached** — the N-panel "Cut may fail" warning rebuilt a
+  bmesh (`mesh_health`) on every sidebar redraw. `panel._cached_health_summary`
+  memoizes it against the object's vert/poly count (Object Mode), recomputing only
+  when the mesh actually changes. Headless `test_panel_health_cache`.
+- **Manifold-first solver on clean meshes** — `choose_solver` now starts a cut on
+  the much faster MANIFOLD solver (Blender 4.5+) when **both** operands are clean
+  and watertight (`non_manifold == 0`, no degenerate / loose geometry), instead of
+  EXACT. The cutter is checked too (a non-manifold cutter could otherwise produce a
+  silently-wrong Manifold result), guarded by the same vert cap. Accuracy is never
+  sacrificed: `robust_boolean` now runs an ordered fallback chain
+  (`_fallback_chain`) that escalates Manifold → **EXACT** → FAST, so if Manifold
+  rejects the input EXACT still runs before the lossy FAST pass. A health-forced
+  FAST start (broken target) is unchanged, and the draw tool no longer mislabels the
+  Manifold pick as a "fallback". Solver-version safety stays in `_coerce_solver` /
+  the new `_solver_available`. Headless `test_solver_fallback_chain_and_message`,
+  `test_choose_solver_cutter_gate` + updated `test_choose_solver_from_health`.
 
 ## [1.13.0] — 2026-06-30
 

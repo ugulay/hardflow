@@ -125,6 +125,7 @@ class HARDFLOW_OT_draw(Operator):
         self._forced_main_key = None  # Ctrl+Click main-edge override (vert-idx set)
         self.grid_origin = None     # H: re-anchor the snap grid to a chosen point
         self._preview = None        # live 3D cutter/face volume object
+        self._preview_sig = None    # last-built preview signature (dirty check)
         self._collect_snap_geometry(context)
 
         # Edge-grid workflow: if you enter with edge(s) selected in Edit Mode,
@@ -1024,6 +1025,27 @@ class HARDFLOW_OT_draw(Operator):
             return None
         return rv3d.view_matrix.inverted_safe().translation.copy()
 
+    def _preview_signature(self):
+        """A cheap hashable snapshot of everything that determines the live cutter
+        volume. Two consecutive modal events with an equal signature build an
+        identical cage, so the rebuild can be skipped. The placed points are kept
+        in current-view screen space (re-anchored every event by
+        `_sync_points_from_world`), so an orbit/zoom changes them and forces a
+        rebuild; the world-space cage is regenerated from those + the cursor."""
+        origin = self.grid_origin
+        return (
+            self.shape, self.mode, self.sides, round(self.arc_sweep, 5),
+            round(self.inset, 5), round(self.rotation, 5),
+            self.array_count, self.array_axis, self.mirror_axis,
+            self.cutter_bevel, self.orientation, round(self.depth, 5),
+            round(self.grid_size, 6), self.plane, round(self.plane_spin, 5),
+            None if origin is None
+            else (round(origin.x, 4), round(origin.y, 4), round(origin.z, 4)),
+            (round(self.cursor[0], 1), round(self.cursor[1], 1)),
+            tuple((round(p[0], 1), round(p[1], 1)) for p in self.points),
+            self.live_bool,
+        )
+
     def _update_preview(self, context):
         """Refresh the live preview object. Shown as a wireframe drawn in front,
         non-selectable, so it reads as a cutter cage over the model and never
@@ -1031,6 +1053,15 @@ class HARDFLOW_OT_draw(Operator):
         Boolean modifier on the target then shows the actual cut result."""
         if self.edit:
             return  # Edit Mode: the 2D shape outline is the preview (no cage)
+        # The modal rebuilds the preview on every event (mouse-move included). Within
+        # one snapped grid cell the signature is stable, so skip the bmesh rebuild +
+        # live-boolean re-evaluation when nothing relevant changed -- the dominant
+        # responsiveness win while dragging. A missing cage forces a rebuild even on
+        # a stable signature.
+        sig = self._preview_signature()
+        if sig == self._preview_sig and self._preview is not None:
+            return
+        self._preview_sig = sig
         try:
             mesh = self._build_preview_mesh(context)
         except Exception:  # noqa: BLE001 -- preview must never break the modal
@@ -1463,7 +1494,11 @@ class HARDFLOW_OT_draw(Operator):
             if not ok:
                 failures.append(msg)
             else:
-                if used != solver:
+                # Only a drop to the less-accurate FAST solver is worth flagging.
+                # A Manifold/EXACT auto-pick is an equal-accuracy speed choice
+                # (Manifold-first on clean meshes), not a quality fallback, so it
+                # stays quiet -- matching robust_boolean's own message.
+                if used == 'FAST' and solver != 'FAST':
                     fallbacks.append(used)
                 if cleanup:
                     geometry.cleanup_mesh(tgt)

@@ -14,6 +14,30 @@ from ..core import decal
 
 
 # Each item is (operator_idname, label, icon, {properties}); None = separator.
+# Lead with the hero (Cut), then the other operations, then the Polyline and
+# shape variants, then the selected-object boolean + finalize.
+_BOOLEAN_ITEMS = (
+    ("mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', {'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Slice", 'MOD_EDGESPLIT', {'mode': 'SLICE'}),
+    ("mesh.hardflow_draw", "Make (Union)", 'MESH_PLANE', {'mode': 'MAKE'}),
+    ("mesh.hardflow_draw", "Join (Add Solid)", 'MESH_CUBE', {'mode': 'JOIN'}),
+    ("mesh.hardflow_draw", "Intersect", 'MOD_BOOLEAN', {'mode': 'INTERSECT'}),
+    ("mesh.hardflow_draw", "Knife (Score)", 'MOD_LINEART', {'mode': 'KNIFE'}),
+    None,
+    ("mesh.hardflow_draw", "Polyline Trim", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Polyline Add", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'MAKE'}),
+    None,
+    ("mesh.hardflow_draw", "Circle Cut", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "N-gon Cut", 'MESH_CYLINDER', {'shape': 'NGON', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Slot Cut", 'MESH_CAPSULE', {'shape': 'SLOT', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Star Cut", 'SOLO_ON', {'shape': 'STAR', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Arc Cut", 'MOD_SIMPLEDEFORM', {'shape': 'ARC', 'mode': 'CUT'}),
+    None,
+    ("object.hardflow_boolean", "Boolean (Selected)", 'MOD_BOOLEAN', {}),
+    ("object.hardflow_apply_cutters", "Apply Cutters", 'CHECKMARK', {}),
+)
+
+# Build = create geometry: primitives, sketch faces, construction helpers.
 _BUILD_ITEMS = (
     ("object.hardflow_add_primitive", "Cube", 'MESH_CUBE', {'kind': 'CUBE'}),
     ("object.hardflow_add_primitive", "Plane", 'MESH_PLANE', {'kind': 'PLANE'}),
@@ -25,37 +49,22 @@ _BUILD_ITEMS = (
     ("object.hardflow_add_primitive", "Tube", 'MESH_CYLINDER', {'kind': 'TUBE'}),
     None,
     ("mesh.hardflow_draw", "Rectangle", 'MESH_PLANE', {'shape': 'BOX', 'mode': 'FACE'}),
-    ("mesh.hardflow_draw", "Line", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'FACE'}),
+    ("mesh.hardflow_draw", "Polygon", 'MESH_DATA', {'shape': 'POLY', 'mode': 'FACE'}),
     ("mesh.hardflow_draw", "Circle", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'FACE'}),
     ("mesh.hardflow_draw", "N-gon", 'MESH_CYLINDER', {'shape': 'NGON', 'mode': 'FACE'}),
     None,
-    ("mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW', {}),
-    ("mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY', {}),
-    ("mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL', {}),
-    ("mesh.hardflow_loop_cut", "Loop Cut", 'MOD_MULTIRES', {}),
-    None,
     ("object.hardflow_add_grid", "Construction Grid", 'MESH_GRID', {}),
+    ("object.hardflow_add_guide", "Guide Line", 'IPO_LINEAR', {}),
     ("object.hardflow_loft", "Loft / Bridge", 'MOD_SIMPLEDEFORM', {}),
 )
 
-_BOOLEAN_ITEMS = (
-    ("mesh.hardflow_draw", "Polyline Trim", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'CUT'}),
-    ("mesh.hardflow_draw", "Polyline Add", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'MAKE'}),
+# Edit = direct-modeling tools that reshape existing geometry.
+_EDIT_ITEMS = (
+    ("mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW', {}),
+    ("mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY', {}),
     None,
-    ("mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', {'mode': 'CUT'}),
-    ("mesh.hardflow_draw", "Slice", 'MOD_EDGESPLIT', {'mode': 'SLICE'}),
-    ("mesh.hardflow_draw", "Make (Union)", 'MESH_PLANE', {'mode': 'MAKE'}),
-    ("mesh.hardflow_draw", "Join (Add Solid)", 'MESH_CUBE', {'mode': 'JOIN'}),
-    ("mesh.hardflow_draw", "Intersect", 'MOD_BOOLEAN', {'mode': 'INTERSECT'}),
-    ("mesh.hardflow_draw", "Knife (Score)", 'MOD_LINEART', {'mode': 'KNIFE'}),
-    ("mesh.hardflow_draw", "Circle Cut", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'CUT'}),
-    ("mesh.hardflow_draw", "N-gon Cut", 'MESH_CYLINDER', {'shape': 'NGON', 'mode': 'CUT'}),
-    ("mesh.hardflow_draw", "Slot Cut", 'MESH_CAPSULE', {'shape': 'SLOT', 'mode': 'CUT'}),
-    ("mesh.hardflow_draw", "Star Cut", 'SOLO_ON', {'shape': 'STAR', 'mode': 'CUT'}),
-    ("mesh.hardflow_draw", "Arc Cut", 'MOD_SIMPLEDEFORM', {'shape': 'ARC', 'mode': 'CUT'}),
-    None,
-    ("object.hardflow_boolean", "Boolean (Selected)", 'MOD_BOOLEAN', {}),
-    ("object.hardflow_apply_cutters", "Apply Cutters", 'CHECKMARK', {}),
+    ("mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL', {}),
+    ("mesh.hardflow_loop_cut", "Loop Cut", 'MOD_MULTIRES', {}),
 )
 
 _DISPLAY_ITEMS = (
@@ -100,6 +109,13 @@ def _render(layout, items):
             setattr(op, key, val)
 
 
+class HARDFLOW_MT_menu_boolean(Menu):
+    bl_label = "Boolean"
+
+    def draw(self, context):
+        _render(self.layout, _BOOLEAN_ITEMS)
+
+
 class HARDFLOW_MT_menu_build(Menu):
     bl_label = "Build"
 
@@ -107,11 +123,11 @@ class HARDFLOW_MT_menu_build(Menu):
         _render(self.layout, _BUILD_ITEMS)
 
 
-class HARDFLOW_MT_menu_boolean(Menu):
-    bl_label = "Boolean"
+class HARDFLOW_MT_menu_edit(Menu):
+    bl_label = "Edit"
 
     def draw(self, context):
-        _render(self.layout, _BOOLEAN_ITEMS)
+        _render(self.layout, _EDIT_ITEMS)
 
 
 class HARDFLOW_MT_menu_curves(Menu):
@@ -166,8 +182,10 @@ class HARDFLOW_MT_menu(Menu):
 
     def draw(self, context):
         layout = self.layout
-        layout.menu("HARDFLOW_MT_menu_build", icon='MESH_GRID')
+        # Same category order as the pie + the N-panel: learn it once.
         layout.menu("HARDFLOW_MT_menu_boolean", icon='MOD_BOOLEAN')
+        layout.menu("HARDFLOW_MT_menu_build", icon='MESH_GRID')
+        layout.menu("HARDFLOW_MT_menu_edit", icon='TOOL_SETTINGS')
         layout.menu("HARDFLOW_MT_menu_curves", icon='MOD_SCREW')
         layout.menu("HARDFLOW_MT_menu_display", icon='OVERLAY')
         layout.separator()

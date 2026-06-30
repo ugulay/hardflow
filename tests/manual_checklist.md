@@ -34,6 +34,12 @@ Setup: add a default cube, stay in Object Mode, keep it selected/active.
       3D volume** of the cutter is shown through the model (non-destructive depth
       preview), updating as you move. It disappears on commit/cancel — no
       leftover `hf_preview` object in the outliner.
+- [ ] **Cage dirty-check (perf, regression):** the cage must still update when it
+      *should*, now that redundant rebuilds are skipped (`_preview_signature`).
+      Confirm the cage tracks the cursor while dragging, and refreshes on each of:
+      `[`/`]` sides, `-`/`=` inset, `,`/`.` rotate, `A`/`D` array, `M` mirror,
+      `PgUp`/`PgDn` depth, `O` orient, `C` bevelled cutter, and **after an
+      orbit/zoom**. With `J` live-boolean on, the real cut result must update too.
 - [ ] **Slice / Make / Face** (`2`/`3`/`4`) also show the live cage; FACE shows
       the flat face outline.
 - [ ] HUD snap state toggles with `X` (grid) and `V` (vertex/edge).

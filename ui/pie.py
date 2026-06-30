@@ -1,13 +1,21 @@
 # Categorized pie menu system.
 #
-# The toolset outgrew a single 8-slot ring, so the pie is now categorized: a
-# MAIN pie (Alt+Q) whose slots either fire the most-common operator directly or
-# open a focused SUB-pie (Build / Boolean / Curves). Every tool is
-# reachable in at most two clicks, and adding a tool is a one-line edit in the
-# relevant sub-pie.
+# The toolset outgrew a single 8-slot ring, so the pie is categorized: a MAIN
+# pie (Alt+Q) whose ring mixes the three HERO tools every hard-surface session
+# leans on -- Cut, Push/Pull, Offset -- with one opener per tool CATEGORY
+# (Boolean / Build / Edit / Curves). Every tool is reachable in at most two
+# flicks, and adding a tool is a one-line edit in the relevant sub-pie.
 #
-# Pie slot order: menu_pie() places calls W, E, S, N, NW, NE, SW, SE.
-# Sub-pies keep their SW slot as a "Back" link to the main pie.
+# Design rules (keep these stable -- pie speed IS muscle memory):
+#   * The same four categories appear here, in the header menu, and in the
+#     N-panel, in the same order. Learn the layout once, use it everywhere.
+#   * The main ring PROMOTES each category's most-used tool for 1-click speed
+#     (Cut, Push/Pull, Offset). A sub-pie still lists the full category so the
+#     promoted tool has a discoverable home too -- intentional redundancy.
+#   * Sub-pies keep "Back" near the South-West slot (matches long-standing
+#     habit); the small Curves pie lands it at its natural slot.
+#
+# Pie slot order: menu_pie() fills W, E, S, N, NW, NE, SW, SE.
 import bpy
 from bpy.types import Menu
 
@@ -30,36 +38,16 @@ class HARDFLOW_MT_pie(Menu):
 
     def draw(self, context):
         pie = self.layout.menu_pie()
-        # W / E / S / N
+        # Cardinals (W/E/S/N): the three hero tools + the Boolean category.
         _draw(pie, "mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', mode='CUT')
-        _open(pie, "HARDFLOW_MT_pie_build", "Build ▸", 'MESH_GRID')
+        _draw(pie, "mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW')
+        _draw(pie, "mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY')
         _open(pie, "HARDFLOW_MT_pie_boolean", "Boolean ▸", 'MOD_BOOLEAN')
+        # Corners (NW/NE/SW/SE): the remaining categories + finalize.
+        _open(pie, "HARDFLOW_MT_pie_build", "Build ▸", 'MESH_GRID')
+        _open(pie, "HARDFLOW_MT_pie_edit", "Edit ▸", 'TOOL_SETTINGS')
         _open(pie, "HARDFLOW_MT_pie_curves", "Curves ▸", 'MOD_SCREW')
-        # Corners: NW / NE / SW / SE
-        _draw(pie, "mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW')
-        _draw(pie, "mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY')
         _draw(pie, "object.hardflow_apply_cutters", "Apply Cutters", 'CHECKMARK')
-        _draw(pie, "mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL')
-
-
-class HARDFLOW_MT_pie_build(Menu):
-    bl_label = "Build"
-
-    def draw(self, context):
-        pie = self.layout.menu_pie()
-        # Sketch a face, then Push/Pull / Offset it.
-        _draw(pie, "mesh.hardflow_draw", "Rectangle", 'MESH_PLANE',
-              shape='BOX', mode='FACE')
-        _draw(pie, "mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW')
-        _draw(pie, "mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY')
-        _draw(pie, "mesh.hardflow_draw", "Line", 'IPO_LINEAR',
-              shape='POLY', mode='FACE')
-        _draw(pie, "object.hardflow_add_grid", "Grid", 'MESH_GRID')
-        _draw(pie, "mesh.hardflow_draw", "Circle", 'MESH_CIRCLE',
-              shape='CIRCLE', mode='FACE')
-        _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')
-        _draw(pie, "mesh.hardflow_draw", "N-gon", 'MESH_CYLINDER',
-              shape='NGON', mode='FACE')
 
 
 class HARDFLOW_MT_pie_boolean(Menu):
@@ -70,13 +58,46 @@ class HARDFLOW_MT_pie_boolean(Menu):
         _draw(pie, "mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', mode='CUT')
         _draw(pie, "mesh.hardflow_draw", "Slice", 'MOD_EDGESPLIT', mode='SLICE')
         _draw(pie, "mesh.hardflow_draw", "Make", 'MESH_PLANE', mode='MAKE')
-        _draw(pie, "mesh.hardflow_draw", "Polyline Trim", 'IPO_LINEAR',
-              shape='POLY', mode='CUT')
-        _draw(pie, "object.hardflow_boolean", "Boolean (Sel)", 'MOD_BOOLEAN')
-        _draw(pie, "mesh.hardflow_draw", "N-gon Cut", 'MESH_CYLINDER',
-              shape='NGON', mode='CUT')
+        _draw(pie, "mesh.hardflow_draw", "Intersect", 'MOD_BOOLEAN',
+              mode='INTERSECT')
+        _draw(pie, "mesh.hardflow_draw", "Join", 'MESH_CUBE', mode='JOIN')
+        _draw(pie, "mesh.hardflow_draw", "Knife", 'MOD_LINEART', mode='KNIFE')
         _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')
-        _draw(pie, "object.hardflow_apply_cutters", "Apply Cutters", 'CHECKMARK')
+        _draw(pie, "object.hardflow_boolean", "Boolean (Sel)", 'MOD_BOOLEAN')
+
+
+class HARDFLOW_MT_pie_build(Menu):
+    bl_label = "Build"
+
+    def draw(self, context):
+        pie = self.layout.menu_pie()
+        _draw(pie, "object.hardflow_add_primitive", "Cube", 'MESH_CUBE',
+              kind='CUBE')
+        _draw(pie, "object.hardflow_add_primitive", "Cylinder", 'MESH_CYLINDER',
+              kind='CYLINDER')
+        _draw(pie, "object.hardflow_add_primitive", "Plane", 'MESH_PLANE',
+              kind='PLANE')
+        _draw(pie, "object.hardflow_add_primitive", "Sphere", 'MESH_UVSPHERE',
+              kind='SPHERE')
+        # Sketch a face to model on (ready for Push/Pull / Offset).
+        _draw(pie, "mesh.hardflow_draw", "Rectangle", 'MESH_PLANE',
+              shape='BOX', mode='FACE')
+        _draw(pie, "mesh.hardflow_draw", "Circle", 'MESH_CIRCLE',
+              shape='CIRCLE', mode='FACE')
+        _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')
+        _draw(pie, "object.hardflow_add_grid", "Grid", 'MESH_GRID')
+
+
+class HARDFLOW_MT_pie_edit(Menu):
+    bl_label = "Edit"
+
+    def draw(self, context):
+        pie = self.layout.menu_pie()
+        _draw(pie, "mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW')
+        _draw(pie, "mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY')
+        _draw(pie, "mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL')
+        _draw(pie, "mesh.hardflow_loop_cut", "Loop Cut", 'MOD_MULTIRES')
+        _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')
 
 
 class HARDFLOW_MT_pie_curves(Menu):
