@@ -413,6 +413,28 @@ behaviour still awaits a live-Blender pass.
       the exact drawn outline needs the view-dependent `knife_project` operator,
       pending a live-Blender pass.
 
+## Reference-tool gap pass (pre-publish)
+A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /
+KitOps. Closed in this pass:
+- [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock
+      the shape's size (`core/grid.lock_distance`, `_apply_numeric`); the boolean
+      mode moved to `Tab`/`Shift+Tab`. Grid Modeler / Boxcutter precision.
+- [x] **INTERSECT draw mode** — keep only what's inside the drawn volume.
+- [x] **Bevelled cutter** (`C`) — chamfered recess walls (`geometry.bevel_cutter`),
+      distinct from `B` bevel-on-cut (target edge).
+- [x] **Mirror across the 3D cursor / active object** — `HARDFLOW_OT_mirror`
+      "Mirror Across" pivot (Self / 3D Cursor / Active Object).
+- [x] **Array along a curve** — `HARDFLOW_OT_curve_array` (Array fit-curve +
+      Curve deform).
+- [x] **Decal transfer between surfaces** — `HARDFLOW_OT_transfer_decal`
+      (`decal.retarget_decal`).
+
+Still open (deferred — all need real viewport events / GUI verification):
+- [ ] `Ctrl+Click` set main edge; pixel-accurate `knife_project`; set/move the
+      grid origin (see the v1.9 list above and Known limitations).
+- [ ] EXTRACT — effectively covered by Slice (it already keeps both the object
+      and the carved piece); not separately planned.
+
 ## Known limitations
 - Concave polygons work; self-intersecting ones produce a broken cutter.
 - The EXACT solver can still fail on badly broken targets. The draw tool and the
