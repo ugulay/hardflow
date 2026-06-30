@@ -13,7 +13,7 @@ converts far better than a still.
 ## 🐦 X / Twitter (≤ 280 chars)
 
 ```
-Hardflow {{1.8.0}} is out — a FREE, open-source hard-surface boolean modeling
+Hardflow {{1.10.0}} is out — a FREE, open-source hard-surface boolean modeling
 toolkit for Blender 4.2+.
 
 Draw-to-cut booleans, world-scale snapping, decals, kitbash assets &
@@ -27,8 +27,8 @@ SketchUp-style Push/Pull — no price tag. GPLv3.
 
 ```
 What's inside 👇
-• Box/Circle/Poly/N-gon → Cut / Slice / Make / Face / Knife
-• World-scale grid + vertex/edge snap, Edit Mode (v1.3)
+• Box/Circle/Poly/N-gon → Cut / Slice / Make / Intersect / Face / Knife
+• World-scale grid + vertex/edge snap + numeric exact-size entry, Edit Mode (v1.3)
 • In-draw inset/array/mirror/bevel/rotate/stamp (Boxcutter)
 • Non-destructive cutters + modifier-stack manager
 • Bevel/Mirror/Array/Radial/Symmetrize/Sharpen + dice/greeble (Hard Ops)
@@ -53,9 +53,10 @@ Hardflow brings the core workflows of the big paid hard-surface add-ons into one
 free GPLv3 extension for Blender 4.2+:
 
 - **Draw-to-cut booleans** — Box / Circle / Polygon / N-gon, with Cut / Slice /
-  Make / Face / Knife modes — in Object **and** Edit Mode (v1.3).
+  Make / Intersect / Face / Knife modes — in Object **and** Edit Mode (v1.3).
 - **Precision** — world-scale (meter) grid snap, vertex/edge snap, angle lock,
-  rotatable drawing plane, live grid density.
+  rotatable drawing plane, live grid density, and **numeric exact-size entry**
+  (type a dimension to lock the shape's size).
 - **In-draw ops (Boxcutter)** — inset, array, mirror, bevel-on-cut, in-plane
   rotation, and stamp/repeat, all while drawing.
 - **Non-destructive** — live cutters in their own collection + a modifier-stack
@@ -71,8 +72,9 @@ free GPLv3 extension for Blender 4.2+:
 - **SketchUp-style** — Push/Pull, Offset, construction grid, loft/bridge, and
   round/square/rect pipe profiles.
 
-The pure-logic core is unit-tested (48/48, no Blender needed); live in-Blender
-verification is ongoing, so bug reports are very welcome.
+The pure-logic core is unit-tested (60/60, no Blender needed) and every bpy path
+is verified headless in Blender 5.1.2 (77/77); the modal tools' interactive feel
+is checked via a manual checklist, so bug reports are very welcome.
 
 Repo / install: {{repo link}}
 
@@ -84,7 +86,7 @@ features stay isolated.
 
 ## 🎨 BlenderArtists forum
 
-**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.8.0}})`
+**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.10.0}})`
 
 **Body:** same as the Reddit body above. BlenderArtists supports embedded video —
 lead with a GIF/clip and put the install link near the top.
@@ -94,7 +96,7 @@ lead with a GIF/clip and put the install link near the top.
 ## 💼 LinkedIn
 
 ```
-Excited to share Hardflow {{1.8.0}} — a free, open-source hard-surface modeling
+Excited to share Hardflow {{1.10.0}} — a free, open-source hard-surface modeling
 toolkit for Blender 4.2+. 🛠️
 
 It bundles the core workflows of Grid Modeler, Boxcutter, Hard Ops, DECALmachine,
@@ -103,7 +105,7 @@ full decal pipeline, KitOps-style kitbash assets, and SketchUp-style Push/Pull �
 no license fee.
 
 Built with a strict, testable architecture (pure logic separated from Blender's
-API, 48/48 unit tests green). Open to contributors and feedback.
+API, 60/60 unit tests green). Open to contributors and feedback.
 
 ⬇️ {{repo link}}
 
@@ -115,7 +117,7 @@ API, 48/48 unit tests green). Open to contributors and feedback.
 ## 🐘 Mastodon (≤ 500 chars)
 
 ```
-Hardflow {{1.8.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
+Hardflow {{1.10.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
 for #Blender 4.2+.
 
 Draw-to-cut booleans, world-scale snapping, decals, kitbash assets, and
@@ -130,7 +132,7 @@ SketchUp-style Push/Pull — all without a price tag.
 ## 📝 GitHub Release notes (template)
 
 ```
-## Hardflow v{{1.8.0}}
+## Hardflow v{{1.10.0}}
 
 {{One-line summary of the milestone.}}
 
@@ -150,7 +152,7 @@ select the hardflow zip.
 ## ✅ Launch checklist
 
 - [ ] Tag the release and write GitHub Release notes (template above)
-- [ ] Attach the built `hardflow-{{1.8.0}}.zip` to the release
+- [ ] Attach the built `hardflow-{{1.10.0}}.zip` to the release
 - [ ] Record fresh clips (cut, bevel, decal/asset, Push/Pull)
 - [ ] Post to X, Reddit, BlenderArtists, LinkedIn, Mastodon
 - [ ] Pin the announcement in GitHub Discussions

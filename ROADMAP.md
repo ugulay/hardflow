@@ -116,7 +116,7 @@ existing cut core.
       `bake_image_node`; `bake_size` preference; N-panel + per-decal button).
       Requires the target to be UV-unwrapped.
 
-### v0.9 — Library and performance (current release)
+### v0.9 — Library and performance
 - [x] **Decal library** — `core/decal_image.py` `scan_library` (pure, tested)
       finds image files in the `decal_library_path` preference folder;
       `ui/decal_library.py` `HARDFLOW_PT_decal_library` shows them as an icon

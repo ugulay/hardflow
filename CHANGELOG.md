@@ -1,13 +1,20 @@
 # Changelog
 
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
-logic; since the project is pre-1.0, minor versions add features.
+logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
-Follow-up hardening from a full code review of the decal/asset subsystems, plus
-two more increments of Grid Modeler / SketchUp surface-modeling parity. Pure
-logic is unit-tested (`59/59`); the new bpy paths gain headless coverage.
+_Nothing yet._
+
+## [1.10.0] — 2026-06-30
+
+A code-review hardening pass over the decal/asset subsystems plus a reference-tool
+gap pass (Grid Modeler / Boxcutter / Hard Ops / DECALmachine / KitOps): numeric
+exact-size drawing, an Intersect draw mode, a bevelled cutter, mirror across the
+3D cursor / active object, array-along-curve, and decal transfer between surfaces.
+Pure logic is unit-tested (`60/60`); every new bpy path is verified headless in
+Blender 5.1.2 (`77/77`).
 
 ### Added
 - **Numeric size entry while drawing** — after placing the first point, type an
