@@ -22,6 +22,7 @@ _BUILD_ITEMS = (
     None,
     ("mesh.hardflow_push_pull", "Push/Pull", 'EMPTY_SINGLE_ARROW', {}),
     ("mesh.hardflow_offset", "Offset", 'MOD_SOLIDIFY', {}),
+    ("mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL', {}),
     None,
     ("object.hardflow_add_grid", "Construction Grid", 'MESH_GRID', {}),
     ("object.hardflow_loft", "Loft / Bridge", 'MOD_SIMPLEDEFORM', {}),

@@ -362,5 +362,29 @@ Setup: a cube, Object Mode, selected/active.
 
 ---
 
+## 16. Edge Bevel ⭐ (object-mode, new — bevel an edge without Edit Mode)
+
+Setup: a cube in Object Mode, selected/active.
+
+- [ ] Build menu ▸ **Edge Bevel** (or F3 → "Hardflow Edge Bevel").
+- [ ] **Hover** near an edge → that **edge highlights** (a line; the HUD says
+      "Hover an edge…"). Moving to a different edge of the face re-picks the
+      nearest one.
+- [ ] **Click** an edge → it locks (orange), HUD switches to "Width … Segments 2".
+- [ ] **Drag right** → the edge **bevels live**, wider with distance (grid-snapped;
+      `X` toggles snap). **Type a number** for an exact width.
+- [ ] **`[` / `]`** decrease / increase **segments** (1–12) → a chamfer becomes a
+      rounded bevel; the preview updates.
+- [ ] **Enter / click** keeps the bevel; **Esc** rolls the mesh back to the
+      original (no change). `Ctrl+Z` reverts in one step.
+- [ ] **`R` repeat** — run again on another edge, press `R` → last width.
+- [ ] Headless geometry is covered by `test_nearest_edge_on_face` +
+      `test_bevel_object_edges`; the modal/raycast pick needs this GUI pass.
+
+Watch for: picking the wrong edge (the raycast→nearest-edge mapping), and any
+console error on a non-manifold/curved face.
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.

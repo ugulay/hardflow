@@ -823,6 +823,35 @@ def test_inset_extrude_faces_recess():
                                         Vector((0, 0, 1))) is False
 
 
+def test_nearest_edge_on_face():
+    # Object-Mode edge pick: the edge nearest a hit point on the top face.
+    _reset()
+    cube = _add_cube("EdgePick", size=2.0)
+    top = max(range(len(cube.data.polygons)),
+              key=lambda i: cube.data.polygons[i].normal.z)
+    key = geometry.nearest_edge_on_face(cube, top, Vector((1.0, 0.0, 1.0)))
+    assert key is not None
+    a, b = cube.data.vertices[key[0]].co, cube.data.vertices[key[1]].co
+    # the +X / z=1 edge: both endpoints at x=1, z=1
+    assert abs(a.x - 1.0) < 1e-4 and abs(b.x - 1.0) < 1e-4, (a[:], b[:])
+    assert abs(a.z - 1.0) < 1e-4 and abs(b.z - 1.0) < 1e-4, (a[:], b[:])
+    assert geometry.nearest_edge_on_face(cube, 9999, Vector((0, 0, 0))) is None
+
+
+def test_bevel_object_edges():
+    # Object-Mode edge bevel: one picked edge -> real chamfer geometry.
+    _reset()
+    cube = _add_cube("EdgeBevel", size=2.0)
+    before = len(cube.data.vertices)
+    top = max(range(len(cube.data.polygons)),
+              key=lambda i: cube.data.polygons[i].normal.z)
+    key = geometry.nearest_edge_on_face(cube, top, Vector((1.0, 0.0, 1.0)))
+    assert geometry.bevel_object_edges(cube, [key], 0.2, segments=2) == 1
+    assert len(cube.data.vertices) > before, "bevel added no geometry"
+    assert geometry.bevel_object_edges(cube, [key], 0.0) == 0          # width 0
+    assert geometry.bevel_object_edges(cube, [(0, 9000)], 0.2) == 0    # bad edge
+
+
 def test_snapshot_restore_mesh():
     # the live-preview backbone for Push/Pull + Offset: snapshot a mesh, mutate
     # it, then restore it back to the captured state.

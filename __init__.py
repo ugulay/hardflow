@@ -5,7 +5,7 @@ import bpy
 from . import preferences, keymaps, gizmos
 from .operators import (draw_cut, modifiers, cutters, pipe, decals,
                         boolean_ops, array, assets, push_pull, offset,
-                        construction, hardops)
+                        construction, hardops, edge_tool)
 from .ui import pie, menu, panel, decal_panel, decal_library, asset_panel
 
 # Registration order doesn't matter, but keep it tidy:
@@ -26,6 +26,7 @@ _classes = (
     pipe.HARDFLOW_OT_cable,
     push_pull.HARDFLOW_OT_push_pull,
     offset.HARDFLOW_OT_offset,
+    edge_tool.HARDFLOW_OT_edge_bevel,
     construction.HARDFLOW_OT_add_primitive,
     construction.HARDFLOW_OT_add_guide,
     construction.HARDFLOW_OT_add_grid,

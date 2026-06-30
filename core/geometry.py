@@ -755,6 +755,61 @@ def edit_bevel_edges(obj, width, segments=2, profile=0.5):
     return n
 
 
+def nearest_edge_on_face(obj, face_index, local_point):
+    """Return the (vi, vj) vertex-index pair of the polygon edge of
+    `obj.data.polygons[face_index]` nearest to `local_point` (object-local), or
+    None for a bad index. Lets the Object-Mode edge tools pick the edge under the
+    cursor from a face raycast hit. Pure mesh-data read (no bpy.ops)."""
+    from mathutils.geometry import intersect_point_line
+    me = obj.data
+    if not (0 <= face_index < len(me.polygons)):
+        return None
+    vs = list(me.polygons[face_index].vertices)
+    best, best_d = None, None
+    for k in range(len(vs)):
+        a = me.vertices[vs[k]].co
+        b = me.vertices[vs[(k + 1) % len(vs)]].co
+        pt, t = intersect_point_line(local_point, a, b)
+        t = max(0.0, min(1.0, t))
+        d = (local_point - a.lerp(b, t)).length
+        if best_d is None or d < best_d:
+            best_d, best = d, (vs[k], vs[(k + 1) % len(vs)])
+    return best
+
+
+def bevel_object_edges(obj, edge_keys, width, segments=2, profile=0.5):
+    """Object Mode: bevel the edges given as (vi, vj) vertex-index pairs into real
+    chamfer geometry (bmesh.ops.bevel, affect EDGES). The destructive,
+    pick-an-edge counterpart of `edit_bevel_edges` -- bevel one edge without
+    entering Edit Mode. Returns the number of edges beveled, 0 when none match or
+    width <= 0."""
+    if width <= 0.0:
+        return 0
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    wanted = set()
+    nv = len(bm.verts)
+    for a, b in edge_keys:
+        if 0 <= a < nv and 0 <= b < nv:
+            e = bm.edges.get((bm.verts[a], bm.verts[b]))
+            if e is not None:
+                wanted.add(e)
+    if not wanted:
+        bm.free()
+        return 0
+    n = len(wanted)
+    bmesh.ops.bevel(bm, geom=list(wanted), offset=width, offset_type='OFFSET',
+                    segments=max(1, int(segments)), profile=profile,
+                    affect='EDGES', clamp_overlap=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return n
+
+
 def edit_knife_polygon(obj, local_corners, view_dir):
     """Edit Mode knife / zero-depth cut: score the drawn closed polygon
     (`local_corners`, object-local) onto obj's mesh without adding or removing

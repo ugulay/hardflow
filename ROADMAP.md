@@ -493,8 +493,13 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       chain into extruding the inner face along its normal (recess for `-`, raised
       panel for `+`), one bmesh pass `geometry.inset_extrude_faces` /
       `edit_inset_extrude_faces`. Headless `test_inset_extrude_faces_recess`.
-- [ ] **Interactive edge tools** — Object-Mode edge/loop bevel + loop-cut modals
-      (drag width / segments) so edge work doesn't require Edit Mode.
+- [x] **Interactive edge bevel** — Object-Mode `HARDFLOW_OT_edge_bevel`
+      (`operators/edge_tool.py`, on the shared `_FaceDragModal`): raycast → pick the
+      nearest edge (`geometry.nearest_edge_on_face`) → drag width, `[ ]` segments →
+      `geometry.bevel_object_edges`, live snapshot/restore. Bevel an edge without
+      Edit Mode. Headless `test_nearest_edge_on_face` + `test_bevel_object_edges`.
+- [ ] **Edge-loop bevel + loop cut** — expand the pick to the connected edge loop,
+      and a loop-cut modal (insert a ring) — both need loop traversal; pending.
 - [ ] **Hover-pick through modifiers** — Object-Mode face pick still indexes the
       base mesh; supporting generative modifiers needs an evaluated-mesh map.
 
