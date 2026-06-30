@@ -223,5 +223,27 @@ Setup: enter Edit Mode on a cube.
 
 ---
 
+## 13. Surface-modeling smartness (v1.9 follow-ups)
+
+Setup: Edit Mode on a face whose edges have clearly different lengths (e.g. a
+4 × 1 rectangle).
+
+- [ ] **EDGES grid plane — deterministic main axis:** select two edges of
+      different length, start a draw (`Ctrl+Shift+D`) → the grid lays on the
+      selection with its **main axis along the LONGER edge**, regardless of which
+      edge you selected first (`best_edge_pair`). `Shift+←/→` still spins it.
+- [ ] **Overlap-accurate knife footprint:** on a single large face, `5` (Knife),
+      draw a **thin score that crosses the whole face** → only that face is
+      scored; the score does **not** reach distant parts of the mesh, and a
+      crossing score is no longer dropped (it used to fall back to slicing every
+      face).
+
+> **Pending (not yet implemented — verify in the same pass once added; see
+> `ROADMAP.md`):** `Ctrl+Click` to set the 2-edge plane's main edge manually,
+> and a pixel-accurate `knife_project` that clips the score to the exact drawn
+> outline (today a single large face still scores a full-width line).
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.
