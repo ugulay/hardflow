@@ -152,11 +152,11 @@ def _knife_footprint_faces(faces, local_corners, view_dir):
         return faces
     out = []
     for f in faces:
-        if gridmod.point_in_polygon(proj(f.calc_center_median()), poly2):
-            out.append(f)
-            continue
         face2 = [proj(v.co) for v in f.verts]
-        if any(gridmod.point_in_polygon(p, face2) for p in poly2):
+        # Full polygon overlap (vertex-in-either + edge crossings), so a thin
+        # score that only crosses a large face is caught too -- not just faces
+        # whose center sits inside the drawn loop.
+        if gridmod.polygons_overlap(poly2, face2):
             out.append(f)
     return out or list(faces)
 

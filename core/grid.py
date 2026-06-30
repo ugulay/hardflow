@@ -246,3 +246,26 @@ def point_in_polygon(point, polygon):
                 inside = not inside
         j = i
     return inside
+
+
+def polygons_overlap(a, b):
+    """Do two simple 2D polygons share any area? True when any vertex of one
+    lies inside the other, or any edge of one crosses an edge of the other.
+    Used as the local-knife footprint test: a thin drawn polygon that merely
+    *crosses* a big face (so neither a vertex-in test alone catches it) is still
+    recognised, so the score follows the drawn outline instead of falling back
+    to slicing the whole mesh. Pure 2D; lists of (x, y)."""
+    na, nb = len(a), len(b)
+    if na < 3 or nb < 3:
+        return False
+    if any(point_in_polygon(p, b) for p in a):
+        return True
+    if any(point_in_polygon(p, a) for p in b):
+        return True
+    for i in range(na):
+        a1, a2 = a[i], a[(i + 1) % na]
+        for j in range(nb):
+            b1, b2 = b[j], b[(j + 1) % nb]
+            if segments_intersect(a1, a2, b1, b2):
+                return True
+    return False

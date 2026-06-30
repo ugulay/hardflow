@@ -263,6 +263,22 @@ def test_point_in_polygon():
     assert not grid.point_in_polygon((0, 0), [(0, 0), (1, 1)])  # degenerate
 
 
+def test_polygons_overlap():
+    sq = [(0, 0), (4, 0), (4, 4), (0, 4)]
+    # shared area (a corner of one inside the other)
+    assert grid.polygons_overlap(sq, [(2, 2), (6, 2), (6, 6), (2, 6)])
+    # a thin strip crossing the square with NO vertex of either inside the
+    # other -> caught only by the edge-crossing test (the old center/corner
+    # footprint test missed this and fell back to slicing every face)
+    strip = [(0.5, -1.0), (1.0, -1.0), (1.0, 5.0), (0.5, 5.0)]
+    assert grid.polygons_overlap(sq, strip)
+    assert grid.polygons_overlap(strip, sq)        # symmetric
+    # disjoint polygons do not overlap
+    assert not grid.polygons_overlap(sq, [(10, 10), (12, 10), (11, 12)])
+    # degenerate inputs (fewer than 3 points) never overlap
+    assert not grid.polygons_overlap(sq, [(1, 1), (2, 2)])
+
+
 # --- snap: vertex / edge -----------------------------------------------------
 
 def test_nearest_point():

@@ -391,7 +391,11 @@ behaviour still awaits a live-Blender pass.
 - [x] **Starter primitives + guide lines** — Add Cube/Plane and a snappable guide
       line at the cursor (`geometry.build_box`/`build_plane`/`build_line`).
 - [x] **Local knife** — the knife score is restricted to the drawn footprint
-      (`geometry.knife_polygon`), not infinite planes across the whole mesh.
+      (`geometry.knife_polygon`), not infinite planes across the whole mesh. The
+      footprint test is a full polygon-overlap check (vertex-in-either + edge
+      crossings, `core/grid.polygons_overlap`), so a thin score that merely
+      crosses a large face is still localised instead of falling back to slicing
+      every face.
 - [x] **`Z` quick-close** + **line-width preference** (UI-scaled).
 - [x] **Deterministic main edge** — the 2-edge grid plane uses the longest
       selected edge as the main axis and its most-perpendicular partner for the
@@ -403,9 +407,11 @@ behaviour still awaits a live-Blender pass.
 - [ ] **`Ctrl+Click` set main edge** — manually override the automatic
       longest-edge main (above); needs the modal edge-pick UX, pending a
       live-Blender pass.
-- [ ] **Pixel-accurate knife** (`knife_project`) — the footprint restriction stops
-      whole-mesh slicing, but a single large face still scores a full-width line;
-      a true cut needs the view-dependent `knife_project` operator.
+- [ ] **Pixel-accurate knife** (`knife_project`) — footprint *selection* is now
+      overlap-accurate (`grid.polygons_overlap`), but the per-edge bisect still
+      scores a full-width line across each included face; clipping the score to
+      the exact drawn outline needs the view-dependent `knife_project` operator,
+      pending a live-Blender pass.
 
 ## Known limitations
 - Concave polygons work; self-intersecting ones produce a broken cutter.
