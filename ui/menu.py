@@ -31,6 +31,7 @@ _BOOLEAN_ITEMS = (
     ("mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', {'mode': 'CUT'}),
     ("mesh.hardflow_draw", "Slice", 'MOD_EDGESPLIT', {'mode': 'SLICE'}),
     ("mesh.hardflow_draw", "Make", 'MESH_PLANE', {'mode': 'MAKE'}),
+    ("mesh.hardflow_draw", "Intersect", 'MOD_BOOLEAN', {'mode': 'INTERSECT'}),
     ("mesh.hardflow_draw", "Knife (Score)", 'MOD_LINEART', {'mode': 'KNIFE'}),
     ("mesh.hardflow_draw", "Circle Cut", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'CUT'}),
     ("mesh.hardflow_draw", "N-gon Cut", 'MESH_CYLINDER', {'shape': 'NGON', 'mode': 'CUT'}),

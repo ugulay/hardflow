@@ -73,6 +73,22 @@ def test_apply_boolean_difference():
     assert len(target.modifiers) == 0, "modifier not applied (still present)"
 
 
+def test_robust_boolean_intersect():
+    # The draw tool's Intersect mode (and the menu entry) route to an INTERSECT
+    # boolean: keep only the volume inside the cutter. Verify against real Blender.
+    _reset()
+    target = _add_cube("Target", size=2.0)               # local x in [-1, 1]
+    cutter = _add_cube("Cutter", size=2.0, location=(1, 0, 0))  # world x in [0, 2]
+    _activate(target)
+    ok, _used, _msg = boolean.robust_boolean(bpy.context, target, cutter,
+                                             'INTERSECT', 'EXACT')
+    assert ok, "INTERSECT boolean failed"
+    xs = [v.co.x for v in target.data.vertices]
+    assert xs, "INTERSECT produced an empty mesh"
+    # the result must live in the [0, 1] overlap band, not the original [-1, 1]
+    assert min(xs) >= -0.05 and max(xs) <= 1.05, (min(xs), max(xs))
+
+
 def test_add_boolean_nondestructive():
     _reset()
     target = _add_cube("Target", size=2.0)

@@ -30,6 +30,7 @@ _MODES = [
     ('CUT', "Cut", "Boolean DIFFERENCE"),
     ('SLICE', "Slice", "Slice the object in two"),
     ('MAKE', "Make", "Add geometry (UNION)"),
+    ('INTERSECT', "Intersect", "Boolean INTERSECT (keep only what's inside the drawn volume)"),
     ('FACE', "Face", "Create a new face (create face, not boolean)"),
     ('KNIFE', "Knife", "Score the surface only (zero-depth cut, no boolean)"),
 ]
@@ -160,10 +161,11 @@ class HARDFLOW_OT_draw(Operator):
             step = 1 if event.type == 'RIGHT_BRACKET' else -1
             self.sides = max(3, min(64, self.sides + step))
 
-        elif (event.type in {'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'}
+        elif (event.type in {'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX'}
               and event.value == 'PRESS'):
             self.mode = {'ONE': 'CUT', 'TWO': 'SLICE', 'THREE': 'MAKE',
-                         'FOUR': 'FACE', 'FIVE': 'KNIFE'}[event.type]
+                         'FOUR': 'FACE', 'FIVE': 'KNIFE',
+                         'SIX': 'INTERSECT'}[event.type]
 
         # --- in-draw operations (v1.4) -----------------------------------
         elif event.type in {'MINUS', 'EQUAL'} and event.value == 'PRESS':
@@ -560,8 +562,8 @@ class HARDFLOW_OT_draw(Operator):
         # Hints split into short lines -> roomier than one long line.
         lines = [
             status,
-            ("Q/W/E/R shape    [ ] sides    1-5 mode    < > plane (VIEW/SURFACE/"
-             "EDGES/XYZ)    Shift+< > rotate grid    Z close", dim),
+            ("Q/W/E/R shape    [ ] sides    1-6 mode (Cut/Slice/Make/Face/Knife/"
+             "Intersect)    < > plane    Shift+< > rotate grid    Z close", dim),
             ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
              "B bevel    G stamp", dim),
             ("Ctrl+Wheel grid    PgUp/Dn depth    X grid    V vertex    "
@@ -876,7 +878,8 @@ class HARDFLOW_OT_draw(Operator):
         """If multi-object mode is on, all selected meshes (CUT/MAKE); otherwise
         only the active object. SLICE/FACE always operate on the active one."""
         active = context.active_object
-        if get_prefs(context).multi_object and self.mode in {'CUT', 'MAKE'}:
+        if (get_prefs(context).multi_object
+                and self.mode in {'CUT', 'MAKE', 'INTERSECT'}):
             sel = [o for o in context.selected_objects if o.type == 'MESH']
             return sel if sel else [active]
         return [active]
@@ -957,7 +960,8 @@ class HARDFLOW_OT_draw(Operator):
         diagnosis) and surfaces the outcome so a failed/degraded cut is never
         silent."""
         cleanup = get_prefs(context).cleanup_after_cut
-        op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION'}.get(self.mode)
+        op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION',
+              'INTERSECT': 'INTERSECT'}.get(self.mode)
         failures, fallbacks = [], []
 
         def cut(tgt, bop):
@@ -994,13 +998,14 @@ class HARDFLOW_OT_draw(Operator):
     def _apply_nondestructive(self, context, targets, cutter, solver):
         """Leave a live modifier, stash the cutter in the 'Hardflow Cutters'
         collection."""
-        op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION'}.get(self.mode)
+        op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION',
+              'INTERSECT': 'INTERSECT'}.get(self.mode)
         if self.mode == 'SLICE':
             target = targets[0]
             other = boolean.duplicate_object(context, target)
             boolean.add_boolean(target, cutter, 'DIFFERENCE', solver)
             boolean.add_boolean(other, cutter, 'INTERSECT', solver)
-        else:  # CUT / MAKE
+        else:  # CUT / MAKE / INTERSECT
             for t in targets:
                 boolean.add_boolean(t, cutter, op, solver)
         boolean.stash_cutter(context, cutter, targets[0])
