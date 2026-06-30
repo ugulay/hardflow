@@ -397,21 +397,29 @@ behaviour still awaits a live-Blender pass.
       crosses a large face is still localised instead of falling back to slicing
       every face.
 - [x] **`Z` quick-close** + **line-width preference** (UI-scaled).
+- [x] **Set / move the grid origin** — `H` in the draw tool re-anchors the snap
+      lattice (and the visible grid) to the point under the cursor on the current
+      plane; press again to revert (`draw_cut` `grid_origin`, applied in
+      `_plane_basis`). Grid Modeler's movable grid origin.
 - [x] **Deterministic main edge** — the 2-edge grid plane uses the longest
       selected edge as the main axis and its most-perpendicular partner for the
       plane (`core/decal_math.best_edge_pair`), so the grid no longer depends on
       bmesh selection order; parallel selections degrade to a clean single-edge
       plane.
-- [ ] **`X` start-from-edge-vertex** — deferred: `X` is the snap toggle; vertex
-      snap (`V`) already starts a draw from an existing vertex.
-- [ ] **`Ctrl+Click` set main edge** — manually override the automatic
-      longest-edge main (above); needs the modal edge-pick UX, pending a
-      live-Blender pass.
-- [ ] **Pixel-accurate knife** (`knife_project`) — footprint *selection* is now
-      overlap-accurate (`grid.polygons_overlap`), but the per-edge bisect still
-      scores a full-width line across each included face; clipping the score to
-      the exact drawn outline needs the view-dependent `knife_project` operator,
-      pending a live-Blender pass.
+- [x] **`Ctrl+Click` set main edge** — on the EDGES plane, Ctrl+Click the
+      selected edge under the cursor to force it as the grid's main axis,
+      overriding the automatic longest-edge pick (`draw_cut._pick_selected_edge` →
+      `decal_math.best_edge_pair` `forced_main`). Headless
+      `test_capture_edges_basis_forced_main` + pure `test_best_edge_pair`.
+- [x] **Pixel-accurate knife** (`knife_project`) — KNIFE mode now builds a wire
+      cutter from the drawn loop(s) and projects it along the current view onto the
+      active mesh (`draw_cut._knife_project_object` → `bpy.ops.mesh.knife_project`),
+      clipping the score to the exact drawn outline; falls back to the
+      footprint-restricted object knife when the viewport operator can't run.
+      Live-verified in Blender 5.1.2 (the modal/viewport path is in
+      `tests/manual_checklist.md`).
+- **`X` start-from-edge-vertex** — *not planned (redundant):* `X` is the snap
+  toggle, and vertex snap (`V`) already starts a draw from an existing vertex.
 
 ## v1.10 — Viewport gizmos (interactive handles)
 On-object handles for the common transforms, so the hard-surface loop doesn't
@@ -461,8 +469,10 @@ the core pipeline (POLY shape + Cut/Make/Intersect). All on
 - [x] **Discoverability** — "Polyline Trim" / "Polyline Add" / "Join (Add Solid)"
       in the header Boolean menu, and a "Polyline Trim" pie slot (`ui/menu.py`,
       `ui/pie.py`).
-- [ ] **Project verify** — the perspective taper is built and unit-checked; a
-      live-Blender pass should confirm the frustum cut matches the native tool.
+- [x] **Project verify** — the perspective taper is built, unit-checked, and
+      live-verified in Blender 5.1.2: Fixed keeps both caps equal (straight prism),
+      Project narrows the cap nearer the camera apex (frustum taper). A side-by-side
+      visual A/B against the native Sculpt tool remains a manual nicety.
 
 ## v1.12 — SketchUp tool improvements
 Push/Pull and Offset were minimal (hover → lock → drag/type → apply). Bring them
@@ -492,8 +502,13 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       include edge mid-points (not just vertices), and the Offset EXTRUDE depth
       drag uses it too (not only Push/Pull). Reuses the tested
       `snap.snap_to_candidates`.
-- [ ] **In-plane offset-thickness inference** — snap the inset *thickness* so the
-      border aligns with another vertex/edge within the face plane; pending.
+- [x] **In-plane offset-thickness inference** — the Offset drag snaps the inset
+      *thickness* so the border lines up with a coplanar feature inside the face:
+      every other vertex coplanar with the locked face and inside its boundary
+      becomes a candidate (its distance to the nearest boundary edge), and the
+      thickness snaps to it before grid (`offset.inset_inference_candidates` +
+      `offset._capture_offset_inference`/`_snap_offset`; HUD `-> on geometry`).
+      Pure `test_inset_inference_candidates` + headless `test_offset_inference_projection`.
 - [x] **Offset → auto Push/Pull** — press `E` mid-Offset to lock the inset and
       chain into extruding the inner face along its normal (recess for `-`, raised
       panel for `+`), one bmesh pass `geometry.inset_extrude_faces` /
@@ -510,8 +525,10 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       shared `_EdgePickModal`): pick an edge → insert an edge loop by subdividing
       its ring (`geometry.edge_ring` + `loop_cut`); `[ ]` / type sets how many
       loops. Inserted at the ring midpoints. Headless `test_loop_cut`.
-- [ ] **Loop-cut slide** — position the inserted loop along the ring (drag the
-      parameter t), not only the midpoint; pending.
+- [x] **Loop-cut slide** — drag to position a single inserted loop along its ring
+      (slide -1..1, 0 = midpoint), not only the midpoint (`geometry.loop_cut`
+      `slide` via `_oriented_ring` for a zig-zag-free slide; `edge_tool` loop-cut
+      drag). Headless `test_loop_cut_slide` + live-verified in Blender 5.1.2.
 - [x] **Hover-pick through modifiers** — when the raycast hits geometry a
       generative modifier added (evaluated face index past the base mesh), map the
       hit point back to the nearest base face (`geometry.nearest_face_to_point`) so
@@ -536,11 +553,14 @@ KitOps. Closed in this pass:
 - [x] **Decal transfer between surfaces** — `HARDFLOW_OT_transfer_decal`
       (`decal.retarget_decal`).
 
-Still open (deferred — all need real viewport events / GUI verification):
-- [ ] `Ctrl+Click` set main edge; pixel-accurate `knife_project`; set/move the
-      grid origin (see the v1.9 list above and Known limitations).
-- [ ] EXTRACT — effectively covered by Slice (it already keeps both the object
-      and the carved piece); not separately planned.
+Closed in a later pass (now implemented + verified):
+- [x] `Ctrl+Click` set main edge, pixel-accurate `knife_project`, and set/move the
+      grid origin (`H`) — all landed; see the v1.9 list above. The modal/viewport
+      interactions are live-verified in Blender 5.1.2 (`tests/manual_checklist.md`).
+
+Not separately planned (covered by an existing tool):
+- **EXTRACT** — *covered by Slice*, which already keeps both the object and the
+  carved piece, so it is not implemented separately.
 
 ## Known limitations
 - Concave polygons work; self-intersecting ones produce a broken cutter.
@@ -556,3 +576,8 @@ Still open (deferred — all need real viewport events / GUI verification):
   (aligned to the face under the cursor) / world X / Y / Z planes, cycled with
   `←/→` (`operators/draw_cut.py` `_plane_basis`, `core/raycast.basis_from_normal`).
 - ~~Object Mode only~~ — Edit Mode draw / Push-Pull / Offset / snap landed in v1.3.
+- ~~No manual main-edge / movable grid origin / pixel-accurate knife~~ — the draw
+  tool gained `Ctrl+Click` set-main-edge on the EDGES plane, `H` set/move grid
+  origin, and a view-accurate `knife_project` KNIFE path (footprint fallback);
+  loop cut gained slide and Offset gained in-plane thickness inference (all v1.9 /
+  v1.12, live-verified in Blender 5.1.2).

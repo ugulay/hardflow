@@ -10,7 +10,8 @@
 from bpy.types import Operator
 
 from .face_tool import _FaceDragModal
-from ..core import raycast, geometry, grid
+from ..core import raycast, geometry, grid, snap
+from ..core import offset as inset_math
 from ..preferences import get_prefs
 
 
@@ -37,6 +38,7 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         self.plane_co = None      # world face center (the inset's plane)
         self.plane_no = None      # world face normal
         self.pick0 = None         # world point where the drag started
+        self._offset_infer = []   # in-plane thickness inference candidates
 
     # --- locking ---------------------------------------------------------
 
@@ -73,6 +75,42 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         self.typed = ""
         self.locked = True
         self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+        self._capture_offset_inference()
+
+    def _capture_offset_inference(self):
+        """In-plane thickness inference: the distances at which the inset border
+        would line up with a real feature, so the offset can snap the border onto
+        another vertex / coplanar edge of the face. Every other mesh vertex that is
+        coplanar with the locked face and projects inside its boundary becomes a
+        candidate (its distance to the nearest boundary edge). Object Mode only;
+        Edit Mode keeps grid snap. Captured once from the pre-edit mesh."""
+        self._offset_infer = []
+        if self.edit or self.face_index < 0:
+            return
+        src = self._base if self._base is not None else self.obj.data
+        if src is None or len(src.vertices) > 50000:
+            return
+        poly = src.polygons[self.face_index]
+        right, up, normal = raycast.basis_from_normal(self.plane_no)
+        origin = self.plane_co
+        mw = self.obj.matrix_world
+        boundary = [raycast.world_to_plane_uv(mw @ src.vertices[vi].co,
+                                              origin, right, up)
+                    for vi in poly.vertices]
+        face_vi = set(poly.vertices)
+        tol = max(1e-4, max(self.obj.dimensions) * 1e-3)
+        interior = []
+        for v in src.vertices:
+            if v.index in face_vi:
+                continue
+            d = (mw @ v.co) - origin
+            if abs(d.dot(normal)) > tol:          # not in the face plane
+                continue
+            uv = (d.dot(right), d.dot(up))
+            if grid.point_in_polygon(uv, boundary):
+                interior.append(uv)
+        self._offset_infer = inset_math.inset_inference_candidates(boundary,
+                                                                   interior)
 
     # --- dragging / apply ------------------------------------------------
 
@@ -105,19 +143,33 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
 
     def _update_drag(self, context, co):
         region, rv3d = context.region, context.region_data
-        prefs = get_prefs(context)
         if self.phase == 'OFFSET':
             p = raycast.ray_to_plane(region, rv3d, co,
                                      self.plane_co, self.plane_no)
             if p is None or self.pick0 is None:
                 return
             d = (p - self.pick0).length
-            self.thickness = grid.snap_scalar(d, prefs.grid_world, self.snap)
+            self.thickness = self._snap_offset(d, context)
         else:  # EXTRUDE: drag along the face normal (signed), with inference
             d = raycast.closest_axis_distance(region, rv3d, co,
                                               self.plane_co, self.plane_no)
             self.distance = self._snap_axis_value(d, context)
         self.typed = ""
+
+    def _snap_offset(self, value, context):
+        """Inference-then-grid snap for the inset thickness: snap the border onto a
+        coplanar feature first (`_offset_infer`), grid otherwise. Sets
+        self._infer_hit for the HUD. Returns the snapped thickness."""
+        self._infer_hit = False
+        if not self.snap:
+            return value
+        prefs = get_prefs(context)
+        tol = max(1e-4, prefs.grid_world * 0.5)
+        inferred = snap.snap_to_candidates(value, self._offset_infer, tol)
+        if inferred != value and inferred > 0.0:
+            self._infer_hit = True
+            return inferred
+        return grid.snap_scalar(value, prefs.grid_world, True)
 
     def _set_value(self, v):
         if self.phase == 'OFFSET':
@@ -155,7 +207,9 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
             line2 = ("Click face = lock    drag / type number = thickness    "
                      "X snap %s" % ('ON' if self.snap else 'OFF'), dim)
         elif self.phase == 'OFFSET':
-            top = ("Thickness:  %.3f m%s" % (self.thickness, typed), accent)
+            infer = "  -> on geometry" if self._infer_hit else ""
+            top = ("Thickness:  %.3f m%s%s" % (self.thickness, typed, infer),
+                   accent)
             line2 = ("drag / type = thickness    E = then extrude (recess/panel)"
                      "    X snap %s" % ('ON' if self.snap else 'OFF'), dim)
         else:  # EXTRUDE

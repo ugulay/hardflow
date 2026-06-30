@@ -111,6 +111,8 @@ class HARDFLOW_OT_draw(Operator):
         self._surface_basis = None  # locked (origin,right,up,normal) in SURFACE
         self._surface_miss = False  # SURFACE ray missed -> fell back to VIEW
         self._edges_basis = None    # locked basis from selected edges (EDGES plane)
+        self._forced_main_key = None  # Ctrl+Click main-edge override (vert-idx set)
+        self.grid_origin = None     # H: re-anchor the snap grid to a chosen point
         self.committing = False
         self._preview = None        # live 3D cutter/face volume object
         self._collect_snap_geometry(context)
@@ -150,6 +152,17 @@ class HARDFLOW_OT_draw(Operator):
                 self._snap_hit = None  # angle lock invalidates the geometry marker
             self._raw_cursor = co
             self._apply_numeric(context)  # lock size to a typed value, else = raw
+
+        # Ctrl+Click on the EDGES plane: set the main grid axis to the selected
+        # edge under the cursor (override the automatic longest-edge pick),
+        # instead of placing a draw point.
+        elif (event.type == 'LEFTMOUSE' and event.value == 'PRESS'
+              and event.ctrl and self.plane == 'EDGES'):
+            key = self._pick_selected_edge(
+                context, (event.mouse_region_x, event.mouse_region_y))
+            if key is not None:
+                self._forced_main_key = key
+                self._edges_basis = self._capture_edges_basis(context)
 
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             p = self.cursor
@@ -268,6 +281,18 @@ class HARDFLOW_OT_draw(Operator):
         elif event.type == 'V' and event.value == 'PRESS':
             self.geo = not self.geo
 
+        # H: set / clear the grid origin. Re-anchors the snap lattice (and the
+        # visible grid) to the point under the cursor on the current plane -- Grid
+        # Modeler's 'move the grid origin'. Press again to revert to the default.
+        elif event.type == 'H' and event.value == 'PRESS':
+            if self.grid_origin is not None:
+                self.grid_origin = None
+            elif self.plane != 'VIEW':
+                region, rv3d = context.region, context.region_data
+                origin, _r, _u, normal = self._plane_basis(context)
+                self.grid_origin = raycast.ray_to_plane(
+                    region, rv3d, self.cursor, origin, normal)
+
         # S: persist the live HUD settings (snap/geo/ND, grid, sides, plane) as
         # the defaults for the next draw session.
         elif event.type == 'S' and event.value == 'PRESS':
@@ -288,6 +313,8 @@ class HARDFLOW_OT_draw(Operator):
                 self.world_points = []
                 self._surface_basis = None  # re-pick the surface on next click
                 self._edges_basis = None    # re-read the selected edges for EDGES
+                self._forced_main_key = None  # drop the Ctrl+Click main-edge pick
+                self.grid_origin = None     # the old origin is off the new plane
 
         elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
             self._cleanup(context)
@@ -378,9 +405,18 @@ class HARDFLOW_OT_draw(Operator):
 
         # Pick the main (longest) edge + its most-perpendicular partner, so the
         # grid axis is the dominant selected edge regardless of bmesh order, and
-        # parallel selections degrade cleanly to a single-edge plane.
+        # parallel selections degrade cleanly to a single-edge plane. A Ctrl+Click
+        # main-edge override (self._forced_main_key, an edge's vertex-index set)
+        # forces that edge as the main axis when it's part of the selection.
         vecs = [tuple(edge_vec(e)) for e in sel]
-        main_i, partner_i = decal_math.best_edge_pair(vecs)
+        forced = None
+        forced_key = getattr(self, "_forced_main_key", None)
+        if forced_key is not None:
+            for i, e in enumerate(sel):
+                if frozenset((e.verts[0].index, e.verts[1].index)) == forced_key:
+                    forced = i
+                    break
+        main_i, partner_i = decal_math.best_edge_pair(vecs, forced_main=forced)
         if partner_i is not None:
             r, u, n = decal_math.basis_from_two_edges(vecs[main_i], vecs[partner_i])
             origin = mw @ ((edge_mid(sel[main_i]) + edge_mid(sel[partner_i])) * 0.5)
@@ -393,6 +429,32 @@ class HARDFLOW_OT_draw(Operator):
             r, u, n = decal_math.basis_from_edge(vecs[main_i], tuple(nrm))
             origin = mw @ edge_mid(e)
         return (origin, Vector(r), Vector(u), Vector(n))
+
+    def _pick_selected_edge(self, context, screen_co):
+        """The selected edit-mesh edge nearest `screen_co`, as its vertex-index
+        frozenset -- the Ctrl+Click 'set main edge' target. Projects each selected
+        edge to the screen and takes the closest segment. None outside Edit Mode /
+        with no selection / when every endpoint projects off-screen."""
+        if context.mode != 'EDIT_MESH':
+            return None
+        import bmesh
+        obj = context.active_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        sel = [e for e in bm.edges if e.select]
+        if not sel:
+            return None
+        region, rv3d = context.region, context.region_data
+        mw = obj.matrix_world
+        segs = []
+        for e in sel:
+            a = raycast.world_to_screen(region, rv3d, mw @ e.verts[0].co)
+            b = raycast.world_to_screen(region, rv3d, mw @ e.verts[1].co)
+            segs.append((a, b) if a is not None and b is not None else (None, None))
+        hit = snap.nearest_on_segments((screen_co[0], screen_co[1]), segs, 1e9)
+        if hit is None:
+            return None
+        e = sel[hit[0]]
+        return frozenset((e.verts[0].index, e.verts[1].index))
 
     def _plane_basis(self, context):
         """Origin, local axes and normal of the projection plane, after the live
@@ -418,7 +480,14 @@ class HARDFLOW_OT_draw(Operator):
             right, up, normal = self._AXIS_BASIS[self.plane]
             origin = context.active_object.matrix_world.translation
             basis = (origin, right, up, normal)
-        return self._apply_spin(basis)
+        basis = self._apply_spin(basis)
+        # H 'move grid origin': re-anchor the lattice to a chosen on-plane point
+        # (kept coplanar by capture + cleared on plane change). VIEW tracks the
+        # camera, so a fixed origin there wouldn't stay on-plane -- skip it.
+        if self.grid_origin is not None and self.plane != 'VIEW':
+            o, r, u, n = basis
+            basis = (self.grid_origin, r, u, n)
+        return basis
 
     def _apply_spin(self, basis):
         """Rotate the plane's right/up axes around its normal by the live grid
@@ -663,6 +732,8 @@ class HARDFLOW_OT_draw(Operator):
         plane_label = self.plane
         if self.plane == 'SURFACE' and self._surface_miss:
             plane_label = "SURFACE (no face -> VIEW)"
+        elif self.plane == 'EDGES':
+            plane_label = "EDGES (Ctrl+Click = set main)"
         status = (
             f"Shape {self.shape}    Mode {self.mode}    Plane {plane_label}"
             f"        Snap {'ON' if self.snap else 'OFF'}"
@@ -676,8 +747,8 @@ class HARDFLOW_OT_draw(Operator):
              "< > plane    Shift+< > rotate grid    Z close", dim),
             ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
              "B bevel    O orient    G stamp", dim),
-            ("Ctrl+Wheel grid    PgUp/Dn depth    X grid    V vertex    "
-             "N non-destructive    S save settings    Enter apply    "
+            ("Ctrl+Wheel grid    PgUp/Dn depth    H grid origin    X grid    "
+             "V vertex    N non-destructive    S save settings    Enter apply    "
              "Esc cancel", dim),
         ]
         # Surface the in-draw operation state only when something is active.
@@ -693,6 +764,10 @@ class HARDFLOW_OT_draw(Operator):
             bits.append("mirror %s" % self.mirror_axis)
         if abs(self.plane_spin) > 1e-9:
             bits.append("grid spin %.0f°" % math.degrees(self.plane_spin))
+        if self._forced_main_key is not None:
+            bits.append("main edge set")
+        if self.grid_origin is not None:
+            bits.append("grid origin set")
         if self.bevel_cut:
             bits.append("bevel-on-cut")
         if self.cutter_bevel:
@@ -1055,8 +1130,13 @@ class HARDFLOW_OT_draw(Operator):
         context.view_layer.objects.active = obj
 
     def _knife_object(self, context, sets):
-        """KNIFE in Object Mode: score every drawn loop onto the active mesh
-        (zero-depth, no boolean) via the object-data knife."""
+        """KNIFE in Object Mode: score the drawn loop(s) onto the active mesh
+        (zero-depth, no boolean). Prefers Blender's view-accurate `knife_project`,
+        which clips the score to the exact drawn outline; falls back to the
+        footprint-restricted object-data knife when the viewport operator can't
+        run (no region / edge-on plane / projection failure)."""
+        if self._knife_project_object(context, sets):
+            return
         obj = context.active_object
         mw_inv = obj.matrix_world.inverted_safe()
         rot = mw_inv.to_3x3()
@@ -1066,6 +1146,80 @@ class HARDFLOW_OT_draw(Operator):
             scored += geometry.knife_polygon(obj, local, (rot @ vd).normalized())
         if scored == 0:
             self.report({'WARNING'}, "Knife cut scored nothing")
+
+    def _knife_project_object(self, context, sets):
+        """Pixel-accurate knife via `bpy.ops.mesh.knife_project`: build a wire
+        cutter from the drawn loop(s) and project it along the *current* view onto
+        the active mesh, so the score follows the exact drawn silhouette instead of
+        a full-width bisect per face. Returns True on success, False to let
+        `_knife_object` fall back to the footprint knife.
+
+        Runs in the modal's own VIEW_3D context. The cutter must be the only OTHER
+        selected object (the target alone enters Edit Mode -- both entering at once
+        would leave knife_project with no projector), so we add it after the mode
+        switch. Always restores Object Mode + the user's active object."""
+        region = context.region
+        rv3d = context.region_data
+        obj = context.active_object
+        if (region is None or rv3d is None or context.area is None
+                or context.area.type != 'VIEW_3D' or obj is None
+                or context.mode != 'OBJECT'):
+            return False
+        import bmesh
+        cme = bpy.data.meshes.new("HF_KnifeCutter")
+        bm = bmesh.new()
+        built = 0
+        for corners, _vd in sets:
+            if len(corners) < 2:
+                continue
+            vs = [bm.verts.new((c.x, c.y, c.z)) for c in corners]
+            for i in range(len(vs)):
+                try:
+                    bm.edges.new((vs[i], vs[(i + 1) % len(vs)]))
+                except ValueError:
+                    pass               # duplicate edge from a repeated corner
+            built += 1
+        if built == 0:
+            bm.free()
+            bpy.data.meshes.remove(cme)
+            return False
+        bm.to_mesh(cme)
+        bm.free()
+        cutter = bpy.data.objects.new("HF_KnifeCutter", cme)
+        context.collection.objects.link(cutter)
+        context.view_layer.update()
+        ok = False
+        try:
+            with context.temp_override(area=context.area, region=region,
+                                       region_data=rv3d):
+                bpy.ops.object.select_all(action='DESELECT')
+                context.view_layer.objects.active = obj
+                obj.select_set(True)             # ONLY the target enters Edit Mode
+                bpy.ops.object.mode_set(mode='EDIT')
+                cutter.select_set(True)          # the projector (object-level)
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.mesh.knife_project(cut_through=False)
+                bpy.ops.object.mode_set(mode='OBJECT')
+            ok = True
+        except Exception as ex:
+            self.report({'WARNING'}, "knife_project failed (%s); using footprint"
+                        % type(ex).__name__)
+            try:
+                if obj.mode != 'OBJECT':
+                    with context.temp_override(area=context.area, region=region):
+                        bpy.ops.object.mode_set(mode='OBJECT')
+            except Exception:
+                pass
+            ok = False
+        finally:
+            if cutter.name in bpy.data.objects:
+                bpy.data.objects.remove(cutter, do_unlink=True)
+            try:
+                context.view_layer.objects.active = obj
+                obj.select_set(True)
+            except Exception:
+                pass
+        return ok
 
     def _bevel_on_cut(self, targets):
         """Add a small angle-limited bevel to each cut target so the cut edge

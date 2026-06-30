@@ -873,12 +873,14 @@ def test_edge_loop():
     assert len(keys) == 3, keys                              # full row at y=1
     for (i, j) in keys:
         assert i // n == 1 and j // n == 1, (i, j)           # all on row y=1
-    # a plain cube has no extendable loop -> just the picked edge
+    # a plain cube has no extendable loop -> just the picked edge (edge keys are
+    # unordered: compare as a set, like the production bm.edges.get lookup)
     cube = _add_cube("LoopCube", size=2.0)
     top = max(range(len(cube.data.polygons)),
               key=lambda k: cube.data.polygons[k].normal.z)
     ek = geometry.nearest_edge_on_face(cube, top, Vector((1.0, 0.0, 1.0)))
-    assert geometry.edge_loop(cube, ek) == [ek]
+    loop = geometry.edge_loop(cube, ek)
+    assert len(loop) == 1 and set(loop[0]) == set(ek), (loop, ek)
 
 
 def test_loop_cut():
@@ -909,6 +911,104 @@ def test_loop_cut():
               key=lambda k: cube.data.polygons[k].normal.z)
     ck = geometry.nearest_edge_on_face(cube, top, Vector((1.0, 0.0, 1.0)))
     assert geometry.loop_cut(cube, ck, 1) >= 1
+
+
+def _quad_grid(name, n=4):
+    """An n x n vertex quad grid in the XY plane; vert (x, y) -> index y*n + x."""
+    import bmesh
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    vs = [[bm.verts.new((x, y, 0)) for x in range(n)] for y in range(n)]
+    for y in range(n - 1):
+        for x in range(n - 1):
+            bm.faces.new((vs[y][x], vs[y][x + 1], vs[y + 1][x + 1], vs[y + 1][x]))
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(obj)
+    return obj
+
+
+def test_loop_cut_slide():
+    # Loop-cut slide on a 3x3 quad grid: the ring of a horizontal edge runs in X
+    # (x: 1 -> 2). slide=0 inserts the loop at the midpoint x=1.5; a non-zero slide
+    # moves the whole loop off-centre CONSISTENTLY (one shared x, no zig-zag).
+    _reset()
+    n = 4
+    ek = (1 * n + 1, 1 * n + 2)                  # horizontal edge (1,1)-(2,1)
+
+    mid = _quad_grid("SlideMid", n)
+    assert geometry.loop_cut(mid, ek, cuts=1, slide=0.0) == 4
+    mid_x = sorted({round(v.co.x, 5) for v in mid.data.vertices
+                    if 1.0 < v.co.x < 2.0})
+    assert mid_x == [1.5], mid_x                 # default = midpoint
+
+    pos = _quad_grid("SlidePos", n)
+    assert geometry.loop_cut(pos, ek, cuts=1, slide=0.6) == 4
+    pos_x = sorted({round(v.co.x, 5) for v in pos.data.vertices
+                    if 1.0 < v.co.x < 2.0})
+    assert len(pos_x) == 1, pos_x                # consistent slide, no zig-zag
+    assert abs(pos_x[0] - 1.5) > 0.05, pos_x     # actually slid off-centre
+
+    neg = _quad_grid("SlideNeg", n)
+    assert geometry.loop_cut(neg, ek, cuts=1, slide=-0.6) == 4
+    neg_x = sorted({round(v.co.x, 5) for v in neg.data.vertices
+                    if 1.0 < v.co.x < 2.0})
+    assert len(neg_x) == 1, neg_x
+    # opposite slide -> mirrored across the midpoint
+    assert abs((pos_x[0] + neg_x[0]) - 3.0) < 1e-4, (pos_x, neg_x)
+
+    # multiple cuts ignore slide -> evenly spaced (two loops at x=1/3+1, 2/3+1)
+    multi = _quad_grid("SlideMulti", n)
+    assert geometry.loop_cut(multi, ek, cuts=2, slide=0.9) == 4
+    multi_x = sorted({round(v.co.x, 4) for v in multi.data.vertices
+                      if 1.0 < v.co.x < 2.0})
+    assert len(multi_x) == 2, multi_x
+    assert abs(multi_x[0] - (1 + 1 / 3)) < 1e-3 and \
+        abs(multi_x[1] - (1 + 2 / 3)) < 1e-3, multi_x
+
+
+def test_offset_inference_projection():
+    # The Offset tool's in-plane thickness inference: a coplanar vertex inside the
+    # locked face yields the inset thickness at which the shrinking border reaches
+    # it. Mirrors HARDFLOW_OT_offset._capture_offset_inference end to end (face
+    # plane basis -> project boundary + interior -> candidate distances).
+    _reset()
+    import bmesh
+    from hardflow.core import offset as inset_math
+    me = bpy.data.meshes.new("face")
+    bm = bmesh.new()
+    c = [bm.verts.new(p) for p in [(0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0)]]
+    bm.faces.new(c)
+    bm.verts.new((3, 5, 0))           # coplanar interior vert, 3 from left edge
+    bm.verts.new((5, 5, 5))           # off-plane -> must be filtered out
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new("Face", me)
+    bpy.context.collection.objects.link(obj)
+
+    poly = obj.data.polygons[0]
+    plane_co = obj.matrix_world @ poly.center
+    plane_no = (obj.matrix_world.to_3x3() @ poly.normal).normalized()
+    right, up, normal = raycast.basis_from_normal(plane_no)
+    mw = obj.matrix_world
+    boundary = [raycast.world_to_plane_uv(mw @ obj.data.vertices[vi].co,
+                                          plane_co, right, up)
+                for vi in poly.vertices]
+    face_vi = set(poly.vertices)
+    interior = []
+    for v in obj.data.vertices:
+        if v.index in face_vi:
+            continue
+        d = (mw @ v.co) - plane_co
+        if abs(d.dot(normal)) > 1e-4:             # off the face plane -> skip
+            continue
+        uv = (d.dot(right), d.dot(up))
+        if grid.point_in_polygon(uv, boundary):
+            interior.append(uv)
+    assert len(interior) == 1, interior          # the off-plane vert was dropped
+    cands = inset_math.inset_inference_candidates(boundary, interior)
+    assert any(abs(c - 3.0) < 1e-4 for c in cands), cands
 
 
 def test_nearest_face_to_point():
@@ -1182,6 +1282,53 @@ def test_capture_edges_basis_uses_longest_edge():
     _origin, right, _up, normal = basis
     # main axis follows the longest (X) edge; the plane normal is world Z
     assert abs(abs(right.x) - 1.0) < 1e-5, right
+    assert abs(abs(normal.z) - 1.0) < 1e-5, normal
+
+
+def test_capture_edges_basis_forced_main():
+    # Ctrl+Click 'set main edge': forcing a SHORTER selected edge as the main axis
+    # (self._forced_main_key) makes the grid's right axis follow it instead of the
+    # automatic longest edge. Exercises the override path through best_edge_pair.
+    from hardflow.operators import draw_cut
+    import bmesh
+    _reset()
+    me = bpy.data.meshes.new("Rect2")
+    bm = bmesh.new()
+    vs = [bm.verts.new(c) for c in ((0, 0, 0), (4, 0, 0), (4, 1, 0), (0, 1, 0))]
+    bm.faces.new(vs)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("Rect2", me)
+    bpy.context.collection.objects.link(ob)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.context.tool_settings.mesh_select_mode = (False, True, False)
+    bm = bmesh.from_edit_mesh(ob.data)
+    for e in bm.edges:
+        e.select_set(False)
+    short_key = None
+    for e in bm.edges:
+        v = e.verts[1].co - e.verts[0].co
+        if v.length <= 1e-6:
+            continue
+        if abs(v.x) > abs(v.y):                       # every long X edge
+            e.select_set(True)
+        elif short_key is None:                       # one short Y edge -> force it
+            e.select_set(True)
+            short_key = frozenset((e.verts[0].index, e.verts[1].index))
+    bmesh.update_edit_mesh(ob.data)
+
+    class _S:                                         # minimal stand-in for `self`
+        pass
+    s = _S()
+    s._forced_main_key = short_key
+    basis = draw_cut.HARDFLOW_OT_draw._capture_edges_basis(s, bpy.context)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    assert basis is not None
+    _o, right, _u, normal = basis
+    # the main axis now follows the forced short (Y) edge, not the long X edge
+    assert abs(abs(right.y) - 1.0) < 1e-5, right
     assert abs(abs(normal.z) - 1.0) < 1e-5, normal
 
 

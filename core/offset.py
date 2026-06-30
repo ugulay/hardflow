@@ -33,6 +33,46 @@ def _line_intersection(p0, d0, p1, d1):
     return (p0[0] + d0[0] * t, p0[1] + d0[1] * t)
 
 
+def _point_segment_dist(p, a, b):
+    """Shortest distance from 2D point `p` to the segment [a, b]."""
+    px, py = p
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    ll = dx * dx + dy * dy
+    if ll <= 1e-12:                       # degenerate edge (a == b)
+        return math.hypot(px - ax, py - ay)
+    t = ((px - ax) * dx + (py - ay) * dy) / ll
+    t = max(0.0, min(1.0, t))
+    cx, cy = ax + t * dx, ay + t * dy
+    return math.hypot(px - cx, py - cy)
+
+
+def inset_inference_candidates(boundary, interior):
+    """Inset thicknesses at which the shrinking border of polygon `boundary`
+    (the SketchUp Offset drag) lines up with a real feature -- so the inset border
+    passes through one of the `interior` points (another vertex / a coplanar edge
+    within the face plane). Each candidate is an interior point's distance to the
+    nearest boundary edge: at that thickness the uniformly-inset border reaches it.
+
+    All points are 2D (x, y) in the face plane; the operator does the
+    world <-> plane lifting. Returns a sorted list of positive distances; points on
+    or outside the boundary (distance ~ 0) are dropped. Pure math, stdlib only."""
+    n = len(boundary)
+    if n < 3:
+        return []
+    cands = []
+    for p in interior:
+        best = None
+        for i in range(n):
+            d = _point_segment_dist(p, boundary[i], boundary[(i + 1) % n])
+            if best is None or d < best:
+                best = d
+        if best is not None and best > 1e-6:
+            cands.append(best)
+    return sorted(cands)
+
+
 def offset_polygon(points, distance):
     """Offset a simple polygon by `distance` (positive = inward, negative =
     outward), independent of the polygon's winding. Returns the new list of

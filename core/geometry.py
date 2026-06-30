@@ -883,27 +883,100 @@ def edge_ring(obj, edge_key):
     return keys
 
 
-def loop_cut(obj, edge_key, cuts=1):
+def _quad_partner(face, a_vert, edge, opp):
+    """In quad `face`, the vertex of the opposite edge `opp` that joins `a_vert`
+    (a vertex of `edge`) through a quad side edge -- so an oriented ring walk keeps
+    the same side. Falls back to the geometrically nearest vertex of `opp`."""
+    opp_verts = set(opp.verts)
+    for fe in face.edges:
+        if fe is edge or fe is opp:
+            continue
+        if a_vert in fe.verts:
+            other = fe.other_vert(a_vert)
+            if other in opp_verts:
+                return other
+    return min(opp.verts, key=lambda v: (v.co - a_vert.co).length_squared)
+
+
+def _oriented_ring(start):
+    """Ring edges from BMEdge `start`, each as (edge, a_vert, b_vert) with a_vert
+    kept on a consistent side of the quad strip so a slide parameter moves the
+    whole inserted loop the same way (no zig-zag). Walks both directions across
+    opposite quad edges. Used by `loop_cut`'s slide."""
+    a0, b0 = start.verts[0], start.verts[1]
+    ring, seen = [(start, a0, b0)], {start}
+    for f0 in start.link_faces:
+        e, f, a_vert = start, f0, a0
+        while True:
+            oe = _opposite_edge_in_quad(f, e)
+            if oe is None or oe in seen:
+                break
+            oa = _quad_partner(f, a_vert, e, oe)
+            ob = oe.other_vert(oa)
+            seen.add(oe)
+            ring.append((oe, oa, ob))
+            nxt = [nf for nf in oe.link_faces if nf is not f]
+            if not nxt:
+                break
+            f, e, a_vert = nxt[0], oe, oa
+    return ring
+
+
+def loop_cut(obj, edge_key, cuts=1, slide=0.0):
     """Insert `cuts` edge loop(s) by subdividing the edge ring through `edge_key`
     (`edge_ring` + `bmesh.ops.subdivide_edges` with grid-fill so each quad in the
     strip is split). Object Mode. Returns the number of ring edges subdivided
-    (0 on failure)."""
-    keys = edge_ring(obj, edge_key)
+    (0 on failure).
+
+    `slide` in [-1, 1] positions a single inserted loop along the ring (0 = the
+    midpoint, +1 toward one side, -1 the other), the loop-cut slide. It only
+    applies for `cuts == 1`; multiple loops stay evenly spaced. The slide is made
+    consistent across the strip via `_oriented_ring` so the loop doesn't zig-zag."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
     nv = len(bm.verts)
-    edges = []
-    for a, b in keys:
-        if 0 <= a < nv and 0 <= b < nv:
-            e = bm.edges.get((bm.verts[a], bm.verts[b]))
-            if e is not None:
-                edges.append(e)
-    if not edges:
+    a, b = edge_key
+    if not (0 <= a < nv and 0 <= b < nv):
         bm.free()
         return 0
+    start = bm.edges.get((bm.verts[a], bm.verts[b]))
+    if start is None:
+        bm.free()
+        return 0
+    ring = _oriented_ring(start)
+    edges = [e for (e, _a, _b) in ring]
+    do_slide = cuts == 1 and abs(slide) > 1e-6
+    # Identify original vs inserted verts by INDEX: subdivide_edges appends the
+    # new verts after the originals (whose indices it preserves). A wrapper-set
+    # `in` test fails after the op, and a custom int id gets interpolated onto the
+    # new verts -- the index split is the reliable signal. The oriented ring is
+    # recorded as index pairs BEFORE the op so each new vert can be matched to its
+    # host edge and slid along it consistently.
+    ring_idx = ([(av.index, bv.index) for (_e, av, bv) in ring]
+                if do_slide else None)
+    nv_before = len(bm.verts)
     bmesh.ops.subdivide_edges(bm, edges=edges, cuts=max(1, int(cuts)),
                               use_grid_fill=True)
+    if do_slide:
+        p = min(0.98, max(0.02, 0.5 + 0.5 * slide))
+        bm.verts.ensure_lookup_table()
+        lookup = {frozenset(k): k for k in ring_idx}
+        for v in bm.verts:
+            if v.index < nv_before:              # an original vert, not inserted
+                continue
+            # the new vertex sits on one ring edge: its two ORIGINAL neighbours
+            # are that edge's endpoints. Reposition it along the oriented edge.
+            ends = [n.index for n in (e.other_vert(v) for e in v.link_edges)
+                    if n.index < nv_before]
+            if len(ends) != 2:
+                continue
+            host = lookup.get(frozenset(ends))
+            if host is None:
+                continue
+            a_idx, b_idx = host
+            v.co = bm.verts[a_idx].co.lerp(bm.verts[b_idx].co, p)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(obj.data)
     obj.data.update()

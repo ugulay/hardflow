@@ -183,29 +183,39 @@ class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
 
     def _init_tool(self, context, event):
         self.cuts = 1
+        self.slide = 0.0            # -1..1: position a single loop along the ring
         self._edge_key = None
         self._edge_world = None
+        self._lock_mouse_x = 0      # cursor x at lock -> horizontal drag = slide
 
     def _lock_face(self, context, co):
         if self._edge_key is None:
             return
         self.typed = ""
         self.locked = True
+        self.slide = 0.0
+        self._lock_mouse_x = co[0]
         self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
         self._refresh_preview()      # show the loop straight away
 
     def _update_drag(self, context, co):
-        pass   # the loop position isn't cursor-driven; cuts via [ ] / numeric
+        # Drag horizontally to slide a single inserted loop along its ring; full
+        # -1..1 travel over ~250 px. Multiple loops stay evenly spaced.
+        if self.cuts == 1:
+            self.slide = max(-1.0, min(1.0, (co[0] - self._lock_mouse_x) / 250.0))
+        self.typed = ""
 
     def _refresh_preview(self):
         if self._base is None or self._edge_key is None:
             return
         geometry.restore_mesh(self.obj, self._base)
-        geometry.loop_cut(self.obj, self._edge_key, self.cuts)
+        geometry.loop_cut(self.obj, self._edge_key, self.cuts, self.slide)
 
     def _set_value(self, v):
         try:
             self.cuts = max(1, min(20, int(round(v))))
+            if self.cuts != 1:
+                self.slide = 0.0      # slide only applies to a single loop
         except (ValueError, TypeError):
             pass
 
@@ -220,6 +230,8 @@ class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
         if event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}:
             step = 1 if event.type == 'RIGHT_BRACKET' else -1
             self.cuts = max(1, min(20, self.cuts + step))
+            if self.cuts != 1:
+                self.slide = 0.0          # slide only applies to a single loop
             if self.locked:
                 self._refresh_preview()
             return True
@@ -231,11 +243,17 @@ class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
         if not self.locked:
             top = (("Hover an edge, then click to add a loop", accent)
                    if self._edge_key else ("Hover an edge to loop-cut", dim))
+        elif self.cuts == 1:
+            typed = ("  [typing %s]" % self.typed) if self.typed else ""
+            slide = ("    slide %+.0f%%" % (self.slide * 100.0)
+                     if abs(self.slide) > 1e-3 else "")
+            top = ("Loop Cut    Cuts %d%s%s" % (self.cuts, typed, slide), accent)
         else:
             typed = ("  [typing %s]" % self.typed) if self.typed else ""
             top = ("Loop Cut    Cuts %d%s" % (self.cuts, typed), accent)
+        drag = "drag = slide    " if self.cuts == 1 else ""
         return [
             top,
-            ("Click edge = insert    [ ] cuts    type = count    "
-             "Enter apply    Esc cancel", dim),
+            ("Click edge = insert    %s[ ] cuts    type = count    "
+             "Enter apply    Esc cancel" % drag, dim),
         ]

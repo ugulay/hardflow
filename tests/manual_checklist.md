@@ -406,6 +406,10 @@ loops — still works, but a grid shows it best).
       shows "Loop Cut  Cuts 1".
 - [ ] **`[` / `]`** (or type a number) → **more loops** at once (evenly spaced);
       the preview updates.
+- [ ] With **Cuts 1**, **drag left/right** → the loop **slides along its ring**
+      (HUD shows `slide ±NN%`); the whole loop moves together (no zig-zag). Setting
+      Cuts > 1 clears the slide. Headless `test_loop_cut_slide`; the slide math is
+      live-verified in Blender 5.1.2.
 - [ ] **Enter / click** keeps the loop(s); **Esc** rolls the mesh back. `Ctrl+Z`
       reverts in one step.
 - [ ] On a **plain cube**, clicking a top edge inserts a band loop around the cube
@@ -413,6 +417,38 @@ loops — still works, but a grid shows it best).
 
 Watch for: a ring that stops early on non-quad faces (expected), and any console
 error on n-gons / triangles.
+
+---
+
+## 18. v1.12 / trailing-v1.9 completions ⭐ (new)
+
+**Offset in-plane thickness inference** (Object Mode; §4 setup, but on a face that
+has a *coplanar* feature — e.g. a face with an interior vertex/hole, or run Offset
+once then Offset again so the prior inset edge is a coplanar reference):
+- [ ] Lock a face, drag the inset → as the border passes a coplanar vertex/edge the
+      thickness **snaps to it** and the HUD shows `-> on geometry`; grid snap is the
+      fallback. Pure `test_inset_inference_candidates` + headless
+      `test_offset_inference_projection`.
+
+**Draw tool ▸ Ctrl+Click set main edge** (Edit Mode, EDGES plane):
+- [ ] Select 2+ edges, launch the draw tool → it starts on **EDGES**; the grid main
+      axis follows the longest edge. HUD plane reads `EDGES (Ctrl+Click = set main)`.
+- [ ] **Ctrl+Click** a different selected edge → the grid **re-orients** so that edge
+      is the main axis (HUD bit `main edge set`). Headless
+      `test_capture_edges_basis_forced_main`.
+
+**Draw tool ▸ `H` move grid origin** (any non-VIEW plane):
+- [ ] Press **`H`** over a point → the visible snap grid **re-anchors** there (HUD bit
+      `grid origin set`); snapping now falls on the new lattice. **`H`** again reverts.
+      Cycling the plane (`←/→`) also clears it.
+
+**Draw tool ▸ KNIFE = pixel-accurate `knife_project`** (Object Mode):
+- [ ] KNIFE mode, draw a shape over a face → the score follows the **exact drawn
+      outline** (not a full-width line across the face). The temporary
+      `HF_KnifeCutter` is removed and the object stays active in Object Mode.
+      Live-verified in Blender 5.1.2 (`_knife_project_object`).
+- [ ] Draw with the plane **edge-on** to the view (or in a context with no region) →
+      it **falls back** to the footprint knife without error.
 
 ---
 

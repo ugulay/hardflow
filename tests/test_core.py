@@ -207,6 +207,23 @@ def test_offset_polygon_outward_and_guards():
     assert offset.offset_polygon([(0, 0), (0, 0), (1, 1)], 0.5) is None
 
 
+def test_inset_inference_candidates():
+    sq = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    # a point 3 in from the left edge -> the inset border reaches it at t = 3
+    cands = offset.inset_inference_candidates(sq, [(3, 5)])
+    assert any(math.isclose(c, 3.0, abs_tol=1e-9) for c in cands)
+    # the centre is 5 from every edge -> the border collapses there at t = 5
+    cands2 = offset.inset_inference_candidates(sq, [(5, 5)])
+    assert any(math.isclose(c, 5.0, abs_tol=1e-9) for c in cands2)
+    # a coplanar edge (two verts at x=2) aligns the whole border at t = 2
+    edge = offset.inset_inference_candidates(sq, [(2, 3), (2, 7)])
+    assert sum(1 for c in edge if math.isclose(c, 2.0, abs_tol=1e-9)) == 2
+    assert edge == sorted(edge)
+    # points on / outside the boundary are dropped; a degenerate poly -> []
+    assert offset.inset_inference_candidates(sq, [(0, 0)]) == []
+    assert offset.inset_inference_candidates([(0, 0), (1, 1)], [(0.5, 0.5)]) == []
+
+
 # --- grid: shape points ------------------------------------------------------
 
 def test_lock_distance():
@@ -367,6 +384,13 @@ def test_best_edge_pair():
     # single edge / empty are well-defined
     assert decal_math.best_edge_pair([(5, 0, 0)]) == (0, None)
     assert decal_math.best_edge_pair([]) == (0, None)
+    # forced_main (Ctrl+Click 'set main edge') overrides the longest-edge pick;
+    # the partner is still the most-perpendicular of the rest
+    vecs = [(10, 0, 0), (2, 0.1, 0), (0, 3, 0)]
+    assert decal_math.best_edge_pair(vecs, forced_main=2) == (2, 0)
+    assert decal_math.best_edge_pair(vecs, forced_main=1) == (1, 2)
+    # an out-of-range forced index falls back to the automatic longest edge
+    assert decal_math.best_edge_pair(vecs, forced_main=9) == (0, 2)
 
 
 def test_orientation_basis_identity():
