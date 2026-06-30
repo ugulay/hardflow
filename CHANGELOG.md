@@ -5,7 +5,42 @@ logic; since the project is pre-1.0, minor versions add features.
 
 ## [Unreleased]
 
-_Nothing yet._
+Follow-up hardening from a full code review of the decal/asset subsystems, plus
+two more increments of Grid Modeler / SketchUp surface-modeling parity. Pure
+logic is unit-tested (`59/59`); the new bpy paths gain headless coverage.
+
+### Changed
+- **Deterministic main edge for the 2-edge grid plane** — the `EDGES` construction
+  plane picked edges by arbitrary bmesh order, so which selected edge became the
+  grid's main axis was unpredictable. It now takes the longest selected edge as the
+  main axis and its most-perpendicular partner for the plane
+  (`core/decal_math.best_edge_pair`, `operators/draw_cut._capture_edges_basis`);
+  parallel selections degrade cleanly to a single-edge plane. The manual
+  `Ctrl+Click` main-edge override still awaits the modal edge-pick UX.
+
+### Fixed
+- **Failed bake no longer pollutes the target material** — a Cycles bake that
+  raised (in `HARDFLOW_OT_bake_decal` / `HARDFLOW_OT_create_decal`) left an orphan
+  image plus a dangling Image Texture node wired into the target. The error path
+  now rolls back exactly what that call created via `core/decal.discard_bake_image`
+  (guarded by `image.users == 0`, so a re-bake never deletes a prior good result).
+- **Knife footprint is overlap-accurate** — `_knife_footprint_faces` kept only
+  faces whose center sat inside the drawn loop (or that held a loop corner) and
+  fell back to slicing *every* face when none matched, so a thin score crossing a
+  large face sliced the whole mesh. It now uses a full polygon-overlap test
+  (vertex-in-either + edge crossings, `core/grid.polygons_overlap`).
+- **INSERT export / decal save can't escape the library folder** — a user-typed
+  name now passes through `core/decal_image.safe_filename` (strips path separators
+  and characters illegal on common filesystems); `HARDFLOW_OT_export_asset` also
+  warns before overwriting an existing `.blend` and reports Overwrote vs Exported.
+- **Place wrappers report cancellation** — the decal/asset `_invoke_place` helpers
+  returned `{'FINISHED'}` even when the spawned modal cancelled immediately (no
+  viewport / bad args); they now propagate `{'CANCELLED'}`.
+- **Material match writes the active slot** — `core/decal.match_decal_to_material`
+  assigned `materials[0]`, wrong when the decal's material is not slot 0; it now
+  replaces the single-user copy via `active_material`.
+- **`transfer_shading` guards non-mesh targets** — `core/asset.transfer_shading`
+  early-returns instead of dereferencing `target.data.polygons` on a non-mesh.
 
 ## [1.9.0] — 2026-06-30
 
