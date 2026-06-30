@@ -133,6 +133,19 @@ def box_points(a, b):
     return [(a[0], a[1]), (b[0], a[1]), (b[0], b[1]), (a[0], b[1])]
 
 
+def lock_distance(a, b, dist):
+    """The point at exactly `dist` from `a` along the direction `a`->`b` (2D).
+    Lets a drawn shape's size lock to a typed dimension (radius / extent /
+    segment length) while keeping the cursor's direction. Returns `a` when the
+    direction is degenerate (b == a). Pure 2D, unit-tested."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length = math.hypot(dx, dy)
+    if length < 1e-12:
+        return (a[0], a[1])
+    s = dist / length
+    return (a[0] + dx * s, a[1] + dy * s)
+
+
 def ngon_points(center, edge, sides, rotation=0.0):
     """Screen-space regular-polygon corners from a center and an edge point.
     The edge point sets the circumradius and the orientation of the first

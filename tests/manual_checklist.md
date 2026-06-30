@@ -162,12 +162,24 @@ surface and straight segments cut through corners (see the v1.2 screenshot).
 
 Setup: a cube, Object Mode, `Ctrl+Shift+D`.
 
-- [ ] `5` selects **Knife** mode → drawing a box scores the surface (edges added,
-      no boolean / no volume cage). In Object Mode it knifes the active mesh;
-      select a face first for a contained score.
+- [ ] **`Tab`** cycles the boolean mode (Cut→Slice→Make→Intersect→Face→Knife),
+      **Shift+Tab** reverses; the HUD's "Mode" updates. (The number row no longer
+      switches mode — it types a size, below.)
+- [ ] **Intersect** mode (Tab to it, or menu ▸ Boolean ▸ Intersect): draw a box →
+      only the part of the object **inside** the drawn volume remains.
+- [ ] **Knife** mode: drawing a box scores the surface (edges added, no boolean /
+      no volume cage). In Object Mode it knifes the active mesh; select a face
+      first for a contained score.
+- [ ] **Numeric size** ⭐ — after the first click, **type a number** → the shape
+      locks to that exact size (radius / extent / segment length) in metres; the
+      HUD shows `size … m (typing)`. `Backspace` edits, `.` (or numpad `.`) is the
+      decimal; moving the mouse rotates the fixed-size shape around the anchor.
+      A second click commits at the typed size. Works on the SURFACE/EDGES/XYZ
+      planes too (size is measured in the plane's metres).
 - [ ] `-` / `=` change **inset** (the loop shrinks/grows before commit); HUD shows
       `inset … m`.
-- [ ] `,` / `.` **rotate** the shape in-plane; HUD shows `rot …°`.
+- [ ] `,` / `.` **rotate** the shape in-plane (when not mid-number); HUD shows
+      `rot …°`.
 - [ ] `A` cycles **array count** (1→6), `D` cycles the **array axis** (X/Y/Z) →
       the cage shows N stamped copies; commit bakes them into one cutter.
 - [ ] `M` cycles a live **mirror** across a world axis (off→X→Y→Z).

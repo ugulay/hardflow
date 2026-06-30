@@ -200,6 +200,17 @@ def test_offset_polygon_outward_and_guards():
 
 # --- grid: shape points ------------------------------------------------------
 
+def test_lock_distance():
+    # locks the point to an exact distance along the a->b direction
+    assert grid.lock_distance((0, 0), (10, 0), 2.5) == (2.5, 0.0)
+    x, y = grid.lock_distance((0, 0), (3, 4), 10.0)   # dir (0.6,0.8) * 10
+    assert abs(x - 6.0) < 1e-9 and abs(y - 8.0) < 1e-9
+    # shrinks as well as extends
+    assert grid.lock_distance((1, 1), (5, 1), 2.0) == (3.0, 1.0)
+    # degenerate direction (b == a) returns a unchanged
+    assert grid.lock_distance((2, 2), (2, 2), 5.0) == (2.0, 2.0)
+
+
 def test_ngon_points():
     # a square (4 sides) around the origin with the first vertex on +x
     pts = grid.ngon_points((0.0, 0.0), (1.0, 0.0), 4)

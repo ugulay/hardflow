@@ -9,6 +9,18 @@ Follow-up hardening from a full code review of the decal/asset subsystems, plus
 two more increments of Grid Modeler / SketchUp surface-modeling parity. Pure
 logic is unit-tested (`59/59`); the new bpy paths gain headless coverage.
 
+### Added
+- **Numeric size entry while drawing** — after placing the first point, type an
+  exact dimension (radius / extent / segment length, in the plane's metres) to
+  lock the shape's size along the cursor direction; the HUD shows
+  `size … m (typing)`, `Backspace` edits, `.`/numpad-`.` is the decimal, and
+  moving the mouse rotates the fixed-size shape around the anchor (Grid Modeler /
+  Boxcutter precision entry, `core/grid.lock_distance`). The boolean mode now
+  cycles with **`Tab` / `Shift+Tab`** (the number row types the size instead).
+- **Intersect draw mode** — the draw modal gains an INTERSECT mode (keep only the
+  part of the object inside the drawn volume), reached via `Tab` mode-cycle or
+  the header Boolean menu (Boxcutter / Hard Ops parity).
+
 ### Changed
 - **Deterministic main edge for the 2-edge grid plane** — the `EDGES` construction
   plane picked edges by arbitrary bmesh order, so which selected edge became the

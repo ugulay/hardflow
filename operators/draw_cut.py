@@ -80,6 +80,8 @@ class HARDFLOW_OT_draw(Operator):
         #                           plane's shape locked in space when the view
         #                           changes mid-draw (parallel to self.points)
         self.cursor = (0, 0)      # current (snapped) mouse point
+        self.typed = ""           # numeric size buffer: type an exact dimension
+        self._raw_cursor = (0, 0)  # snapped cursor before any typed-size lock
         self._snap_hit = None     # (screen_point, kind) -- for visual marker
         self._surface_basis = None  # locked (origin,right,up,normal) in SURFACE
         self._surface_miss = False  # SURFACE ray missed -> fell back to VIEW
@@ -121,7 +123,8 @@ class HARDFLOW_OT_draw(Operator):
                 step = get_prefs(context).angle_step
                 co = grid.snap_angle(anchor, co, step, True)
                 self._snap_hit = None  # angle lock invalidates the geometry marker
-            self.cursor = co
+            self._raw_cursor = co
+            self._apply_numeric(context)  # lock size to a typed value, else = raw
 
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             p = self.cursor
@@ -131,6 +134,7 @@ class HARDFLOW_OT_draw(Operator):
                     and self._surface_basis is None):
                 self._lock_surface_basis(context, p)
             self._place_point(context, p)
+            self.typed = ""   # next POLY segment starts a fresh numeric entry
             # BOX / CIRCLE / NGON finish on the second click; POLY keeps going.
             if self.shape != 'POLY' and len(self.points) >= 2:
                 return self._commit(context)
@@ -145,7 +149,10 @@ class HARDFLOW_OT_draw(Operator):
                 return self._commit(context)
 
         elif event.type == 'BACK_SPACE' and event.value == 'PRESS':
-            if self.points:
+            if self.typed:                 # editing a typed size? trim it
+                self.typed = self.typed[:-1]
+                self._apply_numeric(context)
+            elif self.points:
                 self.points.pop()
                 if self.world_points:
                     self.world_points.pop()
@@ -155,27 +162,47 @@ class HARDFLOW_OT_draw(Operator):
                           'R': 'NGON'}[event.type]
             self.points = []
             self.world_points = []
+            self.typed = ""
 
         elif (event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}
               and event.value == 'PRESS'):
             step = 1 if event.type == 'RIGHT_BRACKET' else -1
             self.sides = max(3, min(64, self.sides + step))
 
-        elif (event.type in {'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX'}
-              and event.value == 'PRESS'):
-            self.mode = {'ONE': 'CUT', 'TWO': 'SLICE', 'THREE': 'MAKE',
-                         'FOUR': 'FACE', 'FIVE': 'KNIFE',
-                         'SIX': 'INTERSECT'}[event.type]
+        # Tab / Shift+Tab cycle the boolean mode (the number row now types an
+        # exact size -- Grid Modeler / Boxcutter precision entry).
+        elif event.type == 'TAB' and event.value == 'PRESS':
+            order = [m[0] for m in _MODES]
+            step = -1 if event.shift else 1
+            self.mode = order[(order.index(self.mode) + step) % len(order)]
+            self.typed = ""
+
+        # Numeric size entry: type a distance to lock the shape's size (radius /
+        # extent / segment length) in plane metres, along the cursor direction.
+        elif event.type in self._DIGIT_KEYS and event.value == 'PRESS':
+            self.typed += self._DIGIT_KEYS[event.type]
+            self._apply_numeric(context)
 
         # --- in-draw operations (v1.4) -----------------------------------
         elif event.type in {'MINUS', 'EQUAL'} and event.value == 'PRESS':
             step = self.grid_size
             self.inset += step if event.type == 'EQUAL' else -step
 
-        elif event.type in {'COMMA', 'PERIOD'} and event.value == 'PRESS':
-            import math
-            step = math.radians(get_prefs(context).angle_step)
-            self.rotation += step if event.type == 'PERIOD' else -step
+        elif event.type in {'COMMA', 'PERIOD', 'NUMPAD_PERIOD'} \
+                and event.value == 'PRESS':
+            # A '.' while typing a number is the decimal point; otherwise (and for
+            # ',') it nudges the in-plane shape rotation.
+            if (event.type in {'PERIOD', 'NUMPAD_PERIOD'} and self.typed
+                    and '.' not in self.typed):
+                self.typed += '.'
+                self._apply_numeric(context)
+            elif event.type == 'NUMPAD_PERIOD' and not self.typed:
+                self.typed = "0."
+                self._apply_numeric(context)
+            else:
+                import math
+                step = math.radians(get_prefs(context).angle_step)
+                self.rotation += step if event.type == 'PERIOD' else -step
 
         elif event.type == 'A' and event.value == 'PRESS':
             self.array_count = self.array_count % 6 + 1  # cycle 1..6
@@ -419,6 +446,49 @@ class HARDFLOW_OT_draw(Operator):
         # 3) raw mouse point
         return (screen_co[0], screen_co[1])
 
+    # --- numeric size entry (type an exact dimension) -------------------
+
+    _DIGIT_KEYS = {
+        'ZERO': '0', 'ONE': '1', 'TWO': '2', 'THREE': '3', 'FOUR': '4',
+        'FIVE': '5', 'SIX': '6', 'SEVEN': '7', 'EIGHT': '8', 'NINE': '9',
+        'NUMPAD_0': '0', 'NUMPAD_1': '1', 'NUMPAD_2': '2', 'NUMPAD_3': '3',
+        'NUMPAD_4': '4', 'NUMPAD_5': '5', 'NUMPAD_6': '6', 'NUMPAD_7': '7',
+        'NUMPAD_8': '8', 'NUMPAD_9': '9',
+    }
+
+    def _numeric_value(self):
+        """The positive metre value currently typed, or None for an empty /
+        partial / non-positive entry."""
+        try:
+            v = float(self.typed)
+        except ValueError:
+            return None
+        return v if v > 0.0 else None
+
+    def _apply_numeric(self, context):
+        """Lock self.cursor so the drawn shape's size (anchor -> cursor) equals
+        the typed distance in plane metres, along the current cursor direction.
+        With no valid number typed, the cursor is just the snapped raw point."""
+        v = self._numeric_value()
+        if v is None or not self.points:
+            self.cursor = self._raw_cursor
+            return
+        region, rv3d = context.region, context.region_data
+        origin, right, up, normal = self._plane_basis(context)
+        anchor = self.points[-1] if self.shape == 'POLY' else self.points[0]
+        a3 = raycast.ray_to_plane(region, rv3d, anchor, origin, normal)
+        c3 = raycast.ray_to_plane(region, rv3d, self._raw_cursor, origin, normal)
+        if a3 is None or c3 is None:
+            self.cursor = self._raw_cursor
+            return
+        a_uv = raycast.world_to_plane_uv(a3, origin, right, up)
+        c_uv = raycast.world_to_plane_uv(c3, origin, right, up)
+        lu, lv = grid.lock_distance(a_uv, c_uv, v)
+        world = raycast.plane_uv_to_world(lu, lv, origin, right, up)
+        screen = raycast.world_to_screen(region, rv3d, world)
+        self.cursor = (screen[0], screen[1]) if screen is not None \
+            else self._raw_cursor
+
     # --- vertex / edge snap (v0.2) --------------------------------------
 
     # On very dense meshes projecting every vertex on each mouse move is
@@ -562,8 +632,8 @@ class HARDFLOW_OT_draw(Operator):
         # Hints split into short lines -> roomier than one long line.
         lines = [
             status,
-            ("Q/W/E/R shape    [ ] sides    1-6 mode (Cut/Slice/Make/Face/Knife/"
-             "Intersect)    < > plane    Shift+< > rotate grid    Z close", dim),
+            ("Q/W/E/R shape    [ ] sides    Tab mode    type = exact size    "
+             "< > plane    Shift+< > rotate grid    Z close", dim),
             ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
              "B bevel    G stamp", dim),
             ("Ctrl+Wheel grid    PgUp/Dn depth    X grid    V vertex    "
@@ -588,6 +658,8 @@ class HARDFLOW_OT_draw(Operator):
         if self.depth > 1e-6:
             bits.append("depth %.3f m" % self.depth)
         bits.append("grid %.3f m" % self.grid_size)
+        if self.typed:
+            bits.insert(0, "size %s m (typing)" % self.typed)
         if bits:
             lines.insert(1, ("   ".join(bits), accent))
         measure = self._measure(context)
