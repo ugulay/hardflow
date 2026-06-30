@@ -448,6 +448,25 @@ def test_aspect_size():
     assert decal_image.aspect_size(100, 100, 0.0) == (0.0, 0.0)
 
 
+def test_safe_filename():
+    # ordinary names pass through, internal spaces are kept (collapsed)
+    assert decal_image.safe_filename("Bolt M3") == "Bolt M3"
+    assert decal_image.safe_filename("Bolt   M3") == "Bolt M3"
+    # path separators and illegal chars are stripped (can't escape the folder);
+    # leading/trailing dots are also trimmed (no "../" or hidden-file stems)
+    assert decal_image.safe_filename("../../etc/passwd") == "etcpasswd"
+    assert decal_image.safe_filename("a/b\\c:d*e?f") == "abcdef"
+    assert decal_image.safe_filename('na"me') == "name"
+    # spaces between kept characters survive an illegal-char strip
+    assert decal_image.safe_filename("na me|x") == "na mex"
+    # control whitespace becomes a space, leading/trailing dots + space trimmed
+    assert decal_image.safe_filename("  .name.\t") == "name"
+    # nothing usable -> default
+    assert decal_image.safe_filename("///") == "untitled"
+    assert decal_image.safe_filename("") == "untitled"
+    assert decal_image.safe_filename("   ", default="x") == "x"
+
+
 # --- atlas: trim-sheet slicing + bin packing (v0.9) --------------------------
 
 def test_slice_grid():

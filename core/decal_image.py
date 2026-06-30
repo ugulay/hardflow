@@ -38,6 +38,23 @@ def scan_library(folder):
     return out
 
 
+def safe_filename(name, default="untitled"):
+    """Sanitize a user-supplied name into a safe single filename stem (no
+    extension): drop directory separators and characters illegal on common
+    filesystems, turn control whitespace into spaces, collapse whitespace runs,
+    and fall back to `default` when nothing usable is left. Keeps a user-typed
+    INSERT/decal name from escaping its library folder or producing an invalid
+    path. Pure stdlib so it is unit-tested; shared by the decal and asset
+    export paths."""
+    cleaned = []
+    for ch in str(name):
+        if ch in '/\\:*?"<>|':
+            continue
+        cleaned.append(' ' if ch in '\r\n\t' else ch)
+    stem = " ".join("".join(cleaned).split()).strip('.')
+    return stem or default
+
+
 def aspect_size(img_w, img_h, longest):
     """Fit an image of (img_w x img_h) pixels into a decal whose longest side is
     `longest` meters, preserving aspect ratio. Returns (width, height) in meters.

@@ -213,6 +213,8 @@ def transfer_shading(target, objects):
     """Apply the target's active material and smooth-shading state to the placed
     part (KitOps material/auto-smooth transfer). Does nothing for the material if
     the target has none."""
+    if target is None or target.type != 'MESH':
+        return
     mat = target.active_material
     smooth = bool(target.data.polygons) and target.data.polygons[0].use_smooth
     for o in objects:

@@ -14,7 +14,7 @@ from bpy.types import Operator
 from bpy.props import FloatProperty, StringProperty, BoolProperty
 from bpy_extras.io_utils import ImportHelper
 
-from ..core import raycast, asset, decal_math, snapping
+from ..core import raycast, asset, decal_math, snapping, decal_image
 from ..preferences import get_prefs
 from ..ui import draw as hud
 
@@ -33,8 +33,10 @@ def _invoke_place(context, op, **kwargs):
         op.report({'WARNING'}, "Open a 3D viewport to place the asset")
         return {'CANCELLED'}
     with context.temp_override(window=win, area=area, region=region):
-        bpy.ops.object.hardflow_place_asset('INVOKE_DEFAULT', **kwargs)
-    return {'FINISHED'}
+        result = bpy.ops.object.hardflow_place_asset('INVOKE_DEFAULT', **kwargs)
+    # Propagate an immediate cancel (no viewport / bad args) instead of always
+    # reporting success; a started modal returns RUNNING_MODAL -- launch is done.
+    return {'CANCELLED'} if result == {'CANCELLED'} else {'FINISHED'}
 
 
 class HARDFLOW_OT_place_asset(Operator):
@@ -358,6 +360,25 @@ class HARDFLOW_OT_export_asset(Operator):
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
 
+    def _dest_path(self, context):
+        """Resolved library path for the (sanitized) name, or '' with no folder."""
+        prefs = get_prefs(context)
+        folder = bpy.path.abspath(prefs.asset_library_path) \
+            if prefs.asset_library_path else ""
+        if not folder:
+            return ""
+        return os.path.join(folder, "%s.blend" % decal_image.safe_filename(self.name))
+
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "name")
+        layout.prop(self, "mark_asset")
+        # Surface a silent overwrite before the user confirms the dialog.
+        path = self._dest_path(context)
+        if path and os.path.isfile(path):
+            layout.label(text="Overwrites %s" % os.path.basename(path),
+                         icon='ERROR')
+
     def execute(self, context):
         prefs = get_prefs(context)
         folder = bpy.path.abspath(prefs.asset_library_path) \
@@ -376,13 +397,16 @@ class HARDFLOW_OT_export_asset(Operator):
                     ob.asset_generate_preview()
                 except (AttributeError, RuntimeError):
                     pass
-        path = os.path.join(folder, "%s.blend" % self.name)
+        # Sanitize the user name so it can't escape the library folder.
+        path = os.path.join(folder, "%s.blend" % decal_image.safe_filename(self.name))
+        overwrote = os.path.isfile(path)
         try:
             asset.write_objects_blend(path, objects)
         except (RuntimeError, OSError) as ex:
             self.report({'ERROR'}, "Export failed: %s" % ex)
             return {'CANCELLED'}
-        self.report({'INFO'}, "Exported INSERT to %s" % path)
+        verb = "Overwrote" if overwrote else "Exported"
+        self.report({'INFO'}, "%s INSERT %s" % (verb, path))
         return {'FINISHED'}
 
 

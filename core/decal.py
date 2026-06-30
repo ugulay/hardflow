@@ -326,6 +326,21 @@ def bake_image_node(material, image):
     return node
 
 
+def discard_bake_image(material, image, remove_node=True, remove_image=True):
+    """Roll back bake_image_node after a *failed* bake so the failure does not
+    leave an orphan image plus a dangling Image Texture node wired into the
+    target material. Pass the flags that say what THIS bake call newly created
+    (remove_node / remove_image) so a re-bake never deletes a prior good result.
+    Safe to call when the datablocks are already gone."""
+    if remove_node and material is not None and material.use_nodes:
+        tree = material.node_tree
+        for node in [n for n in tree.nodes
+                     if n.type == 'TEX_IMAGE' and n.image == image]:
+            tree.nodes.remove(node)
+    if remove_image and image is not None and image.users == 0:
+        bpy.data.images.remove(image)
+
+
 def _assemble_decal(context, target, mesh, location, normal, tangent,
                     material, offset, tag):
     """Shared decal assembly: orient the quad to the surface, link it into the
@@ -420,10 +435,10 @@ def match_decal_to_material(decal_obj, sample):
     grp = _decal_group_node(decal_obj)
     if grp is None:
         return False
-    # Copy the material so tuning one decal does not affect every sibling.
-    mat = decal_obj.active_material
-    mat = mat.copy()
-    decal_obj.data.materials[0] = mat
+    # Copy the material so tuning one decal does not affect every sibling, and
+    # replace it in the ACTIVE slot (the decal's material may not be slot 0).
+    mat = decal_obj.active_material.copy()
+    decal_obj.active_material = mat
     grp = _decal_group_node(decal_obj)
     if not grp.inputs['Base Color'].is_linked:
         grp.inputs['Base Color'].default_value = sample['base_color']

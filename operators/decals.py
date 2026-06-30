@@ -32,8 +32,11 @@ def _invoke_place(context, op, **kwargs):
         op.report({'WARNING'}, "Open a 3D viewport to place the decal")
         return {'CANCELLED'}
     with context.temp_override(window=win, area=area, region=region):
-        bpy.ops.object.hardflow_place_decal('INVOKE_DEFAULT', **kwargs)
-    return {'FINISHED'}
+        result = bpy.ops.object.hardflow_place_decal('INVOKE_DEFAULT', **kwargs)
+    # Propagate an immediate cancel (no viewport / bad args) so the wrapper does
+    # not report success -- and so a just-loaded image isn't left by a no-op
+    # undo step. A started modal returns RUNNING_MODAL; the launch succeeded.
+    return {'CANCELLED'} if result == {'CANCELLED'} else {'FINISHED'}
 
 
 class HARDFLOW_OT_place_decal(Operator):
@@ -353,10 +356,14 @@ class HARDFLOW_OT_bake_decal(Operator):
         scene = context.scene
         view_layer = context.view_layer
         is_data = (self.bake_type == 'NORMAL')
-        img = decal.bake_image(
-            "HF_Bake_%s_%s" % (target.name, self.bake_type.capitalize()),
-            self.size, is_data=is_data)
+        img_name = "HF_Bake_%s_%s" % (target.name, self.bake_type.capitalize())
+        # Remember what already existed so a failed bake only rolls back what
+        # THIS call created (never a prior good result reused by bake_image).
+        img_existed = img_name in bpy.data.images
+        img = decal.bake_image(img_name, self.size, is_data=is_data)
         mat = decal.ensure_material(target)
+        node_existed = any(n.type == 'TEX_IMAGE' and n.image == img
+                           for n in mat.node_tree.nodes)
         decal.bake_image_node(mat, img)
 
         # save the bits of scene state we are about to change, restore in finally
@@ -384,6 +391,9 @@ class HARDFLOW_OT_bake_decal(Operator):
             bpy.ops.object.bake(type=self.bake_type)
             img.pack()
         except RuntimeError as ex:
+            # Don't leave an orphan image + dangling node in the target material.
+            decal.discard_bake_image(mat, img, remove_node=not node_existed,
+                                     remove_image=not img_existed)
             self.report({'ERROR'}, "Bake failed: %s" % ex)
             return {'CANCELLED'}
         finally:
@@ -581,9 +591,12 @@ class HARDFLOW_OT_create_decal(Operator):
             return {'CANCELLED'}
 
         scene, view_layer = context.scene, context.view_layer
-        img = decal.bake_image("HF_DecalSrc_%s" % self.decal_name, self.size,
-                               is_data=True)
+        img_name = "HF_DecalSrc_%s" % self.decal_name
+        img_existed = img_name in bpy.data.images
+        img = decal.bake_image(img_name, self.size, is_data=True)
         mat = decal.ensure_material(dest)
+        node_existed = any(n.type == 'TEX_IMAGE' and n.image == img
+                           for n in mat.node_tree.nodes)
         decal.bake_image_node(mat, img)
 
         prev_engine = scene.render.engine
@@ -595,6 +608,8 @@ class HARDFLOW_OT_create_decal(Operator):
             scene.render.bake.cage_extrusion = max(0.1, max(dest.dimensions) * 0.5)
             bpy.ops.object.bake(type='NORMAL')
         except RuntimeError as ex:
+            decal.discard_bake_image(mat, img, remove_node=not node_existed,
+                                     remove_image=not img_existed)
             self.report({'ERROR'}, "Bake failed: %s" % ex)
             return {'CANCELLED'}
         finally:
@@ -606,9 +621,10 @@ class HARDFLOW_OT_create_decal(Operator):
         folder = get_prefs(context).decal_library_path
         if folder:
             folder = bpy.path.abspath(folder)
+            # Sanitize the user name so it can't escape the library folder.
+            stem = decal_image.safe_filename(self.decal_name)
             try:
-                decal.save_image(img, os.path.join(folder,
-                                                   "%s.png" % self.decal_name))
+                decal.save_image(img, os.path.join(folder, "%s.png" % stem))
             except (RuntimeError, OSError) as ex:
                 self.report({'WARNING'}, "Baked but could not save: %s" % ex)
         img.pack()
