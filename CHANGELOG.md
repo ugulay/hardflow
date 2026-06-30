@@ -65,6 +65,16 @@ Blender 5.1.2). Modal/interactive feel is in
   and a "Display & Mesh" menu hosts the surviving edge-weight / display / material
   / recalc-normals helpers.
 
+### Fixed
+- **SURFACE-plane box looked rotated on angled faces** — the on-surface
+  construction grid aligned to a face's single *longest* edge, so on
+  non-rectangular (e.g. boolean-cut parallelogram) faces the box sat at an odd
+  angle to the other edges. It now aligns to the face edge **nearest the click**
+  (`raycast.face_edge_tangent` `near_point`), so the box follows the edge you
+  start on. Verified in Blender 5.1.2 (axis aligns to the clicked edge within
+  ~0.02°); headless `test_face_edge_tangent_near_point`. Decal / asset placement
+  keep the longest-edge alignment.
+
 ## [1.11.0] — 2026-06-30
 
 Direct-modeling depth: the SketchUp-style tools were consolidated onto a shared

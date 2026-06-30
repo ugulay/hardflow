@@ -257,6 +257,40 @@ def test_live_boolean_preview_and_cutter_options():
         hardflow.unregister()
 
 
+def test_face_edge_tangent_near_point():
+    # SURFACE-grid orientation on a non-rectangular (parallelogram) ANGLED face:
+    # without near_point it aligns to the longest edge; with near_point it aligns
+    # to the edge nearest the click, so a box follows the edge you start on.
+    import bmesh
+    _reset()
+    # Parallelogram: long edges along +/-Y (len 3), slanted "rungs" along (1,1,1).
+    co = [Vector((0, 0, 0)), Vector((0, 3, 0)),
+          Vector((1, 4, 1)), Vector((1, 1, 1))]
+    me = bpy.data.meshes.new("Para")
+    bm = bmesh.new()
+    bm.faces.new([bm.verts.new(c) for c in co])
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("Para", me)
+    bpy.context.collection.objects.link(ob)
+    mw = ob.matrix_world
+    normal = (mw.to_3x3() @ me.polygons[0].normal).normalized()
+    assert max(abs(normal.x), abs(normal.y), abs(normal.z)) < 0.98  # truly angled
+
+    # no near_point -> longest edge (the +/-Y long pair)
+    t_long = raycast.face_edge_tangent(ob, 0, mw, normal)
+    assert t_long is not None
+    assert abs(t_long.normalized().dot(Vector((0, 1, 0)))) > 0.99, t_long
+
+    # near the slanted B-C edge -> aligns to THAT edge ((1,1,1) dir), not Y
+    near_bc = mw @ ((co[1] + co[2]) * 0.5)
+    t_bc = raycast.face_edge_tangent(ob, 0, mw, normal, near_point=near_bc)
+    assert t_bc is not None
+    bc = Vector((1, 1, 1)).normalized()
+    assert abs(t_bc.normalized().dot(bc)) > 0.99, t_bc
+    assert abs(t_bc.normalized().dot(Vector((0, 1, 0)))) < 0.6, t_bc
+
+
 def test_build_pipe():
     _reset()
     pts = [Vector((0, 0, 0)), Vector((1, 0, 0)), Vector((1, 1, 0))]

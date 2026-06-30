@@ -391,10 +391,13 @@ class HARDFLOW_OT_draw(Operator):
         if hit is None:
             return None
         location, normal, obj, index, matrix = hit
-        # Smart tangent: align the on-surface grid to the hit face's dominant edge
-        # so the drawn shape lines up with existing panel lines. Fall back to the
-        # view's up (which beats world up on an angled face) when no edge is found.
-        up_hint = raycast.face_edge_tangent(obj, index, matrix, normal)
+        # Smart tangent: align the on-surface grid to the face edge NEAREST the hit
+        # point, so the drawn shape lines up with the edge you start on -- correct
+        # on non-rectangular (boolean-cut) faces where the single longest edge is
+        # at an odd angle. Fall back to the view's up (which beats world up on an
+        # angled face) when no edge is found.
+        up_hint = raycast.face_edge_tangent(obj, index, matrix, normal,
+                                            near_point=location)
         if up_hint is None:
             _vr, up_hint = raycast.view_right_up(rv3d)
         right, up, n = raycast.basis_from_normal(normal, up_hint=up_hint)

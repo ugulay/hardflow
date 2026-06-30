@@ -128,12 +128,18 @@ def ray_cast_surface(context, region, rv3d, coord, ignore=None):
     return location, normal, obj
 
 
-def face_edge_tangent(obj, index, matrix, normal):
-    """World-space tangent aligned to the longest edge of obj's face `index`,
-    projected onto the surface plane, or None when the face can't be read (bad
-    index / generative modifiers). Uses the base mesh, matching the Push/Pull
-    index clamp. The shared glue that gives the surface tools their smart,
-    edge-aligned orientation (delegates the math to decal_math.dominant_tangent)."""
+def face_edge_tangent(obj, index, matrix, normal, near_point=None):
+    """World-space tangent aligned to an edge of obj's face `index`, projected
+    onto the surface plane, or None when the face can't be read (bad index /
+    generative modifiers). Uses the base mesh, matching the Push/Pull index clamp.
+    The shared glue that gives the surface tools their smart, edge-aligned
+    orientation (the projection math lives in decal_math.dominant_tangent).
+
+    With `near_point` (a world-space point) the chosen edge is the one NEAREST that
+    point, so a shape drawn on a face lines up with the edge you started on -- the
+    fix for the construction grid looking rotated on non-rectangular (e.g.
+    boolean-cut parallelogram) faces, where the single longest edge isn't the one
+    you mean. Without it the longest edge is used (decal / asset placement)."""
     from . import decal_math
     if obj is None or getattr(obj, 'type', None) != 'MESH':
         return None
@@ -143,6 +149,20 @@ def face_edge_tangent(obj, index, matrix, normal):
     rot = matrix.to_3x3()
     verts = obj.data.vertices
     vids = list(polys[index].vertices)
+    if near_point is not None:
+        # Align to the face edge whose segment is closest to near_point.
+        from mathutils.geometry import intersect_point_line
+        wpts = [matrix @ verts[v].co for v in vids]
+        best, best_d = None, None
+        for i in range(len(vids)):
+            a, b = wpts[i], wpts[(i + 1) % len(vids)]
+            _pt, raw_t = intersect_point_line(near_point, a, b)
+            t = max(0.0, min(1.0, raw_t))
+            d = (near_point - a.lerp(b, t)).length
+            if best_d is None or d < best_d:
+                best_d, best = d, (b - a)
+        tan = decal_math.dominant_tangent([tuple(best)], tuple(normal))
+        return Vector(tan) if tan is not None else None
     edges = []
     for i in range(len(vids)):
         a = verts[vids[i]].co
