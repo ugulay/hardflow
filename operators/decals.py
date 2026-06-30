@@ -217,14 +217,15 @@ class HARDFLOW_OT_place_decal(Operator):
         w, h = self._wh()
         # 0 in the preference means "auto" -> let the build pick a size-scaled gap.
         offset = prefs.decal_offset or None
+        segments = prefs.decal_resolution
         if self._image is not None:
             return decal.make_image_decal(
                 context, obj, location, normal, tangent, self._image,
                 width=w, height=h, offset=offset,
-                uv_rect=self._uv_rect())
+                uv_rect=self._uv_rect(), segments=segments)
         return decal.make_decal(
             context, obj, location, normal, tangent, width=w, height=h,
-            decal_type=self.decal_type, offset=offset)
+            decal_type=self.decal_type, offset=offset, segments=segments)
 
     def _delete_preview(self):
         if self._preview is not None and self._preview.name in bpy.data.objects:

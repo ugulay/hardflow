@@ -6,6 +6,15 @@ logic: minor versions add features, patch versions fix bugs.
 ## [Unreleased]
 
 ### Fixed
+- **Decals didn't conform to curved / multi-face surfaces** — `build_decal_mesh`
+  made a single flat quad, so the SHRINKWRAP had only 4 corner verts to project:
+  on a curved surface the decal's interior clipped through or floated over the
+  curvature. It now builds an NxN grid (preference `decal_resolution`, default 12)
+  so the shrinkwrap can bend the decal to the surface; `add_shrinkwrap` also
+  projects in both Z directions so verts that start inside a curve snap back flush.
+  `set_decal_uv_rect` now maps UVs by normalized position (a grid would have
+  collapsed onto corners under the old sign-based map). Headless
+  `test_decal_mesh_grid_resolution` + updated decal mesh/uv tests.
 - **Asset placement leaked orphan data** — cancelling (or a failed commit of) an
   INSERT placement removed the appended objects but left their mesh / material
   data-blocks behind. `assets._discard_objects` now removes the data too, and the

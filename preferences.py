@@ -185,6 +185,13 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "0 = auto (scaled to the target's size)",
         default=0.0, min=0.0, soft_max=0.1,
     )
+    decal_resolution: IntProperty(
+        name="Decal Resolution",
+        description="Grid cells per axis of a placed decal. 1 is a flat quad; "
+                    "higher lets the shrinkwrap bend the decal to curved / "
+                    "multi-face surfaces instead of clipping through them",
+        default=12, min=1, soft_max=64,
+    )
     bake_size: IntProperty(
         name="Bake Resolution",
         description="Resolution (px) of the image when baking a decal into the "
@@ -364,6 +371,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "cable_segments")
         col.prop(self, "decal_size")
         col.prop(self, "decal_offset")
+        col.prop(self, "decal_resolution")
         col.prop(self, "bake_size")
         col.prop(self, "decal_library_path")
         col.prop(self, "atlas_max_width")

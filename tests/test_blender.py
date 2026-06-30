@@ -339,8 +339,13 @@ def test_decal_mesh_and_material():
     _reset()
     me = decal.build_decal_mesh(0.2, 0.3)
     assert me is not None
-    assert len(me.vertices) == 4 and len(me.polygons) == 1
+    # The default decal is a subdivided grid (not a lone quad) so the shrinkwrap
+    # can bend it to a curved / multi-face surface -- 4 corners can't follow a curve.
+    assert len(me.polygons) > 1 and len(me.vertices) > 4
     assert me.uv_layers, "decal mesh has no UV map"
+    # segments=1 still yields the bare quad (flat surfaces / minimal geometry)
+    quad = decal.build_decal_mesh(0.2, 0.3, segments=1)
+    assert len(quad.vertices) == 4 and len(quad.polygons) == 1
     for type_id, _label, _desc in decal.DECAL_TYPES:
         mat = decal.decal_material(type_id)
         assert mat is not None and mat.use_nodes
@@ -425,6 +430,20 @@ def test_image_decal_material_and_make():
     assert d.parent is target and d.get("hf_decal_type") == 'IMAGE'
     assert d.get("hf_decal_image") == img.name
     assert d.data.materials and d.data.materials[0] is mat
+
+
+def test_decal_mesh_grid_resolution():
+    # The decal is an NxN grid so the shrinkwrap can conform it to curvature; the
+    # topology and the full-image UV span must hold at every resolution.
+    _reset()
+    for segs in (1, 4, 12):
+        me = decal.build_decal_mesh(0.2, 0.2, segments=segs)
+        assert len(me.vertices) == (segs + 1) ** 2, (segs, len(me.vertices))
+        assert len(me.polygons) == segs * segs, (segs, len(me.polygons))
+        us = [round(d.uv[0], 4) for d in me.uv_layers.active.data]
+        vs = [round(d.uv[1], 4) for d in me.uv_layers.active.data]
+        assert min(us) == 0.0 and max(us) == 1.0
+        assert min(vs) == 0.0 and max(vs) == 1.0
 
 
 def test_decal_mesh_uv_rect():
@@ -1471,6 +1490,9 @@ def test_decal_uv_rect_and_match():
     assert decal.set_decal_uv_rect(d, cell)
     us = [round(u.uv[0], 4) for u in d.data.uv_layers.active.data]
     assert min(us) == 0.0 and max(us) == 0.5
+    # the grid decal must get INTERIOR uvs across the cell, not just the corners
+    # (a sign-based corner map would collapse every interior vert onto 0.0/0.5)
+    assert any(0.0 < u < 0.5 for u in us), "uv remap collapsed the grid to corners"
 
     # material match: copy the decal material, set metallic/roughness from target
     sample = decal.sample_material(target)

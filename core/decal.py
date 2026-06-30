@@ -32,24 +32,40 @@ def decal_collection(context):
     return coll
 
 
-def build_decal_mesh(width, height, name="hf_decal", uv_rect=(0.0, 0.0, 1.0, 1.0)):
-    """A single UV-mapped quad centred on the local origin, lying in the local
-    XY plane (so local +Z is the decal's facing/projection axis). uv_rect
-    (u0,v0,u1,v1) maps the quad to a sub-region of the image -- (0,0,1,1) is the
-    whole image; a trim-sheet cell (see core/atlas.py) is a sub-rect."""
+def build_decal_mesh(width, height, name="hf_decal", uv_rect=(0.0, 0.0, 1.0, 1.0),
+                     segments=12):
+    """A UV-mapped grid centred on the local origin, lying in the local XY plane
+    (so local +Z is the decal's facing/projection axis). `segments` is the number
+    of grid cells per axis: 1 is a single flat quad (4 corner verts), while a
+    higher value gives an (segments+1)x(segments+1) vertex grid so the SHRINKWRAP
+    can BEND the decal to a curved / multi-face surface -- a flat quad only has 4
+    corners to project, so its interior clips through or floats over curvature.
+    uv_rect (u0,v0,u1,v1) maps the grid to a sub-region of the image -- (0,0,1,1)
+    is the whole image; a trim-sheet cell (see core/atlas.py) is a sub-rect."""
     hw, hh = width * 0.5, height * 0.5
     u0, v0, u1, v1 = uv_rect
+    n = max(1, int(segments))
     bm = bmesh.new()
-    v00 = bm.verts.new((-hw, -hh, 0.0))
-    v10 = bm.verts.new((hw, -hh, 0.0))
-    v11 = bm.verts.new((hw, hh, 0.0))
-    v01 = bm.verts.new((-hw, hh, 0.0))
-    face = bm.faces.new((v00, v10, v11, v01))
     uv = bm.loops.layers.uv.new("UVMap")
-    coords = {v00: (u0, v0), v10: (u1, v0), v11: (u1, v1), v01: (u0, v1)}
-    for loop in face.loops:
-        loop[uv].uv = coords[loop.vert]
-    bmesh.ops.recalc_face_normals(bm, faces=[face])
+    grid = {}           # (i, j) -> vert
+    param = {}          # vert  -> (tx, ty) in 0..1, for UVs
+    for j in range(n + 1):
+        ty = j / n
+        for i in range(n + 1):
+            tx = i / n
+            vert = bm.verts.new((-hw + width * tx, -hh + height * ty, 0.0))
+            grid[(i, j)] = vert
+            param[vert] = (tx, ty)
+    faces = []
+    for j in range(n):
+        for i in range(n):
+            face = bm.faces.new((grid[(i, j)], grid[(i + 1, j)],
+                                 grid[(i + 1, j + 1)], grid[(i, j + 1)]))
+            faces.append(face)
+            for loop in face.loops:
+                tx, ty = param[loop.vert]
+                loop[uv].uv = (u0 + (u1 - u0) * tx, v0 + (v1 - v0) * ty)
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
@@ -80,16 +96,21 @@ def adaptive_decal_offset(target):
 
 
 def add_shrinkwrap(decal, target, offset=None):
-    """Stick the decal to the target surface: PROJECT the plane down its local
-    -Z onto the target, hovering just above the surface to avoid z-fighting.
-    `offset=None` picks a size-proportional gap (adaptive_decal_offset)."""
+    """Stick the decal to the target surface: PROJECT the grid along its local Z
+    onto the target, hovering just above the surface to avoid z-fighting.
+    `offset=None` picks a size-proportional gap (adaptive_decal_offset).
+
+    Both Z directions are enabled: on a curved / multi-face surface some grid
+    verts of the (initially flat) decal start just *inside* the surface, where a
+    -Z-only projection would push them further in or miss; the nearest-surface hit
+    in either direction snaps them flush instead."""
     if offset is None:
         offset = adaptive_decal_offset(target)
     mod = decal.modifiers.new("HF_Shrinkwrap", 'SHRINKWRAP')
     mod.wrap_method = 'PROJECT'
     mod.wrap_mode = 'ABOVE_SURFACE'
     mod.use_negative_direction = True
-    mod.use_positive_direction = False
+    mod.use_positive_direction = True
     mod.use_project_z = True
     mod.target = target
     mod.offset = offset
@@ -364,24 +385,27 @@ def _assemble_decal(context, target, mesh, location, normal, tangent,
 
 
 def make_decal(context, target, location, normal, tangent,
-               width=0.2, height=0.2, decal_type='INFO', offset=None):
+               width=0.2, height=0.2, decal_type='INFO', offset=None,
+               segments=12):
     """Create a type-template decal (Info/Panel/Subset) on the target surface and
     return it. The caller supplies the surface hit (location, normal) and a
-    tangent (roll direction)."""
-    mesh = build_decal_mesh(width, height)
+    tangent (roll direction). `segments` sets the decal grid resolution so it
+    conforms to curved / multi-face surfaces (see build_decal_mesh)."""
+    mesh = build_decal_mesh(width, height, segments=segments)
     return _assemble_decal(context, target, mesh, location, normal, tangent,
                            decal_material(decal_type), offset, decal_type)
 
 
 def make_image_decal(context, target, location, normal, tangent, image,
                      width=0.2, height=0.2, offset=None,
-                     uv_rect=(0.0, 0.0, 1.0, 1.0)):
+                     uv_rect=(0.0, 0.0, 1.0, 1.0), segments=12):
     """Create an image-driven decal (v0.9 library / 'decal from image') on the
-    target surface and return it. The quad carries the image's color+alpha via
+    target surface and return it. The grid carries the image's color+alpha via
     image_decal_material; the caller usually sizes width/height to the image's
     aspect (see core/decal_image.aspect_size). uv_rect selects a sub-region of
-    the image -- pass a trim-sheet cell (core/atlas.cell_rect) for a trim decal."""
-    mesh = build_decal_mesh(width, height, uv_rect=uv_rect)
+    the image -- pass a trim-sheet cell (core/atlas.cell_rect) for a trim decal.
+    `segments` sets the grid resolution so the decal conforms to curved surfaces."""
+    mesh = build_decal_mesh(width, height, uv_rect=uv_rect, segments=segments)
     decal = _assemble_decal(context, target, mesh, location, normal, tangent,
                             image_decal_material(image), offset, 'IMAGE')
     decal["hf_decal_image"] = image.name
@@ -454,19 +478,28 @@ def match_decal_to_material(decal_obj, sample):
 
 
 def set_decal_uv_rect(decal_obj, uv_rect):
-    """Rewrite a decal quad's UVs to a new sub-rect (a different trim cell) after
-    placement -- the interactive trim-UV editor (v1.7). Maps each loop to a corner
-    by its vertex's local position sign (the build_decal_mesh layout). Returns
-    True on success."""
+    """Rewrite a decal's UVs to a new sub-rect (a different trim cell) after
+    placement -- the interactive trim-UV editor (v1.7). Maps each loop's UV from
+    its vertex's *normalized* position within the decal's local XY bounds, so it
+    works for both a single quad and a subdivided grid (a sign-based corner map
+    would collapse every interior grid vert onto a corner). Returns True on
+    success."""
     me = decal_obj.data
     uvl = me.uv_layers.active
-    if uvl is None:
+    if uvl is None or not me.vertices:
         return False
     u0, v0, u1, v1 = uv_rect
+    xs = [v.co.x for v in me.vertices]
+    ys = [v.co.y for v in me.vertices]
+    minx, miny = min(xs), min(ys)
+    spanx = (max(xs) - minx) or 1.0
+    spany = (max(ys) - miny) or 1.0
     for poly in me.polygons:
         for li in poly.loop_indices:
             co = me.vertices[me.loops[li].vertex_index].co
-            uvl.data[li].uv = (u1 if co.x > 0 else u0, v1 if co.y > 0 else v0)
+            tx = (co.x - minx) / spanx
+            ty = (co.y - miny) / spany
+            uvl.data[li].uv = (u0 + (u1 - u0) * tx, v0 + (v1 - v0) * ty)
     me.update()
     return True
 
