@@ -852,6 +852,35 @@ def test_bevel_object_edges():
     assert geometry.bevel_object_edges(cube, [(0, 9000)], 0.2) == 0    # bad edge
 
 
+def test_edge_loop():
+    # Edge-loop walk on a 3x3 quad grid (interior verts are valence-4). The loop
+    # of an interior horizontal edge spans the whole row; a plain cube (valence-3)
+    # has no loop to extend.
+    _reset()
+    import bmesh
+    me = bpy.data.meshes.new("grid")
+    bm = bmesh.new()
+    n = 4   # 4x4 verts -> 3x3 quads; vert (x,y) has index y*n + x
+    vs = [[bm.verts.new((x, y, 0)) for x in range(n)] for y in range(n)]
+    for y in range(n - 1):
+        for x in range(n - 1):
+            bm.faces.new((vs[y][x], vs[y][x + 1], vs[y + 1][x + 1], vs[y + 1][x]))
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new("Grid", me)
+    bpy.context.collection.objects.link(obj)
+    keys = geometry.edge_loop(obj, (1 * n + 1, 1 * n + 2))   # (1,1)-(2,1)
+    assert len(keys) == 3, keys                              # full row at y=1
+    for (i, j) in keys:
+        assert i // n == 1 and j // n == 1, (i, j)           # all on row y=1
+    # a plain cube has no extendable loop -> just the picked edge
+    cube = _add_cube("LoopCube", size=2.0)
+    top = max(range(len(cube.data.polygons)),
+              key=lambda k: cube.data.polygons[k].normal.z)
+    ek = geometry.nearest_edge_on_face(cube, top, Vector((1.0, 0.0, 1.0)))
+    assert geometry.edge_loop(cube, ek) == [ek]
+
+
 def test_nearest_face_to_point():
     # Maps an evaluated-mesh raycast hit back to a base face (the hover-pick
     # through generative modifiers path).

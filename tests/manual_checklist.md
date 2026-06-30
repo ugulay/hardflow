@@ -381,6 +381,10 @@ Setup: a cube in Object Mode, selected/active.
       `X` toggles snap). **Type a number** for an exact width.
 - [ ] **`[` / `]`** decrease / increase **segments** (1–12) → a chamfer becomes a
       rounded bevel; the preview updates.
+- [ ] **`L` loop** ⭐ — on a **subdivided / grid** mesh (a plain cube has no loops),
+      lock an edge and press `L`: the bevel expands to the whole **edge loop** (HUD
+      shows `loop xN`). On a plain cube it stays a single edge. Core covered by
+      `test_edge_loop`.
 - [ ] **Enter / click** keeps the bevel; **Esc** rolls the mesh back to the
       original (no change). `Ctrl+Z` reverts in one step.
 - [ ] **`R` repeat** — run again on another edge, press `R` → last width.

@@ -498,8 +498,11 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
       nearest edge (`geometry.nearest_edge_on_face`) → drag width, `[ ]` segments →
       `geometry.bevel_object_edges`, live snapshot/restore. Bevel an edge without
       Edit Mode. Headless `test_nearest_edge_on_face` + `test_bevel_object_edges`.
-- [ ] **Edge-loop bevel + loop cut** — expand the pick to the connected edge loop,
-      and a loop-cut modal (insert a ring) — both need loop traversal; pending.
+- [x] **Edge-loop bevel** — `L` in the Edge Bevel tool expands the picked edge to
+      its connected loop (`geometry.edge_loop`, valence-4 quad walk) and bevels the
+      whole loop. Headless `test_edge_loop`.
+- [ ] **Loop cut** — a modal that inserts an edge ring (subdivide a face ring,
+      slide to position) — needs ring traversal + bisect; pending.
 - [x] **Hover-pick through modifiers** — when the raycast hits geometry a
       generative modifier added (evaluated face index past the base mesh), map the
       hit point back to the nearest base face (`geometry.nearest_face_to_point`) so

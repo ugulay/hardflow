@@ -36,8 +36,10 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
     def _init_tool(self, context, event):
         self.width = 0.0
         self.segments = 2
+        self.loop = False           # L: bevel the whole connected edge loop
         self._edge_key = None       # (vi, vj) edge under cursor / locked
         self._edge_world = None     # (Vector, Vector) world endpoints for drawing
+        self._bevel_keys = None     # edges actually beveled (single or loop)
         self._lock_mouse_x = 0      # cursor x at lock -> horizontal drag = width
         self._scale = 0.01          # px -> meters, set from object size at lock
 
@@ -82,6 +84,16 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
         self._lock_mouse_x = co[0]
         self._scale = max(1e-4, max(self.obj.dimensions) / 400.0)
         self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+        self._bevel_keys = self._compute_keys()
+
+    def _compute_keys(self):
+        """The edges to bevel: the picked edge, or its whole loop when L is on
+        (computed from the pre-bevel mesh, before the preview mutates it)."""
+        if self._edge_key is None:
+            return []
+        if self.loop:
+            return geometry.edge_loop(self.obj, self._edge_key)
+        return [self._edge_key]
 
     # --- drag / apply ----------------------------------------------------
 
@@ -92,11 +104,11 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
         self.typed = ""
 
     def _refresh_preview(self):
-        if self._base is None or self._edge_key is None:
+        if self._base is None or not self._bevel_keys:
             return
         geometry.restore_mesh(self.obj, self._base)
         if self.width > 1e-6:
-            geometry.bevel_object_edges(self.obj, [self._edge_key],
+            geometry.bevel_object_edges(self.obj, self._bevel_keys,
                                         self.width, self.segments)
 
     def _set_value(self, v):
@@ -115,6 +127,13 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
             step = 1 if event.type == 'RIGHT_BRACKET' else -1
             self.segments = max(1, min(12, self.segments + step))
             if self.locked:
+                self._refresh_preview()
+            return True
+        # L: bevel the whole connected edge loop instead of the single edge.
+        if event.type == 'L':
+            self.loop = not self.loop
+            if self.locked:
+                self._bevel_keys = self._compute_keys()
                 self._refresh_preview()
             return True
         return False
@@ -141,13 +160,15 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
                    if self._edge_key else ("Hover an edge to bevel", dim))
         else:
             typed = ("  [typing %s]" % self.typed) if self.typed else ""
-            top = ("Width:  %.3f m%s    Segments %d"
-                   % (self.width, typed, self.segments), accent)
+            loop = "  (loop x%d)" % len(self._bevel_keys or []) if self.loop else ""
+            top = ("Width:  %.3f m%s    Segments %d%s"
+                   % (self.width, typed, self.segments, loop), accent)
         last = HARDFLOW_OT_edge_bevel._LAST_WIDTH
         repeat = ("    R repeat %.3f m" % last) if last > 1e-6 else ""
         return [
             top,
             ("Click edge = lock    drag / type = width    [ ] segments    "
-             "X snap %s" % ('ON' if self.snap else 'OFF'), dim),
+             "L loop %s    X snap %s" % ('ON' if self.loop else 'OFF',
+                                         'ON' if self.snap else 'OFF'), dim),
             ("Enter / click apply%s    Esc cancel" % repeat, dim),
         ]

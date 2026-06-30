@@ -793,6 +793,51 @@ def nearest_face_to_point(obj, local_point):
     return best_i
 
 
+def _next_loop_edge(edge, vert):
+    """The edge continuing an edge loop through `vert`: only across a valence-4
+    junction (a quad grid), the edge at `vert` that shares no face with `edge`.
+    Returns a BMEdge or None (pole / boundary / triangle fan)."""
+    if len(vert.link_edges) != 4:
+        return None
+    efaces = set(edge.link_faces)
+    for oe in vert.link_edges:
+        if oe is not edge and not (set(oe.link_faces) & efaces):
+            return oe
+    return None
+
+
+def edge_loop(obj, edge_key):
+    """Return the (vi, vj) edge keys of the edge loop through `edge_key`, walking
+    both directions across valence-4 vertices (quad loops) and stopping at
+    poles/boundaries. Returns [edge_key] when the edge isn't part of an
+    extendable loop (e.g. an all-valence-3 mesh like a plain cube). Object Mode,
+    pure bmesh read."""
+    a, b = edge_key
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    nv = len(bm.verts)
+    start = (bm.edges.get((bm.verts[a], bm.verts[b]))
+             if (0 <= a < nv and 0 <= b < nv) else None)
+    if start is None:
+        bm.free()
+        return [edge_key]
+    loop, seen = [start], {start}
+    for v0 in (start.verts[0], start.verts[1]):
+        e, v = start, v0
+        while True:
+            ne = _next_loop_edge(e, v)
+            if ne is None or ne in seen:
+                break
+            seen.add(ne)
+            loop.append(ne)
+            v = ne.other_vert(v)
+            e = ne
+    keys = [(e.verts[0].index, e.verts[1].index) for e in loop]
+    bm.free()
+    return keys
+
+
 def bevel_object_edges(obj, edge_keys, width, segments=2, profile=0.5):
     """Object Mode: bevel the edges given as (vi, vj) vertex-index pairs into real
     chamfer geometry (bmesh.ops.bevel, affect EDGES). The destructive,
