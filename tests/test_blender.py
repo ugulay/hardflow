@@ -881,6 +881,36 @@ def test_edge_loop():
     assert geometry.edge_loop(cube, ek) == [ek]
 
 
+def test_loop_cut():
+    # Loop cut on a 3x3 quad grid: the ring of an interior horizontal edge is the
+    # full column (4 edges); subdividing it inserts a loop -> +4 verts, +3 faces.
+    _reset()
+    import bmesh
+    me = bpy.data.meshes.new("grid2")
+    bm = bmesh.new()
+    n = 4
+    vs = [[bm.verts.new((x, y, 0)) for x in range(n)] for y in range(n)]
+    for y in range(n - 1):
+        for x in range(n - 1):
+            bm.faces.new((vs[y][x], vs[y][x + 1], vs[y + 1][x + 1], vs[y + 1][x]))
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new("Grid2", me)
+    bpy.context.collection.objects.link(obj)
+    ek = (1 * n + 1, 1 * n + 2)             # edge (1,1)-(2,1)
+    assert len(geometry.edge_ring(obj, ek)) == 4, geometry.edge_ring(obj, ek)
+    vb, fb = len(obj.data.vertices), len(obj.data.polygons)
+    assert geometry.loop_cut(obj, ek, cuts=1) == 4
+    assert len(obj.data.vertices) == vb + 4, len(obj.data.vertices)
+    assert len(obj.data.polygons) == fb + 3, len(obj.data.polygons)
+    # a plain cube has a 4-edge band ring -> loop cut adds geometry, no crash
+    cube = _add_cube("LoopCutCube", size=2.0)
+    top = max(range(len(cube.data.polygons)),
+              key=lambda k: cube.data.polygons[k].normal.z)
+    ck = geometry.nearest_edge_on_face(cube, top, Vector((1.0, 0.0, 1.0)))
+    assert geometry.loop_cut(cube, ck, 1) >= 1
+
+
 def test_nearest_face_to_point():
     # Maps an evaluated-mesh raycast hit back to a base face (the hover-pick
     # through generative modifiers path).

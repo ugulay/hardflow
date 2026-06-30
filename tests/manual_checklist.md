@@ -395,6 +395,25 @@ Setup: a cube in Object Mode, selected/active.
 Watch for: picking the wrong edge (the raycast→nearest-edge mapping), and any
 console error on a non-manifold/curved face.
 
+## 17. Loop Cut ⭐ (object-mode, new — insert an edge loop without Edit Mode)
+
+Setup: a **subdivided / grid** mesh in Object Mode (a plain cube only has band
+loops — still works, but a grid shows it best).
+
+- [ ] Build menu ▸ **Loop Cut** (or F3 → "Hardflow Loop Cut").
+- [ ] **Hover** an edge → it highlights; HUD says "Hover an edge…".
+- [ ] **Click** → an **edge loop is inserted** through that edge's ring (live), HUD
+      shows "Loop Cut  Cuts 1".
+- [ ] **`[` / `]`** (or type a number) → **more loops** at once (evenly spaced);
+      the preview updates.
+- [ ] **Enter / click** keeps the loop(s); **Esc** rolls the mesh back. `Ctrl+Z`
+      reverts in one step.
+- [ ] On a **plain cube**, clicking a top edge inserts a band loop around the cube
+      (no crash). Headless: `test_loop_cut` (+ `edge_ring`).
+
+Watch for: a ring that stops early on non-quad faces (expected), and any console
+error on n-gons / triangles.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

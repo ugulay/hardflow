@@ -506,8 +506,12 @@ up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py
 - [x] **Edge-loop bevel** — `L` in the Edge Bevel tool expands the picked edge to
       its connected loop (`geometry.edge_loop`, valence-4 quad walk) and bevels the
       whole loop. Headless `test_edge_loop`.
-- [ ] **Loop cut** — a modal that inserts an edge ring (subdivide a face ring,
-      slide to position) — needs ring traversal + bisect; pending.
+- [x] **Loop cut** — `HARDFLOW_OT_loop_cut` (`operators/edge_tool.py`, on the
+      shared `_EdgePickModal`): pick an edge → insert an edge loop by subdividing
+      its ring (`geometry.edge_ring` + `loop_cut`); `[ ]` / type sets how many
+      loops. Inserted at the ring midpoints. Headless `test_loop_cut`.
+- [ ] **Loop-cut slide** — position the inserted loop along the ring (drag the
+      parameter t), not only the midpoint; pending.
 - [x] **Hover-pick through modifiers** — when the raycast hits geometry a
       generative modifier added (evaluated face index past the base mesh), map the
       hit point back to the nearest base face (`geometry.nearest_face_to_point`) so

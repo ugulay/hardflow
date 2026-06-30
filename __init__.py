@@ -27,6 +27,7 @@ _classes = (
     push_pull.HARDFLOW_OT_push_pull,
     offset.HARDFLOW_OT_offset,
     edge_tool.HARDFLOW_OT_edge_bevel,
+    edge_tool.HARDFLOW_OT_loop_cut,
     construction.HARDFLOW_OT_add_primitive,
     construction.HARDFLOW_OT_add_guide,
     construction.HARDFLOW_OT_add_grid,

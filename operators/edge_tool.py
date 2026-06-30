@@ -1,11 +1,11 @@
-# Edge Bevel: bevel an edge by dragging, in Object Mode (no Edit Mode needed).
-# Hover an edge (raycast a face, pick its nearest edge), click to lock it, then
-# drag or type a width and adjust segments with [ ]; click again or Enter to
-# apply. R repeats the last width.
+# Object-Mode edge tools, so edge work doesn't need Edit Mode:
+#   * Edge Bevel  -- pick an edge (or its loop), drag a width, [ ] segments.
+#   * Loop Cut    -- pick an edge, insert an edge loop ([ ] = number of cuts).
 #
-# Built on face_tool._FaceDragModal: the hover/lock/drag/snapshot-preview/numeric/
-# cancel shell is shared; this file overrides the pick (edge instead of face),
-# the apply (bevel), and the edge-line drawing.
+# Both share _EdgePickModal (itself on face_tool._FaceDragModal): raycast-pick the
+# nearest edge under the cursor (through generative modifiers) + draw it
+# highlighted + the hover/lock/snapshot-preview/numeric/cancel shell. Each tool
+# only adds its state, its apply, and its HUD.
 from bpy.types import Operator
 from mathutils import Vector
 
@@ -15,15 +15,10 @@ from ..preferences import get_prefs
 from ..ui import draw as hud
 
 
-class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
-    bl_idname = "mesh.hardflow_edge_bevel"
-    bl_label = "Hardflow Edge Bevel"
-    bl_description = "Bevel an edge by dragging, without entering Edit Mode"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    _snapshot_name = "hf_edgebevel_base"
-    allow_negative = False
-    _LAST_WIDTH = 0.0   # remembered across runs -> R repeats the last width
+class _EdgePickModal(_FaceDragModal):
+    """Shared base for the Object-Mode edge tools: pick the nearest edge of the
+    face under the cursor (mapping evaluated-mesh hits from generative modifiers
+    back to a base face), and draw the picked edge highlighted."""
 
     @classmethod
     def poll(cls, context):
@@ -31,22 +26,8 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
         return (obj is not None and obj.type == 'MESH'
                 and context.mode == 'OBJECT')
 
-    # --- tool state ------------------------------------------------------
-
-    def _init_tool(self, context, event):
-        self.width = 0.0
-        self.segments = 2
-        self.loop = False           # L: bevel the whole connected edge loop
-        self._edge_key = None       # (vi, vj) edge under cursor / locked
-        self._edge_world = None     # (Vector, Vector) world endpoints for drawing
-        self._bevel_keys = None     # edges actually beveled (single or loop)
-        self._lock_mouse_x = 0      # cursor x at lock -> horizontal drag = width
-        self._scale = 0.01          # px -> meters, set from object size at lock
-
     def _lock_edit(self, context, event):
-        return False  # Object Mode only (Edit Mode has edit_bevel_edges)
-
-    # --- pick ------------------------------------------------------------
+        return False  # Object Mode only (Edit Mode has edit_bevel_edges etc.)
 
     def _hover_face(self, context, co):
         """Raycast the active mesh; remember the nearest polygon edge to the hit
@@ -75,6 +56,39 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
         verts = self.obj.data.vertices
         self._edge_world = (mw @ verts[key[0]].co, mw @ verts[key[1]].co)
 
+    def _draw_px(self, context):
+        prefs = get_prefs(context)
+        if self._edge_world is not None:
+            region, rv3d = context.region, context.region_data
+            a = raycast.world_to_screen(region, rv3d, self._edge_world[0])
+            b = raycast.world_to_screen(region, rv3d, self._edge_world[1])
+            if a is not None and b is not None:
+                col = ((1.0, 0.6, 0.1, 1.0) if self.locked
+                       else tuple(prefs.line_color)[:3] + (1.0,))
+                hud.draw_shape([(a[0], a[1]), (b[0], b[1])], col, closed=False)
+        hud.draw_hud(context.region, self._hud_lines(context, prefs))
+
+
+class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
+    bl_idname = "mesh.hardflow_edge_bevel"
+    bl_label = "Hardflow Edge Bevel"
+    bl_description = "Bevel an edge by dragging, without entering Edit Mode"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    _snapshot_name = "hf_edgebevel_base"
+    allow_negative = False
+    _LAST_WIDTH = 0.0   # remembered across runs -> R repeats the last width
+
+    def _init_tool(self, context, event):
+        self.width = 0.0
+        self.segments = 2
+        self.loop = False           # L: bevel the whole connected edge loop
+        self._edge_key = None       # (vi, vj) edge under cursor / locked
+        self._edge_world = None     # (Vector, Vector) world endpoints for drawing
+        self._bevel_keys = None     # edges actually beveled (single or loop)
+        self._lock_mouse_x = 0      # cursor x at lock -> horizontal drag = width
+        self._scale = 0.01          # px -> meters, set from object size at lock
+
     def _lock_face(self, context, co):
         if self._edge_key is None:
             return
@@ -94,8 +108,6 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
         if self.loop:
             return geometry.edge_loop(self.obj, self._edge_key)
         return [self._edge_key]
-
-    # --- drag / apply ----------------------------------------------------
 
     def _update_drag(self, context, co):
         dx = co[0] - self._lock_mouse_x
@@ -138,20 +150,6 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
             return True
         return False
 
-    # --- drawing ---------------------------------------------------------
-
-    def _draw_px(self, context):
-        prefs = get_prefs(context)
-        if self._edge_world is not None:
-            region, rv3d = context.region, context.region_data
-            a = raycast.world_to_screen(region, rv3d, self._edge_world[0])
-            b = raycast.world_to_screen(region, rv3d, self._edge_world[1])
-            if a is not None and b is not None:
-                col = ((1.0, 0.6, 0.1, 1.0) if self.locked
-                       else tuple(prefs.line_color)[:3] + (1.0,))
-                hud.draw_shape([(a[0], a[1]), (b[0], b[1])], col, closed=False)
-        hud.draw_hud(context.region, self._hud_lines(context, prefs))
-
     def _hud_lines(self, context, prefs):
         accent = tuple(prefs.line_color)[:3] + (1.0,)
         dim = (0.72, 0.72, 0.72, 1.0)
@@ -171,4 +169,73 @@ class HARDFLOW_OT_edge_bevel(_FaceDragModal, Operator):
              "L loop %s    X snap %s" % ('ON' if self.loop else 'OFF',
                                          'ON' if self.snap else 'OFF'), dim),
             ("Enter / click apply%s    Esc cancel" % repeat, dim),
+        ]
+
+
+class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
+    bl_idname = "mesh.hardflow_loop_cut"
+    bl_label = "Hardflow Loop Cut"
+    bl_description = "Insert an edge loop by picking an edge, without Edit Mode"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    _snapshot_name = "hf_loopcut_base"
+    allow_negative = False
+
+    def _init_tool(self, context, event):
+        self.cuts = 1
+        self._edge_key = None
+        self._edge_world = None
+
+    def _lock_face(self, context, co):
+        if self._edge_key is None:
+            return
+        self.typed = ""
+        self.locked = True
+        self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+        self._refresh_preview()      # show the loop straight away
+
+    def _update_drag(self, context, co):
+        pass   # the loop position isn't cursor-driven; cuts via [ ] / numeric
+
+    def _refresh_preview(self):
+        if self._base is None or self._edge_key is None:
+            return
+        geometry.restore_mesh(self.obj, self._base)
+        geometry.loop_cut(self.obj, self._edge_key, self.cuts)
+
+    def _set_value(self, v):
+        try:
+            self.cuts = max(1, min(20, int(round(v))))
+        except (ValueError, TypeError):
+            pass
+
+    def _repeat_last(self):
+        pass
+
+    def _remember_last(self):
+        pass
+
+    def _handle_key(self, context, event):
+        # [ ] adjust the number of loops inserted at once.
+        if event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}:
+            step = 1 if event.type == 'RIGHT_BRACKET' else -1
+            self.cuts = max(1, min(20, self.cuts + step))
+            if self.locked:
+                self._refresh_preview()
+            return True
+        return False
+
+    def _hud_lines(self, context, prefs):
+        accent = tuple(prefs.line_color)[:3] + (1.0,)
+        dim = (0.72, 0.72, 0.72, 1.0)
+        if not self.locked:
+            top = (("Hover an edge, then click to add a loop", accent)
+                   if self._edge_key else ("Hover an edge to loop-cut", dim))
+        else:
+            typed = ("  [typing %s]" % self.typed) if self.typed else ""
+            top = ("Loop Cut    Cuts %d%s" % (self.cuts, typed), accent)
+        return [
+            top,
+            ("Click edge = insert    [ ] cuts    type = count    "
+             "Enter apply    Esc cancel", dim),
         ]

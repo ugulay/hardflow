@@ -838,6 +838,79 @@ def edge_loop(obj, edge_key):
     return keys
 
 
+def _opposite_edge_in_quad(face, edge):
+    """The edge across a quad `face` from `edge` (shares no vertex with it), or
+    None for a non-quad. The 'ring' step, perpendicular to the edge loop."""
+    if len(face.verts) != 4:
+        return None
+    ev = set(edge.verts)
+    for oe in face.edges:
+        if oe is not edge and not (set(oe.verts) & ev):
+            return oe
+    return None
+
+
+def edge_ring(obj, edge_key):
+    """Return the (vi, vj) edge keys of the edge ring through `edge_key` -- the
+    parallel edges across a quad strip (the set a loop cut subdivides). Walks both
+    faces of the edge via `_opposite_edge_in_quad`, stopping at boundaries /
+    non-quads / closure. Returns [edge_key] when there's no ring. Pure bmesh."""
+    a, b = edge_key
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    nv = len(bm.verts)
+    start = (bm.edges.get((bm.verts[a], bm.verts[b]))
+             if (0 <= a < nv and 0 <= b < nv) else None)
+    if start is None:
+        bm.free()
+        return [edge_key]
+    ring, seen = [start], {start}
+    for f0 in start.link_faces:
+        e, f = start, f0
+        while True:
+            oe = _opposite_edge_in_quad(f, e)
+            if oe is None or oe in seen:
+                break
+            seen.add(oe)
+            ring.append(oe)
+            nxt = [nf for nf in oe.link_faces if nf is not f]
+            if not nxt:
+                break
+            f, e = nxt[0], oe
+    keys = [(e.verts[0].index, e.verts[1].index) for e in ring]
+    bm.free()
+    return keys
+
+
+def loop_cut(obj, edge_key, cuts=1):
+    """Insert `cuts` edge loop(s) by subdividing the edge ring through `edge_key`
+    (`edge_ring` + `bmesh.ops.subdivide_edges` with grid-fill so each quad in the
+    strip is split). Object Mode. Returns the number of ring edges subdivided
+    (0 on failure)."""
+    keys = edge_ring(obj, edge_key)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    nv = len(bm.verts)
+    edges = []
+    for a, b in keys:
+        if 0 <= a < nv and 0 <= b < nv:
+            e = bm.edges.get((bm.verts[a], bm.verts[b]))
+            if e is not None:
+                edges.append(e)
+    if not edges:
+        bm.free()
+        return 0
+    bmesh.ops.subdivide_edges(bm, edges=edges, cuts=max(1, int(cuts)),
+                              use_grid_fill=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return len(edges)
+
+
 def bevel_object_edges(obj, edge_keys, width, segments=2, profile=0.5):
     """Object Mode: bevel the edges given as (vi, vj) vertex-index pairs into real
     chamfer geometry (bmesh.ops.bevel, affect EDGES). The destructive,
