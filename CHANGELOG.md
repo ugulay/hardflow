@@ -26,6 +26,10 @@ logic is unit-tested (`59/59`); the new bpy paths gain headless coverage.
 - **Array along a curve** — `HARDFLOW_OT_curve_array` arrays the active mesh along
   a selected curve (Array fit-curve + Curve deform) so copies follow the path;
   header Modify menu (Hard Ops parity).
+- **Transfer decal to another surface** — `HARDFLOW_OT_transfer_decal` moves the
+  selected decal(s) onto the active mesh, re-pointing their shrinkwrap and
+  re-parenting while preserving world pose (`core/decal.retarget_decal`); Decals
+  menu (DECALmachine transfer).
 
 ### Changed
 - **Mirror across the 3D cursor or active object** — `HARDFLOW_OT_mirror` gains a

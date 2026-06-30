@@ -97,6 +97,35 @@ def test_bevel_cutter_chamfers_edges():
     assert len(me2.vertices) == 8
 
 
+def test_transfer_decal_retargets():
+    # Transfer moves a decal onto a new surface: shrinkwrap target + parent both
+    # follow, world pose preserved.
+    _reset()
+    hardflow.register()
+    try:
+        a = _add_cube("SurfA", size=2.0)
+        b = _add_cube("SurfB", size=2.0, location=(5, 0, 0))
+        d = decal.make_decal(bpy.context, a, Vector((0, 0, 1)),
+                             Vector((0, 0, 1)), Vector((1, 0, 0)))
+        assert d.parent is a
+        sw = next(m for m in d.modifiers if m.type == 'SHRINKWRAP')
+        assert sw.target is a
+        before = d.matrix_world.copy()
+        for o in bpy.context.selected_objects:
+            o.select_set(False)
+        d.select_set(True)
+        b.select_set(True)
+        bpy.context.view_layer.objects.active = b
+        res = bpy.ops.object.hardflow_transfer_decal()
+        assert res == {'FINISHED'}, res
+        assert d.parent is b
+        assert next(m for m in d.modifiers if m.type == 'SHRINKWRAP').target is b
+        # world pose preserved
+        assert (d.matrix_world.translation - before.translation).length < 1e-5
+    finally:
+        hardflow.unregister()
+
+
 def test_curve_array_modifiers():
     # Array along a curve: an Array (fit-curve) + a Curve deform pointing at the
     # selected curve land on the active mesh.

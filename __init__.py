@@ -52,6 +52,7 @@ _classes = (
     decals.HARDFLOW_OT_match_decal,
     decals.HARDFLOW_OT_retrim_decal,
     decals.HARDFLOW_OT_conform_decal,
+    decals.HARDFLOW_OT_transfer_decal,
     decals.HARDFLOW_OT_create_decal,
     decals.HARDFLOW_OT_library_rename,
     decals.HARDFLOW_OT_library_delete,

@@ -567,6 +567,37 @@ class HARDFLOW_OT_conform_decal(Operator):
         return {'FINISHED'}
 
 
+class HARDFLOW_OT_transfer_decal(Operator):
+    bl_idname = "object.hardflow_transfer_decal"
+    bl_label = "Transfer Decal to Surface"
+    bl_description = ("Move the selected decal(s) onto the active mesh: re-point "
+                      "their shrinkwrap and re-parent, keeping the world pose "
+                      "(DECALmachine transfer)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        target = context.active_object
+        if target is None or target.type != 'MESH':
+            return False
+        return any(o is not target and o.get("hf_decal_type") is not None
+                   for o in context.selected_objects)
+
+    def execute(self, context):
+        target = context.active_object
+        decals = [o for o in context.selected_objects
+                  if o is not target and o.get("hf_decal_type") is not None]
+        if not decals:
+            self.report({'WARNING'},
+                        "Select decal(s) plus an active target mesh")
+            return {'CANCELLED'}
+        for d in decals:
+            decal.retarget_decal(d, target)
+        self.report({'INFO'}, "Transferred %d decal(s) to %s"
+                    % (len(decals), target.name))
+        return {'FINISHED'}
+
+
 class HARDFLOW_OT_create_decal(Operator):
     bl_idname = "object.hardflow_create_decal"
     bl_label = "Create Decal (Bake)"

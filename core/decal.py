@@ -500,6 +500,21 @@ def conform_trim_decal(context, decal_obj, target, subdivisions=8, max_gap=0.05)
     return removed
 
 
+def retarget_decal(decal_obj, new_target):
+    """Move a placed decal onto a different surface object (DECALmachine
+    transfer): re-point its shrinkwrap at `new_target` and re-parent to it while
+    keeping the decal's current world pose. Returns True when a shrinkwrap was
+    retargeted (False if the decal had none -- it is still re-parented)."""
+    world = decal_obj.matrix_world.copy()
+    shrink = next((m for m in decal_obj.modifiers if m.type == 'SHRINKWRAP'), None)
+    if shrink is not None:
+        shrink.target = new_target
+    decal_obj.parent = new_target
+    decal_obj.matrix_parent_inverse = new_target.matrix_world.inverted_safe()
+    decal_obj.matrix_world = world          # back-solve basis -> world preserved
+    return shrink is not None
+
+
 def save_image(image, filepath, file_format='PNG'):
     """Write an image datablock to disk (used by the decal-creation pipeline to
     drop a baked decal into the library folder). Returns the saved filepath."""

@@ -143,6 +143,8 @@ class HARDFLOW_MT_menu_decals(Menu):
                         text="Match to Surface", icon='NODE_MATERIAL')
         layout.operator("object.hardflow_conform_decal",
                         text="Auto-cut to Surface", icon='MOD_SHRINKWRAP')
+        layout.operator("object.hardflow_transfer_decal",
+                        text="Transfer to Surface", icon='EXPORT')
         layout.operator("object.hardflow_atlas_decals",
                         text="Atlas Decals", icon='IMGDISPLAY')
 
