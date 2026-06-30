@@ -469,6 +469,11 @@ Push/Pull and Offset were minimal (hover → lock → drag/type → apply). Brin
 up to SketchUp ergonomics and fix an extrude bug. All on `operators/push_pull.py`
 / `operators/offset.py` + `core/geometry.py`; interactions in
 `tests/manual_checklist.md` §3/§4.
+- [x] **Shared modal base** — `operators/face_tool._FaceDragModal` factors the
+      identical hover-pick / lock / drag / snapshot-preview / numeric / HUD /
+      cancel shell out of Push/Pull + Offset (~300 lines of duplication removed),
+      so a direct-modeling fix or feature lands once. Tools keep their own
+      entries; mirrors the existing `pipe._CurveDraw` base.
 - [x] **Clean object-mode extrude (fix)** — `geometry.extrude_faces` now drops the
       source face by default (object-mode push/pull used to leave an interior
       divider, unlike Edit Mode); `keep_original` opt-in preserves it. Headless

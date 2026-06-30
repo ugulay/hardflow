@@ -60,6 +60,10 @@ Setup: select a mesh with clean faces (a cube, or the face from step 2). Object
 Mode. **No generative modifiers** (documented limitation — index targets the base
 mesh).
 
+> Push/Pull and Offset now share `operators/face_tool._FaceDragModal`. Behavior
+> is unchanged, so re-running §3 and §4 in full is the regression check for that
+> refactor — watch for any console error on invoke (a registration / MRO issue).
+
 - [ ] N-panel ▸ Build ▸ **Push/Pull** (or pie ▸ Build ▸ Push/Pull).
 - [ ] Hovering a face **highlights** it (orange fill + outline); the HUD says
       "Hover a face…".
