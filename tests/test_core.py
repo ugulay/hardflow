@@ -660,35 +660,6 @@ def test_blit_pixels_clips_out_of_bounds():
     assert _rgba(dst, 2, 1, 1) == [0.0, 0.0, 0.0, 0.0]   # the rest clipped away
 
 
-# --- transform: array / radial-array math (v1.0) ----------------------------
-
-def test_radial_step_radians():
-    assert math.isclose(transform.radial_step_radians(4), math.pi / 2, abs_tol=1e-9)
-    assert math.isclose(transform.radial_step_radians(6, 180.0),
-                        math.radians(30), abs_tol=1e-9)
-    # count clamps to at least 1 (a single copy = no rotation)
-    assert math.isclose(transform.radial_step_radians(0), math.radians(360),
-                        abs_tol=1e-9)
-
-
-def test_radial_angles_deg():
-    assert transform.radial_angles_deg(4) == [0.0, 90.0, 180.0, 270.0]
-    assert transform.radial_angles_deg(3, 180.0) == [0.0, 60.0, 120.0]
-    assert transform.radial_angles_deg(0) == [0.0]   # clamped to one copy
-
-
-def test_array_offset_vector():
-    assert transform.array_offset_vector('X', 2.0) == (2.0, 0.0, 0.0)
-    assert transform.array_offset_vector('Y', 1.5) == (0.0, 1.5, 0.0)
-    assert transform.array_offset_vector('Z', 0.5, 0.5) == (0.0, 0.0, 1.0)
-
-
-def test_mirror_axis_flags():
-    assert transform.mirror_axis_flags('X') == (True, False, False)
-    assert transform.mirror_axis_flags('Y') == (False, True, False)
-    assert transform.mirror_axis_flags('Z') == (False, False, True)
-
-
 # --- transform: cable / rope sag math (v1.1) --------------------------------
 
 def test_cable_points_straight_and_sag():

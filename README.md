@@ -133,8 +133,8 @@ it brings to Blender for free. The right column points at the implementing modul
 | Feature | What it does | Where |
 |---------|--------------|-------|
 | Inset / extract cut | Offset the drawn loop inward/outward before commit (`-`/`=`) | `core/offset.py offset_polygon` |
-| Array during draw | Stamp the in-progress cutter N times along an axis (`A` / `D`) | `core/transform.py array_offset_vector` |
-| Mirror during draw | Live mirror of the cutter across a world axis (`M`) | `core/transform.py mirror_axis_flags` |
+| Array during draw | Stamp the in-progress cutter N times along an axis (`A` / `D`) | `operators/draw_cut.py _processed_corner_sets` |
+| Mirror during draw | Live mirror of the cutter across a world axis (`M`) | `operators/draw_cut.py _processed_corner_sets` |
 | Bevel-on-cut | Add an angle-limited bevel to the cut edge at commit (`B`) | `operators/draw_cut.py` |
 | Bevelled cutter (v1.10) | Chamfer the cutter so the cut leaves bevelled recess walls (`C`) | `core/geometry.py bevel_cutter` |
 | In-plane rotation | Rotate the drawn shape within its plane, live angle in HUD (`,` / `.`) | `core/grid.py rotate_2d` |
@@ -327,7 +327,7 @@ hardflow/
 │   ├── offset.py           # polygon inset/offset math, Offset tool (pure 2D)
 │   ├── geometry.py         # bmesh build (primitives/prisms/pipe/loft) + Edit-Mode bridge
 │   ├── boolean.py          # destructive + non-destructive boolean + fallbacks
-│   ├── transform.py        # array / radial / cable-sag / fit math (pure)
+│   ├── transform.py        # cable-sag / fit / adaptive sizing math (pure)
 │   ├── decal*.py / atlas.py# decal orientation, image library, trim/atlas math
 │   ├── asset_lib.py        # .blend kit-library scan (pure)
 │   └── asset.py            # append / orient / bind INSERTs + asset extras

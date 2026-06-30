@@ -142,11 +142,13 @@ Setup: same as Push/Pull.
 
 ## 6. Menu system (pie + header dropdown)
 
-- [ ] `Alt+Q` → main pie. Each category slot (**Build ▸ / Boolean ▸ / Modify ▸ /
-      Curves ▸**) opens its sub-pie; the sub-pie's **◂ Back** returns to the main pie.
-- [ ] Direct slots (Cut / Bevel / Mirror / Clean) fire immediately.
-- [ ] Header ▸ **Hardflow** dropdown lists every category **including Decals and
-      Assets**; submenus open and the entries run.
+- [ ] `Alt+Q` → main pie. The category slots (**Build ▸ / Boolean ▸ / Curves ▸**)
+      open their sub-pie; the sub-pie's **◂ Back** returns to the main pie.
+- [ ] The direct slots (Cut / Push/Pull / Offset / Apply Cutters / Edge Bevel)
+      fire immediately.
+- [ ] Header ▸ **Hardflow** dropdown lists every category (Build / Boolean /
+      Curves / Display & Mesh, **plus Decals and Assets**); submenus open and the
+      entries run.
 - [ ] Header ▸ Hardflow ▸ **Pie Menu** opens the pie.
 - [ ] Disable then re-enable the addon → no duplicate "Hardflow" entry in the
       header (the hook is removed on unregister).
