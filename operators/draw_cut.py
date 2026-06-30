@@ -1,13 +1,14 @@
 # Main draw operator: draw a shape on screen, project to 3D, apply boolean.
 #
-# SHAPE: BOX / CIRCLE / POLY / NGON      MODE: CUT / SLICE / MAKE
+# SHAPE: BOX / CIRCLE / POLY / NGON   MODE: CUT / SLICE / MAKE / INTERSECT / FACE / KNIFE
 # Shortcuts (inside modal):
 #   Left click    place point / start-finish shape
 #   Enter         close POLY and apply
-#   Backspace     delete last POLY point
+#   0-9 . (type)  lock the shape to an exact size (radius / extent / segment, m)
+#   Backspace     edit a typed size, else delete last POLY point
 #   Q/W/E/R       shape = BOX / CIRCLE / POLY / NGON
 #   [ / ]         decrease / increase N-gon side count
-#   1/2/3         mode  = CUT / SLICE / MAKE
+#   Tab / Shift+Tab   cycle the mode (Cut/Slice/Make/Intersect/Face/Knife)
 #   X             toggle snap
 #   Right click / ESC  cancel
 import bpy
