@@ -325,6 +325,12 @@ Setup: a cube, Object Mode, selected/active.
 - [ ] **Manifold safety** — set the preference (or op) solver to **Manifold** on a
       Blender **< 4.5**: the cut must fall back to **Exact silently** (no error) —
       `core/boolean._coerce_solver`. On 4.5+ the Manifold solver runs.
+- [ ] **Project orientation** — in a **perspective** view, press **`O`** mid-draw
+      (HUD shows `project`) and cut a polyline through a tall object: the cut
+      **tapers along the camera rays** (a frustum), not a straight prism. Press `O`
+      again → `Fixed` → straight cut. In an **orthographic** view the two are
+      identical (parallel rays). The headless suite covers the taper geometry
+      (`test_build_prism_project_taper`).
 
 ---
 

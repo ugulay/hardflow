@@ -439,6 +439,31 @@ like Blender's native Move/Rotate/Scale).
   viewport). Possible follow-ups: GLOBAL/LOCAL orientation toggle, a uniform
   centre scale handle, an Offset gizmo to mirror Push/Pull.
 
+## v1.11 — Polyline Trim parity (Blender native)
+Match Blender's Sculpt-mode **Polyline Trim** workflow (draw a point-to-point
+polygon → extrude through the mesh → boolean) in the draw tool, which already had
+the core pipeline (POLY shape + Cut/Make/Intersect). All on
+`operators/draw_cut.py` + `core/`; the modal/draw-time paths are in
+`tests/manual_checklist.md` §15 (need a viewport).
+- [x] **Double-click to close** a polyline — parity with the native finish, in
+      addition to `Enter` / `Z` / click-start (`operators/draw_cut.py` modal).
+- [x] **Join mode** — add the drawn shape as a *separate solid* object with no
+      boolean on the target (native "Join"); `_build_solid` +
+      `geometry.build_prisms`. (Cut = Difference and Make = Union already shipped.)
+- [x] **Project / Fixed orientation** (`O`) — Fixed extrudes straight along the
+      drawing-plane normal; Project extrudes each corner along its own camera ray
+      so the cut tapers with perspective (`geometry.build_prism(s)` `apex`,
+      `draw_cut._project_apex`). Equal in an orthographic view. Headless taper test
+      `test_build_prism_project_taper`.
+- [x] **Per-cut boolean solver** — Default / Exact / Fast / **Manifold** exposed
+      on the operator + preferences; `core/boolean._coerce_solver` makes Manifold
+      safe (falls back to Exact before Blender 4.5).
+- [x] **Discoverability** — "Polyline Trim" / "Polyline Add" / "Join (Add Solid)"
+      in the header Boolean menu, and a "Polyline Trim" pie slot (`ui/menu.py`,
+      `ui/pie.py`).
+- [ ] **Project verify** — the perspective taper is built and unit-checked; a
+      live-Blender pass should confirm the frustum cut matches the native tool.
+
 ## Reference-tool gap pass (pre-publish)
 A feature audit against Grid Modeler / Boxcutter / Hard Ops / DECALmachine /
 KitOps. Closed in this pass:

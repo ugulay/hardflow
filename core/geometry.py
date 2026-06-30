@@ -33,12 +33,20 @@ def free_mesh(mesh):
         bpy.data.meshes.remove(mesh, do_unlink=True)
 
 
-def _add_prism(bm, corners, view_dir, thickness):
-    """Append one closed prism (corners extruded along view_dir by thickness) to
-    an existing bmesh. Returns True on success, False on a degenerate cap."""
-    half = view_dir * (thickness * 0.5)
-    vf = [bm.verts.new(c - half) for c in corners]
-    vb = [bm.verts.new(c + half) for c in corners]
+def _add_prism(bm, corners, view_dir, thickness, apex=None):
+    """Append one closed prism to an existing bmesh. With apex=None every corner
+    is extruded along the shared view_dir (Fixed orientation -> a straight
+    prism). With apex set (a world-space camera position) each corner is extruded
+    along its own ray from the apex, so the volume tapers toward the camera
+    (Project orientation -> perspective). Returns True on success, False on a
+    degenerate cap."""
+    half = thickness * 0.5
+    if apex is None:
+        offs = [view_dir * half] * len(corners)
+    else:
+        offs = [(c - apex).normalized() * half for c in corners]
+    vf = [bm.verts.new(c - o) for c, o in zip(corners, offs)]
+    vb = [bm.verts.new(c + o) for c, o in zip(corners, offs)]
     try:
         f_front = bm.faces.new(vf)                   # front cap
         f_back = bm.faces.new(list(reversed(vb)))    # back cap
@@ -62,13 +70,14 @@ def _add_prism(bm, corners, view_dir, thickness):
     return True
 
 
-def build_prism(corners, view_dir, thickness, name="hf_cutter"):
+def build_prism(corners, view_dir, thickness, name="hf_cutter", apex=None):
     """Turn a list of 3D corners on a plane into a closed prism (a cutter
     volume) by extruding along the view direction. corners must be at least 3
     points. Concave n-gons are accepted; self-intersecting polygons give broken
-    results."""
+    results. apex (a camera position) tapers the prism with perspective; see
+    `_add_prism`."""
     bm = bmesh.new()
-    if not _add_prism(bm, corners, view_dir, thickness):
+    if not _add_prism(bm, corners, view_dir, thickness, apex):
         bm.free()
         return None
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
@@ -78,14 +87,16 @@ def build_prism(corners, view_dir, thickness, name="hf_cutter"):
     return mesh
 
 
-def build_prisms(corner_sets, thickness, name="hf_cutter"):
+def build_prisms(corner_sets, thickness, name="hf_cutter", apex=None):
     """Build ONE mesh holding a prism for every (corners, view_dir) pair in
     `corner_sets` -- the in-draw Array/Mirror copies baked into a single cutter
-    (v1.4). Returns mesh data, or None if no prism could be built."""
+    (v1.4). apex (a camera position) tapers every prism with perspective for the
+    Project orientation; None gives the straight Fixed extrude. Returns mesh
+    data, or None if no prism could be built."""
     bm = bmesh.new()
     built = 0
     for corners, view_dir in corner_sets:
-        if _add_prism(bm, corners, view_dir, thickness):
+        if _add_prism(bm, corners, view_dir, thickness, apex):
             built += 1
     if built == 0:
         bm.free()

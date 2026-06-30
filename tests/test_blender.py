@@ -1171,6 +1171,31 @@ def test_build_prisms_and_faces():
     assert geometry.build_prisms([], 1.0) is None
 
 
+def test_build_prism_project_taper():
+    # PROJECT orientation (apex set) extrudes each corner along its own ray from
+    # the camera, so the cutter is a frustum: the two caps have different
+    # cross-sections. Fixed (apex=None) stays a straight prism.
+    corners = [Vector((-1, -1, 0)), Vector((1, -1, 0)),
+               Vector((1, 1, 0)), Vector((-1, 1, 0))]
+    view_dir = Vector((0, 0, 1))
+    apex = Vector((0, 0, 10))            # camera above the plane
+    me = geometry.build_prism(corners, view_dir, thickness=4.0, apex=apex)
+    assert me is not None
+    assert len(me.vertices) == 8 and len(me.polygons) == 6
+
+    def extent(z):
+        xs = [v.co.x for v in me.vertices if round(v.co.z, 4) == z]
+        return round(max(xs) - min(xs), 4)
+
+    zs = sorted({round(v.co.z, 4) for v in me.vertices})
+    assert len(zs) == 2, zs                       # two cap planes
+    assert extent(zs[0]) != extent(zs[1]), (extent(zs[0]), extent(zs[1]))  # taper
+    # Fixed: both caps keep the original 2.0 extent (a straight box prism).
+    flat = geometry.build_prism(corners, view_dir, thickness=4.0)
+    fxs = sorted({round(v.co.x, 4) for v in flat.vertices})
+    assert fxs == [-1.0, 1.0], fxs
+
+
 # --- v1.5 Hard Ops parity ----------------------------------------------------
 
 def test_dice_mesh():

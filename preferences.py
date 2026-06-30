@@ -281,6 +281,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         items=[
             ('EXACT', "Exact", "More accurate, slower"),
             ('FAST', "Fast", "Faster, more fragile"),
+            ('MANIFOLD', "Manifold", "Fastest; manifold meshes only (Blender 4.5+)"),
         ],
         default='EXACT',
     )

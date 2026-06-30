@@ -70,8 +70,8 @@ class HARDFLOW_MT_pie_boolean(Menu):
         _draw(pie, "mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', mode='CUT')
         _draw(pie, "mesh.hardflow_draw", "Slice", 'MOD_EDGESPLIT', mode='SLICE')
         _draw(pie, "mesh.hardflow_draw", "Make", 'MESH_PLANE', mode='MAKE')
-        _draw(pie, "mesh.hardflow_draw", "Circle Cut", 'MESH_CIRCLE',
-              shape='CIRCLE', mode='CUT')
+        _draw(pie, "mesh.hardflow_draw", "Polyline Trim", 'IPO_LINEAR',
+              shape='POLY', mode='CUT')
         _draw(pie, "object.hardflow_boolean", "Boolean (Sel)", 'MOD_BOOLEAN')
         _draw(pie, "mesh.hardflow_draw", "N-gon Cut", 'MESH_CYLINDER',
               shape='NGON', mode='CUT')

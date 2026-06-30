@@ -31,9 +31,30 @@ _MODES = [
     ('CUT', "Cut", "Boolean DIFFERENCE"),
     ('SLICE', "Slice", "Slice the object in two"),
     ('MAKE', "Make", "Add geometry (UNION)"),
+    ('JOIN', "Join", "Add the drawn shape as a separate solid (no boolean)"),
     ('INTERSECT', "Intersect", "Boolean INTERSECT (keep only what's inside the drawn volume)"),
     ('FACE', "Face", "Create a new face (create face, not boolean)"),
     ('KNIFE', "Knife", "Score the surface only (zero-depth cut, no boolean)"),
+]
+
+# Boolean solver for the CUT/MAKE/INTERSECT modes. DEFAULT defers to the
+# preferences solver; the rest mirror Blender's native Polyline Trim choices.
+_SOLVERS = [
+    ('DEFAULT', "Default", "Use the Boolean Solver set in the preferences"),
+    ('EXACT', "Exact", "Accurate, handles overlaps, slower"),
+    ('FAST', "Fast", "Fast, no overlap support"),
+    ('MANIFOLD', "Manifold", "Fastest; manifold meshes only (Blender 4.5+)"),
+]
+
+# Cutter extrude orientation (Blender's Polyline Trim Project/Fixed):
+#   FIXED   -- extrude every corner along one shared direction (the drawing
+#              plane normal): a straight prism.
+#   PROJECT -- extrude each corner along its own camera ray, so the cut tapers
+#              with perspective and matches the screen-space drawing exactly.
+#              Identical to FIXED in an orthographic view (rays are parallel).
+_ORIENTS = [
+    ('FIXED', "Fixed", "Straight extrude along the drawing plane normal"),
+    ('PROJECT', "Project", "Taper the cut along the camera rays (perspective)"),
 ]
 
 # Vertex/edge snap cursor colors live in ui.draw so every tool shares them.
@@ -47,6 +68,8 @@ class HARDFLOW_OT_draw(Operator):
 
     shape: EnumProperty(name="Shape", items=_SHAPES, default='BOX')
     mode: EnumProperty(name="Mode", items=_MODES, default='CUT')
+    solver: EnumProperty(name="Solver", items=_SOLVERS, default='DEFAULT')
+    orientation: EnumProperty(name="Orientation", items=_ORIENTS, default='FIXED')
 
     @classmethod
     def poll(cls, context):
@@ -141,6 +164,13 @@ class HARDFLOW_OT_draw(Operator):
             if self.shape != 'POLY' and len(self.points) >= 2:
                 return self._commit(context)
 
+        # Double-click closes an in-progress polyline (parity with Blender's
+        # native Polyline Trim finish). The triggering second press already
+        # placed the final point, so just close on >=3 points.
+        elif event.type == 'LEFTMOUSE' and event.value == 'DOUBLE_CLICK':
+            if self.shape == 'POLY' and len(self.points) >= 3:
+                return self._commit(context)
+
         elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
             if self.shape == 'POLY' and len(self.points) >= 3:
                 return self._commit(context)
@@ -220,6 +250,11 @@ class HARDFLOW_OT_draw(Operator):
 
         elif event.type == 'C' and event.value == 'PRESS':
             self.cutter_bevel = not self.cutter_bevel  # chamfer the cutter walls
+
+        elif event.type == 'O' and event.value == 'PRESS':
+            # Toggle Fixed <-> Project extrude (perspective taper).
+            self.orientation = ('PROJECT' if self.orientation == 'FIXED'
+                                else 'FIXED')
 
         elif event.type == 'G' and event.value == 'PRESS':
             return self._stamp_last(context)   # repeat the previous shape
@@ -640,7 +675,7 @@ class HARDFLOW_OT_draw(Operator):
             ("Q/W/E/R shape    [ ] sides    Tab mode    type = exact size    "
              "< > plane    Shift+< > rotate grid    Z close", dim),
             ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
-             "B bevel    G stamp", dim),
+             "B bevel    O orient    G stamp", dim),
             ("Ctrl+Wheel grid    PgUp/Dn depth    X grid    V vertex    "
              "N non-destructive    S save settings    Enter apply    "
              "Esc cancel", dim),
@@ -662,6 +697,8 @@ class HARDFLOW_OT_draw(Operator):
             bits.append("bevel-on-cut")
         if self.cutter_bevel:
             bits.append("cutter bevel")
+        if self.orientation == 'PROJECT':
+            bits.append("project")
         if self.depth > 1e-6:
             bits.append("depth %.3f m" % self.depth)
         bits.append("grid %.3f m" % self.grid_size)
@@ -792,7 +829,8 @@ class HARDFLOW_OT_draw(Operator):
         if self.mode == 'FACE':
             return geometry.build_faces(sets, name="hf_preview")
         return geometry.build_prisms(sets, self._thickness(context),
-                                     name="hf_preview")
+                                     name="hf_preview",
+                                     apex=self._project_apex(context.region_data))
 
     def _thickness(self, context):
         """Cutter depth: the explicit live thickness (PgUp/PgDn) when set, else a
@@ -801,6 +839,16 @@ class HARDFLOW_OT_draw(Operator):
             return self.depth
         return max(geometry.estimate_thickness(t)
                    for t in self._targets(context))
+
+    def _project_apex(self, rv3d):
+        """World-space camera position for PROJECT orientation, else None. Each
+        cutter corner is extruded along its own ray from this apex, giving the
+        perspective taper of Blender's Polyline Trim Project mode. Returns None
+        for FIXED, or in an orthographic view (parallel rays -> same as FIXED)."""
+        if (self.orientation != 'PROJECT' or rv3d is None
+                or not rv3d.is_perspective):
+            return None
+        return rv3d.view_matrix.inverted_safe().translation.copy()
 
     def _update_preview(self, context):
         """Refresh the live preview object. Shown as a wireframe drawn in front,
@@ -886,10 +934,19 @@ class HARDFLOW_OT_draw(Operator):
             self._knife_object(context, sets)
             return
 
+        # JOIN: add the drawn volume as its own solid object, no boolean (parity
+        # with Blender's Polyline Trim "Join" mode).
+        if self.mode == 'JOIN':
+            self._build_solid(context, sets)
+            return
+
         targets = self._targets(context)
         # Array/Mirror copies are baked into one cutter mesh; depth = live
-        # thickness when set, else big enough to pierce all targets.
-        cutter_mesh = geometry.build_prisms(sets, self._thickness(context))
+        # thickness when set, else big enough to pierce all targets. apex tapers
+        # the cutter with perspective in PROJECT orientation (None = Fixed).
+        cutter_mesh = geometry.build_prisms(
+            sets, self._thickness(context),
+            apex=self._project_apex(context.region_data))
         if cutter_mesh is None:
             self.report({'WARNING'}, "Invalid shape")
             return
@@ -898,7 +955,7 @@ class HARDFLOW_OT_draw(Operator):
         cutter = bpy.data.objects.new("hf_cutter", cutter_mesh)
         context.collection.objects.link(cutter)
 
-        solver = prefs.default_solver
+        solver = prefs.default_solver if self.solver == 'DEFAULT' else self.solver
         if self.nd:
             self._apply_nondestructive(context, targets, cutter, solver)
         else:
@@ -911,7 +968,8 @@ class HARDFLOW_OT_draw(Operator):
     _LAST = None  # class-level: the last committed shape, replayed with G
 
     _STAMP_KEYS = ('shape', 'mode', 'sides', 'plane', 'inset', 'rotation',
-                   'array_count', 'array_axis', 'mirror_axis', 'bevel_cut')
+                   'array_count', 'array_axis', 'mirror_axis', 'bevel_cut',
+                   'orientation')
 
     def _remember(self):
         """Snapshot the just-committed shape (clicked points + all parameters) so
@@ -979,6 +1037,23 @@ class HARDFLOW_OT_draw(Operator):
         obj.select_set(True)
         context.view_layer.objects.active = obj
 
+    def _build_solid(self, context, sets):
+        """JOIN: create a separate solid object from the drawn shape(s) -- the
+        extruded prism volume, added to the scene without any boolean. The
+        Polyline Trim "Join" mode: block out new geometry next to the model."""
+        mesh = geometry.build_prisms(
+            sets, self._thickness(context),
+            apex=self._project_apex(context.region_data))
+        if mesh is None:
+            self.report({'WARNING'}, "Invalid shape")
+            return
+        obj = bpy.data.objects.new("Hardflow_Solid", mesh)
+        context.collection.objects.link(obj)
+        for o in list(context.selected_objects):
+            o.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+
     def _knife_object(self, context, sets):
         """KNIFE in Object Mode: score every drawn loop onto the active mesh
         (zero-depth, no boolean) via the object-data knife."""
@@ -1028,12 +1103,12 @@ class HARDFLOW_OT_draw(Operator):
 
     def _build_and_apply_edit(self, context, sets):
         """Edit Mode commit: project the drawn shape(s) into the active mesh.
-        MAKE/FACE add n-gon faces; CUT/SLICE/KNIFE score the loops onto the
+        MAKE/JOIN/FACE add n-gon faces; CUT/SLICE/KNIFE score the loops onto the
         surface. Honours the same snap/grid/plane + in-draw pipeline."""
         obj = context.active_object
         mw_inv = obj.matrix_world.inverted_safe()
         rot = mw_inv.to_3x3()
-        if self.mode in {'MAKE', 'FACE'}:
+        if self.mode in {'MAKE', 'FACE', 'JOIN'}:
             ok = False
             for corners, _vd in sets:
                 ok |= geometry.edit_add_face(obj, [mw_inv @ c for c in corners])

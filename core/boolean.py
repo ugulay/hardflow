@@ -3,10 +3,23 @@
 import bpy
 
 
+def _coerce_solver(solver):
+    """Return `solver` if the Boolean modifier supports it in this Blender, else
+    'EXACT'. The MANIFOLD solver only exists from Blender 4.5; assigning it on an
+    older build raises, so fall back to the always-present EXACT solver."""
+    try:
+        items = bpy.types.BooleanModifier.bl_rna.properties['solver'].enum_items
+        if solver in {i.identifier for i in items}:
+            return solver
+    except (KeyError, AttributeError):
+        pass
+    return 'EXACT'
+
+
 def _new_bool(target, cutter, operation, solver):
     mod = target.modifiers.new("HF_Bool", 'BOOLEAN')
     mod.operation = operation
-    mod.solver = solver
+    mod.solver = _coerce_solver(solver)
     mod.object = cutter
     return mod
 

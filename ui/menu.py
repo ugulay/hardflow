@@ -28,9 +28,13 @@ _BUILD_ITEMS = (
 )
 
 _BOOLEAN_ITEMS = (
+    ("mesh.hardflow_draw", "Polyline Trim", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'CUT'}),
+    ("mesh.hardflow_draw", "Polyline Add", 'IPO_LINEAR', {'shape': 'POLY', 'mode': 'MAKE'}),
+    None,
     ("mesh.hardflow_draw", "Cut", 'MOD_BOOLEAN', {'mode': 'CUT'}),
     ("mesh.hardflow_draw", "Slice", 'MOD_EDGESPLIT', {'mode': 'SLICE'}),
-    ("mesh.hardflow_draw", "Make", 'MESH_PLANE', {'mode': 'MAKE'}),
+    ("mesh.hardflow_draw", "Make (Union)", 'MESH_PLANE', {'mode': 'MAKE'}),
+    ("mesh.hardflow_draw", "Join (Add Solid)", 'MESH_CUBE', {'mode': 'JOIN'}),
     ("mesh.hardflow_draw", "Intersect", 'MOD_BOOLEAN', {'mode': 'INTERSECT'}),
     ("mesh.hardflow_draw", "Knife (Score)", 'MOD_LINEART', {'mode': 'KNIFE'}),
     ("mesh.hardflow_draw", "Circle Cut", 'MESH_CIRCLE', {'shape': 'CIRCLE', 'mode': 'CUT'}),
