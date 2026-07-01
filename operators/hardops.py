@@ -215,8 +215,9 @@ class HARDFLOW_OT_smart_sharpen(Operator):
                       "update the same modifiers in place (never stacks copies)")
     bl_options = {'REGISTER', 'UNDO'}
 
-    # The two managed modifiers, matched by name so a re-run updates in place.
+    # The managed modifiers, matched by name so a re-run updates in place.
     BEVEL_NAME = "HF_Bevel"
+    MICRO_NAME = "HF_MicroBevel"
     WN_NAME = "HF_WeightedNormal"
 
     angle: FloatProperty(
@@ -237,6 +238,25 @@ class HARDFLOW_OT_smart_sharpen(Operator):
     )
     segments: IntProperty(name="Segments", default=2, min=1, max=12)
     profile: FloatProperty(name="Profile", default=0.7, min=0.0, max=1.0)
+    micro_bevel: BoolProperty(
+        name="Micro Bevel (2-tier)", default=False,
+        description="Add a second, smaller angle-limited bevel below the main "
+                    "one so boolean-cut corners get a tight chamfer while the "
+                    "form edges keep the big weighted round -- a bevel hierarchy",
+    )
+    micro_width: FloatProperty(
+        name="Micro Width", subtype='DISTANCE',
+        description="Width of the micro bevel; use 'Auto Width' to scale it to "
+                    "the object, else this fixed value",
+        default=0.004, min=0.0, soft_max=0.5,
+    )
+    micro_segments: IntProperty(name="Micro Segments", default=1, min=1, max=6)
+    micro_angle: FloatProperty(
+        name="Micro Angle", subtype='ANGLE',
+        description="Edges sharper than this get the micro bevel (boolean cuts "
+                    "are ~90 deg, so a 40-60 deg threshold catches them)",
+        default=math.radians(45.0), min=math.radians(1.0), max=math.radians(180.0),
+    )
     use_weighted_normal: BoolProperty(
         name="Weighted Normal", default=True,
         description="Add a Weighted Normal modifier at the bottom of the stack so "
@@ -274,6 +294,24 @@ class HARDFLOW_OT_smart_sharpen(Operator):
         mod.limit_method = 'WEIGHT'
         return mod
 
+    def _micro_bevel_mod(self, obj, width):
+        """Get/create the second, angle-limited micro bevel and tune it. Sits
+        below the main weight bevel and catches every remaining hard edge
+        (boolean-cut corners included) with a tight chamfer. clamp_overlap +
+        harden_normals keep it safe where it grazes the main bevel."""
+        mod = obj.modifiers.get(self.MICRO_NAME)
+        if mod is None or mod.type != 'BEVEL':
+            if mod is not None:
+                obj.modifiers.remove(mod)
+            mod = obj.modifiers.new(self.MICRO_NAME, 'BEVEL')
+        mod.width = width
+        mod.segments = self.micro_segments
+        mod.limit_method = 'ANGLE'
+        mod.angle_limit = self.micro_angle
+        mod.harden_normals = True
+        mod.use_clamp_overlap = True
+        return mod
+
     def _weighted_normal_mod(self, obj):
         """Get/create the Weighted Normal modifier and force it to the very bottom
         of the stack (it must run after the bevel to fix the shading)."""
@@ -306,6 +344,16 @@ class HARDFLOW_OT_smart_sharpen(Operator):
         width = (hardsurface.adaptive_bevel_width(tuple(obj.dimensions))
                  if self.auto_width else self.width)
         self._bevel_mod(obj, width)
+        # Second tier: a small angle-limited bevel for boolean-cut corners.
+        if self.micro_bevel:
+            micro = (hardsurface.adaptive_bevel_width(
+                        tuple(obj.dimensions), fraction=0.004)
+                     if self.auto_width else self.micro_width)
+            self._micro_bevel_mod(obj, micro)
+        else:
+            old = obj.modifiers.get(self.MICRO_NAME)
+            if old is not None:
+                obj.modifiers.remove(old)
         if self.use_weighted_normal:
             self._weighted_normal_mod(obj)
         else:
@@ -342,6 +390,14 @@ class HARDFLOW_OT_smart_sharpen(Operator):
         row.prop(self, "width")
         col.prop(self, "segments")
         col.prop(self, "profile")
+        col.prop(self, "micro_bevel")
+        if self.micro_bevel:
+            sub = col.column(align=True)
+            row = sub.row()
+            row.enabled = not self.auto_width
+            row.prop(self, "micro_width")
+            sub.prop(self, "micro_segments")
+            sub.prop(self, "micro_angle")
         col.prop(self, "use_weighted_normal")
         col.prop(self, "set_crease")
 

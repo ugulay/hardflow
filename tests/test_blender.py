@@ -2656,6 +2656,28 @@ def test_smart_sharpen_operator_idempotent():
         hardflow.unregister()
 
 
+def test_smart_sharpen_two_tier_bevel():
+    _reset()
+    hardflow.register()
+    try:
+        cube = _add_cube("Tier", size=2.0)
+        _activate(cube)
+        # Two-tier: a main weight bevel + an angle-limited micro bevel.
+        bpy.ops.object.hardflow_smart_sharpen(micro_bevel=True)
+        main = cube.modifiers.get("HF_Bevel")
+        micro = cube.modifiers.get("HF_MicroBevel")
+        assert main is not None and main.limit_method == 'WEIGHT'
+        assert micro is not None and micro.type == 'BEVEL'
+        assert micro.limit_method == 'ANGLE'
+        assert micro.width < main.width, (micro.width, main.width)
+        # Turning the micro tier off removes just that modifier (updates in place).
+        bpy.ops.object.hardflow_smart_sharpen(micro_bevel=False)
+        assert cube.modifiers.get("HF_MicroBevel") is None
+        assert cube.modifiers.get("HF_Bevel") is not None
+    finally:
+        hardflow.unregister()
+
+
 def test_dissolve_boolean_ngons_cleans_redundant_vert():
     _reset()
     import bmesh
