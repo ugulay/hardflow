@@ -262,6 +262,19 @@ the loop-identification against a live cube→subdiv in Blender before exposing 
 `S` toggle in the UI. Mark it experimental until that pass is done (consistent
 with `tests/manual_checklist.md` discipline).
 
+**Update (v1.15) — topology safety landed.** The original skeleton only handled
+clean quad flanks; a boolean off-cut leaves **n-gon** flanks, which is exactly
+where a naïve support loop collapses a face. v1.15 closed that gap in the pure
+core: `geometry._flank_support_loop` now inserts holding loops on non-quad flanks
+too, `core/bevel.flank_can_support` is a safety barrier that **skips** any flank
+too small to hold a loop (instead of forcing one in), and
+`core/bevel.safe_support_fraction` clamps every split off both ends of a flank.
+`smart_bevel_edges` returns a `skipped` count, surfaced live in the Edge Bevel
+HUD (`+N loops, M clamped`). What remains deferred is only the **live
+subdivision-tuning pass** for the exact holding-loop position, so Smart Bevel
+stays `S`-gated / EXPERIMENTAL — the topology *safety* is no longer the open
+risk, the loop *placement feel* is.
+
 ---
 
 ## 7. Reference prototype (this change)
@@ -300,7 +313,7 @@ single Blender undo step.
 | **0 (done)** | Command core + Knife prototype + tests | `core/command.py`, `operators/hardflow_mode.py`, `tests/test_core.py` | pure tests green; live smoke test pending |
 | **1 (done)** | Extract `_HardflowModeModal` shell (Knife moved onto it) | `operators/hardflow_mode.py` | headless + manual checklist |
 | **2 (done)** | Extrude verb + VIEW/SURFACE/X/Y/Z plane cycle + `Tab` verb cycle + keymap/pie entry on the shell | `operators/hardflow_mode.py`, `keymaps.py`, `ui/pie.py` | headless (`test_mode_shell_verb_and_plane_cycle`) + manual checklist |
-| **3 (done, experimental)** | `support_loop_positions` (pure) + `smart_bevel_edges` / `dissolve_boolean_ngons` (bmesh) + `S` toggle | `core/bevel.py`, `core/geometry.py`, `operators/edge_tool.py` | pure tests + headless; live subdiv tuning pending |
+| **3 (done, experimental)** | `support_loop_positions` (pure) + `smart_bevel_edges` / `dissolve_boolean_ngons` (bmesh) + `S` toggle; **v1.15** non-quad-safe flanks + `flank_can_support` / `safe_support_fraction` barrier + `skipped` HUD readout | `core/bevel.py`, `core/geometry.py`, `operators/edge_tool.py` | pure tests + headless; live subdiv tuning pending |
 | **4 (done)** | Boolean chain → `MacroCommand` (`base.BooleanCutCommand` / `boolean_chain`, atomic rollback), adopted in `draw_cut._apply_destructive` + the `_FaceDragModal` live preview | `operators/base.py`, `operators/draw_cut.py`, `operators/face_tool.py` (+ push_pull/offset/edge_tool) | headless (`test_boolean_chain_command_atomic`, `test_draw_cut_apply_destructive_atomic_chain`, `test_facetool_*`) |
 
 Each phase is independently shippable and leaves the tree green.
@@ -343,11 +356,22 @@ build:
   `test_surface_basis_shared_helper`. With this, the three-layer command
   architecture is consistent across **every** modal tool.
 
+**Landed in the Polish & Performance change (v1.15):** Smart Bevel topology
+safety — non-quad flank support + the `flank_can_support` / `safe_support_fraction`
+barrier + the `skipped` HUD count (§6.4 update) — plus a framed "premium" HUD with
+translucent viewport guide lines (`ui/draw.py` `draw_hud` accent header +
+`draw_guide_line` / `draw_dashed_line` / `draw_snap_ring` / `draw_mirror_plane` /
+`fade_color`; the mode shell now draws dashed per-plane axis guides + a ring snap
+marker) and a high-poly live boolean preview gated by the new pure
+`core/preview_cache` (AABB target culling + idle-frame distance gate, capped by
+the `live_preview_max_verts` preference).
+
 Still pending and deliberately deferred (self-contained, low-risk):
 
-- **Smart Bevel live tuning** — the support-loop placement is deterministic and
-  count-tested, but the exact holding-loop position and non-quad-flank handling
-  need a live cube→Subdivision pass (kept EXPERIMENTAL / `S`-gated until then).
+- **Smart Bevel live tuning** — the support-loop placement is deterministic,
+  count-tested and now topology-safe on non-quad flanks (v1.15), but the exact
+  holding-loop *position* still needs a live cube→Subdivision pass (kept
+  EXPERIMENTAL / `S`-gated until then).
 
 ---
 
@@ -370,7 +394,7 @@ Still pending and deliberately deferred (self-contained, low-risk):
 |---|---|---|
 | Trying to wrap native modal operators | — | Ruled out; we shadow, not wrap (§1.1). |
 | CommandManager desyncs with Blender undo | Med | Journal is per-session only; one undo push at commit; never `undo_push` per sub-step (§5.2). |
-| Smart Bevel support loops land wrong post-bevel | High | Ship pure math + skeleton first; tune loop-ID live; keep experimental (§6.4). |
+| Smart Bevel support loops land wrong post-bevel | Med (was High) | Pure math + skeleton shipped; v1.15 added non-quad-safe flanks + a `flank_can_support` skip barrier so a too-small flank is no longer collapsed. Only live loop-position tuning remains; kept experimental (§6.4). |
 | Feature creep bloats `draw_cut` | Med | New `hardflow_mode.py` stays lean; share via mixin/core, don't grow the monolith (§4.2). |
 | Core layer violation creeps in | Low | Table in §3; `command.py`/`bevel.py` stay bpy-free and unit-tested. |
 
