@@ -179,8 +179,12 @@ class HARDFLOW_OT_draw(Operator):
         self._sync_points_from_world(context)
 
         if event.type == 'MOUSEMOVE':
+            # Ctrl held = force incremental grid snap for this move even when the
+            # persistent snap toggle is off (and bypass geometry snap), so Ctrl is
+            # a momentary "snap precisely to the grid" the way BoxCutter does it.
             co = self._snap_screen(
-                context, (event.mouse_region_x, event.mouse_region_y))
+                context, (event.mouse_region_x, event.mouse_region_y),
+                force_grid=event.ctrl)
             # Shift: lock draw direction to angle steps relative to last point
             if event.shift and self.points:
                 anchor = self.points[-1] if self.shape == 'POLY' else self.points[0]
@@ -378,7 +382,9 @@ class HARDFLOW_OT_draw(Operator):
             self.grid_size = max(0.001, min(100.0, self.grid_size * factor))
 
         elif event.type in {'PAGE_UP', 'PAGE_DOWN'} and event.value == 'PRESS':
-            step = self.grid_size
+            # Depth steps by one grid cell; Shift = a fine 1/10-cell step for
+            # measured, incremental depth control.
+            step = self.grid_size * (0.1 if event.shift else 1.0)
             self.depth = max(0.0, self.depth
                              + (step if event.type == 'PAGE_UP' else -step))
 
@@ -590,20 +596,23 @@ class HARDFLOW_OT_draw(Operator):
             if s is not None:
                 self.points[i] = (s[0], s[1])
 
-    def _snap_screen(self, context, screen_co):
+    def _snap_screen(self, context, screen_co, force_grid=False):
         """Snap the cursor in order: 1) vertex/edge geometry, 2) world grid,
-        3) raw. self._snap_hit is set for the visual marker."""
+        3) raw. self._snap_hit is set for the visual marker. `force_grid` (Ctrl
+        held) forces the world-grid snap on and skips geometry snap -- a momentary
+        precise incremental snap regardless of the persistent toggles."""
         self._snap_hit = None
 
-        # 1) geometry snap -- if present overrides grid (precision snap)
-        if self.geo and self._geo_enabled:
+        # 1) geometry snap -- if present overrides grid (precision snap). Ctrl
+        # (force_grid) bypasses it to lock straight onto the grid.
+        if self.geo and self._geo_enabled and not force_grid:
             hit = self._geo_snap(context, screen_co)
             if hit is not None:
                 self._snap_hit = hit
                 return (hit[0][0], hit[0][1])
 
         # 2) world-scale grid snap
-        if self.snap:
+        if self.snap or force_grid:
             prefs = get_prefs(context)
             region, rv3d = context.region, context.region_data
             origin, right, up, normal = self._plane_basis(context)
@@ -857,8 +866,8 @@ class HARDFLOW_OT_draw(Operator):
         lines = [
             status,
             ("Q/W/E/R/T/Y/U shape    type = exact size    < > plane    "
-             "Shift+< > rotate    Ctrl+Wheel grid    PgUp/Dn depth    "
-             "H origin    G stamp    S save", dim),
+             "Shift+< > rotate    Ctrl=snap grid    Ctrl+Wheel grid    "
+             "PgUp/Dn depth (Shift fine)    H origin    G stamp    S save", dim),
         ]
         # Surface the in-draw operation state only when something is active.
         bits = []
