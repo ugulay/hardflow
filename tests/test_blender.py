@@ -923,10 +923,14 @@ def test_boolean_cut_ngon_cleanup_pipeline():
 def test_topology_prefs_registered():
     # The Super Modeling Mode topology toggles register with safe (off) defaults,
     # so enabling them is opt-in and the default cut/bevel behaviour is unchanged.
+    # Read through get_prefs (not a raw addons[_PKG] lookup) so this passes both
+    # under the Blender binary (addon enabled -> the real prefs) and a standalone
+    # bpy module (registered but not enabled -> the RNA-declared defaults).
     _reset()
     hardflow.register()
     try:
-        prefs = bpy.context.preferences.addons[_PKG].preferences
+        from hardflow.preferences import get_prefs
+        prefs = get_prefs(bpy.context)
         assert prefs.cut_dissolve_ngons is False
         assert prefs.smart_bevel_default is False
     finally:
