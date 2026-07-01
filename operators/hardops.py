@@ -11,7 +11,82 @@ import bpy
 from bpy.types import Operator
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty
 
-from ..core import geometry, boolean, hardsurface
+from ..core import geometry, boolean, hardsurface, modifiers
+
+
+def sort_modifier_stack(obj, mirror_after_boolean=True):
+    """Reorder `obj`'s modifier stack into hard-surface order (Booleans on top,
+    Bevel below, Weighted Normal / Triangulate at the bottom; Mirror above or
+    below the booleans per the toggle). Pure decision in core.modifiers; this
+    only replays the resulting move plan through Blender's modifier API. Returns
+    the number of moves made (0 when already sorted). Safe on any object."""
+    mods = [(m.name, m.type) for m in obj.modifiers]
+    if len(mods) < 2:
+        return 0
+    desired = modifiers.sorted_order(mods, mirror_after_boolean)
+    current = [name for name, _t in mods]
+    moves = modifiers.reorder_moves(current, desired)
+    for src, dst in moves:
+        try:
+            obj.modifiers.move(src, dst)
+        except (RuntimeError, IndexError):
+            pass
+    return len(moves)
+
+
+# Modifier types the Smooth-by-Angle modifier would fight with (they already own
+# split-normal shading), so we don't double them up.
+_SMOOTH_ANGLE_NODE = "Smooth by Angle"
+
+
+def ensure_smooth_by_angle(obj, angle):
+    """Give `obj` modern angle-based smooth shading. Blender 4.1 removed
+    ``mesh.use_auto_smooth`` in favour of the geometry-nodes "Smooth by Angle"
+    modifier, so on 4.1+ we add/refresh that modifier (via the native
+    ``shade_auto_smooth`` operator, which appends the essentials node group);
+    on older builds we fall back to the legacy attribute. Returns True when angle
+    smoothing is in effect. Kept defensive: a missing operator / attribute just
+    means flat-face shading, never a crash."""
+    me = obj.data
+    # Legacy path (Blender < 4.1): the mesh still carries the flag.
+    if hasattr(me, "use_auto_smooth"):
+        me.use_auto_smooth = True
+        me.auto_smooth_angle = angle
+        return True
+    # Modern path (Blender 4.1+): a "Smooth by Angle" geometry-nodes modifier.
+    existing = next((m for m in obj.modifiers
+                     if m.type == 'NODES' and m.node_group is not None
+                     and m.node_group.name.startswith(_SMOOTH_ANGLE_NODE)), None)
+    if existing is not None:
+        _set_smooth_angle_input(existing, angle)
+        return True
+    try:
+        import bpy
+        with bpy.context.temp_override(active_object=obj, object=obj,
+                                       selected_objects=[obj]):
+            bpy.ops.object.shade_auto_smooth(angle=angle)
+        mod = next((m for m in obj.modifiers
+                    if m.type == 'NODES' and m.node_group is not None
+                    and m.node_group.name.startswith(_SMOOTH_ANGLE_NODE)), None)
+        return mod is not None
+    except (RuntimeError, AttributeError, TypeError) as ex:  # noqa: BLE001
+        print("[Hardflow] smooth-by-angle skipped: %s" % ex)
+        return False
+
+
+def _set_smooth_angle_input(mod, angle):
+    """Update the angle input on an existing Smooth-by-Angle modifier (its node
+    group exposes the threshold as the 'Angle' input socket)."""
+    try:
+        ng = mod.node_group
+        for item in ng.interface.items_tree:
+            if (getattr(item, "item_type", "") == 'SOCKET'
+                    and getattr(item, "in_out", "") == 'INPUT'
+                    and item.name == "Angle"):
+                mod[item.identifier] = angle
+                return
+    except (AttributeError, KeyError, TypeError):
+        pass
 
 
 class HARDFLOW_OT_edge_weight(Operator):
@@ -224,10 +299,10 @@ class HARDFLOW_OT_smart_sharpen(Operator):
         n = geometry.mark_sharp_edges(
             obj, self.angle, set_sharp=True, set_bevel_weight=True,
             crease=crease, shade_smooth=True)
-        # Pre-4.1 needs auto-smooth on for sharp edges to affect shading; 4.1+
-        # dropped the flag (sharp edges are always live).
-        if hasattr(obj.data, "use_auto_smooth"):
-            obj.data.use_auto_smooth = True
+        # Angle-based smooth shading: the native "Smooth by Angle" modifier on
+        # Blender 4.1+ (use_auto_smooth was removed there), the legacy flag on
+        # older builds. Without this, sharp-edge shading is a no-op on 4.2+.
+        ensure_smooth_by_angle(obj, self.angle)
         width = (hardsurface.adaptive_bevel_width(tuple(obj.dimensions))
                  if self.auto_width else self.width)
         self._bevel_mod(obj, width)
@@ -237,6 +312,9 @@ class HARDFLOW_OT_smart_sharpen(Operator):
             old = obj.modifiers.get(self.WN_NAME)
             if old is not None:
                 obj.modifiers.remove(old)
+        # Keep the stack in hard-surface order after touching it (booleans stay
+        # on top, this bevel below them, the weighted normal at the bottom).
+        sort_modifier_stack(obj)
         return n
 
     def execute(self, context):
@@ -266,6 +344,114 @@ class HARDFLOW_OT_smart_sharpen(Operator):
         col.prop(self, "profile")
         col.prop(self, "use_weighted_normal")
         col.prop(self, "set_crease")
+
+
+class HARDFLOW_OT_sort_modifiers(Operator):
+    bl_idname = "object.hardflow_sort_modifiers"
+    bl_label = "Sort Modifier Stack"
+    bl_description = ("Reorder the active object's modifiers into hard-surface "
+                      "order: Booleans on top, Bevel below them, Weighted "
+                      "Normal / Triangulate at the bottom. Mirror sits below the "
+                      "booleans (or above, with 'Mirror First')")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    mirror_after_boolean: BoolProperty(
+        name="Booleans First",
+        description="Keep booleans at the very top and place a Mirror just below "
+                    "them; turn off to mirror the raw form first (Mirror above "
+                    "the booleans)",
+        default=True,
+    )
+    all_selected: BoolProperty(
+        name="All Selected",
+        description="Sort every selected mesh, not just the active one",
+        default=False,
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return obj is not None and len(obj.modifiers) > 1
+
+    def execute(self, context):
+        if self.all_selected:
+            objs = [o for o in context.selected_objects if o.modifiers]
+        else:
+            objs = [context.active_object]
+        moved = 0
+        for obj in objs:
+            moved += sort_modifier_stack(obj, self.mirror_after_boolean)
+        if moved:
+            self.report({'INFO'}, "Modifier stack sorted (%d move(s))" % moved)
+        else:
+            self.report({'INFO'}, "Modifier stack already in order")
+        return {'FINISHED'}
+
+
+class HARDFLOW_OT_fix_shading(Operator):
+    bl_idname = "object.hardflow_fix_shading"
+    bl_label = "Fix Boolean Shading"
+    bl_description = ("Kill the smeared shading a boolean leaves on n-gon faces: "
+                      "angle-based smooth shading + a face-area Weighted Normal so "
+                      "flat faces around the cut read crisp. Re-runs update in "
+                      "place; the stack is left in hard-surface order")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    FIX_WN_NAME = "HF_FixNormals"
+
+    angle: FloatProperty(
+        name="Smooth Angle", subtype='ANGLE',
+        default=math.radians(30.0), min=math.radians(1.0), max=math.radians(180.0),
+    )
+    use_weighted_normal: BoolProperty(
+        name="Weighted Normal", default=True,
+        description="Add a face-area Weighted Normal modifier (the workhorse "
+                    "boolean-shading fix)",
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (obj is not None and obj.type == 'MESH'
+                and context.mode == 'OBJECT')
+
+    def _process(self, obj):
+        ensure_smooth_by_angle(obj, self.angle)
+        # A boolean cut breaks up faces; make sure they carry smooth shading so
+        # angle-based smoothing + the weighted normal have something to act on.
+        for f in obj.data.polygons:
+            f.use_smooth = True
+        if self.use_weighted_normal:
+            wn = obj.modifiers.get(self.FIX_WN_NAME)
+            if wn is None or wn.type != 'WEIGHTED_NORMAL':
+                if wn is not None:
+                    obj.modifiers.remove(wn)
+                wn = obj.modifiers.new(self.FIX_WN_NAME, 'WEIGHTED_NORMAL')
+            wn.keep_sharp = True
+            wn.weight = 50
+            wn.mode = 'FACE_AREA'
+        else:
+            old = obj.modifiers.get(self.FIX_WN_NAME)
+            if old is not None:
+                obj.modifiers.remove(old)
+        sort_modifier_stack(obj)
+
+    def execute(self, context):
+        meshes = [o for o in context.selected_objects if o.type == 'MESH']
+        if not meshes and context.active_object is not None:
+            meshes = [context.active_object]
+        done = 0
+        for obj in meshes:
+            try:
+                self._process(obj)
+                done += 1
+            except Exception as ex:  # noqa: BLE001 -- one bad mesh can't abort all
+                self.report({'WARNING'}, "Fix Shading failed on %s: %s"
+                            % (obj.name, ex))
+        if not done:
+            return {'CANCELLED'}
+        self.report({'INFO'}, "Shading fixed on %d object(s)" % done)
+        return {'FINISHED'}
 
 
 class HARDFLOW_OT_recalc_normals(Operator):

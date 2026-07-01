@@ -276,3 +276,74 @@ def stash_cutter(context, cutter, target):
     # When the target moves/rotates, the cutter follows; keep its world pose fixed.
     cutter.parent = target
     cutter.matrix_parent_inverse = target.matrix_world.inverted_safe()
+
+
+# --- shading fix: snapshot clean normals, transfer them back after a cut ------
+
+HELPER_COLLECTION = "Hardflow Helpers"
+
+
+def helper_collection(context):
+    """Get/create a hidden collection for internal helper objects (the normal
+    source snapshots). Excluded from selection and hidden in render."""
+    coll = bpy.data.collections.get(HELPER_COLLECTION)
+    if coll is None:
+        coll = bpy.data.collections.new(HELPER_COLLECTION)
+        context.scene.collection.children.link(coll)
+        coll.hide_render = True
+        coll.hide_viewport = True
+    return coll
+
+
+def capture_normal_source(context, obj, name_suffix="_normals"):
+    """Snapshot `obj`'s CURRENT mesh (its clean, pre-cut normals) into a hidden
+    helper object parented to it, and return that helper. Call this BEFORE a
+    destructive boolean; afterwards `add_normal_transfer` binds a Data Transfer
+    modifier that reflects these clean normals onto the n-gon faces the cut
+    leaves, so the shading never smears. Re-uses / refreshes an existing snapshot
+    for the same object so re-cuts don't pile up helpers."""
+    src_name = obj.name + name_suffix
+    src = bpy.data.objects.get(src_name)
+    fresh = obj.data.copy()
+    if src is not None and src.get("hf_normal_source_of") == obj.name:
+        old = src.data
+        src.data = fresh
+        if old is not None and old.users == 0:
+            bpy.data.meshes.remove(old)
+    else:
+        src = bpy.data.objects.new(src_name, fresh)
+        src["hf_normal_source_of"] = obj.name
+        helper_collection(context).objects.link(src)
+    src.hide_viewport = True
+    src.hide_render = True
+    src.hide_select = True
+    src.parent = obj
+    src.matrix_parent_inverse = obj.matrix_world.inverted_safe()
+    return src
+
+
+def add_normal_transfer(obj, source, name="HF_FixShading"):
+    """Bind a Data Transfer modifier on `obj` that copies `source`'s per-face
+    (loop) normals back onto `obj`, using nearest-polygon-normal mapping so the
+    n-gon faces a boolean leaves take the underlying flat surface normal instead
+    of a smeared average. Custom split normals are enabled so the transfer shows;
+    Blender < 4.1 gated that behind `use_auto_smooth`. Idempotent (updates the
+    same modifier); wrapped so an API mismatch degrades quietly. Returns the
+    modifier or None."""
+    try:
+        me = obj.data
+        if hasattr(me, "use_auto_smooth"):
+            me.use_auto_smooth = True
+        mod = obj.modifiers.get(name)
+        if mod is None or mod.type != 'DATA_TRANSFER':
+            if mod is not None:
+                obj.modifiers.remove(mod)
+            mod = obj.modifiers.new(name, 'DATA_TRANSFER')
+        mod.object = source
+        mod.use_loop_data = True
+        mod.data_types_loops = {'CUSTOM_NORMAL'}
+        mod.loop_mapping = 'NEAREST_POLYNOR'
+        return mod
+    except (RuntimeError, AttributeError, TypeError) as ex:  # noqa: BLE001
+        print("[Hardflow] boolean normal transfer skipped: %s" % ex)
+        return None

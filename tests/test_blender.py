@@ -2678,6 +2678,35 @@ def test_dissolve_boolean_ngons_cleans_redundant_vert():
     assert len(ob.data.polygons[0].vertices) == 4
 
 
+def test_sort_modifier_stack_orders_hardsurface():
+    _reset()
+    from hardflow.operators.hardops import sort_modifier_stack
+    cube = _add_cube("C")
+    cube.modifiers.new("HF_WeightedNormal", 'WEIGHTED_NORMAL')
+    cube.modifiers.new("HF_Bevel", 'BEVEL')
+    cube.modifiers.new("HF_Bool", 'BOOLEAN')          # appended last (bottom)
+    sort_modifier_stack(cube)
+    names = [m.name for m in cube.modifiers]
+    assert names == ["HF_Bool", "HF_Bevel", "HF_WeightedNormal"], names
+    assert sort_modifier_stack(cube) == 0             # idempotent: nothing to move
+
+
+def test_capture_normal_source_and_transfer():
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    src = boolean.capture_normal_source(bpy.context, target)
+    assert src is not None and src.name == "Target_normals"
+    assert src.data is not target.data                # an independent snapshot
+    assert src.parent is target
+    mod = boolean.add_normal_transfer(target, src)
+    assert mod is not None and mod.type == 'DATA_TRANSFER'
+    assert mod.object is src
+    assert 'CUSTOM_NORMAL' in mod.data_types_loops
+    # a re-capture refreshes the SAME helper (re-cuts don't pile up snapshots)
+    src2 = boolean.capture_normal_source(bpy.context, target)
+    assert src2 is src
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

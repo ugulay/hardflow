@@ -319,6 +319,21 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "(core.geometry.dissolve_boolean_ngons)",
         default=False,
     )
+    fix_shading_after_cut: BoolProperty(
+        name="Fix Shading After Cut",
+        description="Snapshot the target's clean normals before a destructive "
+                    "cut and bind a Data Transfer modifier afterwards, so the "
+                    "n-gon faces the boolean leaves shade flat instead of "
+                    "smearing (the boolean-shading fix)",
+        default=False,
+    )
+    sort_modifiers_after_cut: BoolProperty(
+        name="Auto-Sort Modifier Stack",
+        description="After a non-destructive cut, reorder the target's modifiers "
+                    "into hard-surface order (Booleans on top, Bevel below, "
+                    "Weighted Normal at the bottom)",
+        default=True,
+    )
     live_boolean_preview: BoolProperty(
         name="Live Boolean Preview",
         description="While drawing a Cut/Make/Intersect, show the actual boolean "
@@ -443,6 +458,8 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "multi_object")
         col.prop(self, "cleanup_after_cut")
         col.prop(self, "cut_dissolve_ngons")
+        col.prop(self, "fix_shading_after_cut")
+        col.prop(self, "sort_modifiers_after_cut")
         col.prop(self, "live_boolean_preview")
         col.prop(self, "live_preview_max_verts")
         col.prop(self, "draw_inset")

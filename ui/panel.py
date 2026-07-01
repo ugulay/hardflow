@@ -136,6 +136,11 @@ class HARDFLOW_PT_tools(Panel):
         # One-shot hard-surface init: sharpen + bevel + weighted normal.
         col.operator("object.hardflow_smart_sharpen", text="Smart Sharpen",
                      icon='MOD_BEVEL')
+        row = col.row(align=True)
+        row.operator("object.hardflow_fix_shading", text="Fix Shading",
+                     icon='NODE_MATERIAL')
+        row.operator("object.hardflow_sort_modifiers", text="Sort Stack",
+                     icon='SORTSIZE')
 
         # 4. Curves -- pipes, cables, swept profiles.
         col = layout.column(align=True)
@@ -278,8 +283,10 @@ class HARDFLOW_PT_cutter_options(Panel):
         col.label(text="Live keys while drawing: -/= , . A D B C J",
                   icon='INFO')
         col.separator()
-        col.label(text="Topology")
+        col.label(text="Topology & Shading")
         col.prop(prefs, "cut_dissolve_ngons")
+        col.prop(prefs, "fix_shading_after_cut")
+        col.prop(prefs, "sort_modifiers_after_cut")
         col.prop(prefs, "smart_bevel_default")
 
 
@@ -298,6 +305,10 @@ class HARDFLOW_PT_modifiers(Panel):
         if obj is None or not obj.modifiers:
             layout.label(text="No modifiers on the active object", icon='INFO')
             return
+        # One-click hard-surface sort: booleans on top, bevel below, weighted
+        # normal at the bottom (core.modifiers ordering).
+        layout.operator("object.hardflow_sort_modifiers",
+                        text="Sort (Hard-Surface Order)", icon='SORTSIZE')
         # Compact mod-list: name + show/hide + move + apply + remove. Drives
         # Blender's own modifier operators (a compact modifier-stack manager).
         box = layout.box().column(align=True)

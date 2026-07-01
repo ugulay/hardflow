@@ -39,6 +39,7 @@ parallax = _load("parallax")
 hud = _load("hud")
 hardsurface = _load("hardsurface")
 topology = _load("topology")
+modifiers = _load("modifiers")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1300,6 +1301,52 @@ def test_support_loop_positions_segment_aware():
     # fractions form respects segments too (offset 0.01625 over a 0.5 flank)
     fr = bevel.support_loop_fractions(0.1, 0.5, tightness=0.5, segments=3)
     assert fr == [0.0325]
+
+
+# --- modifiers: hard-surface stack ordering ---------------------------------
+
+def test_modifier_sort_boolean_top_wn_bottom():
+    mods = [("HF_WeightedNormal", 'WEIGHTED_NORMAL'),
+            ("HF_Bevel", 'BEVEL'),
+            ("HF_Bool", 'BOOLEAN')]
+    assert modifiers.sorted_order(mods) == [
+        "HF_Bool", "HF_Bevel", "HF_WeightedNormal"]
+
+
+def test_modifier_sort_mirror_toggle():
+    mods = [("HF_Bool", 'BOOLEAN'), ("Mirror", 'MIRROR'), ("HF_Bevel", 'BEVEL')]
+    # default: booleans first, mirror just below them
+    assert modifiers.sorted_order(mods, mirror_after_boolean=True) == [
+        "HF_Bool", "Mirror", "HF_Bevel"]
+    # mirror-first: the mirror rises above the booleans
+    assert modifiers.sorted_order(mods, mirror_after_boolean=False) == [
+        "Mirror", "HF_Bool", "HF_Bevel"]
+
+
+def test_modifier_sort_stable_for_unknowns_and_equal_rank():
+    # two booleans keep their input order; an unknown modifier stays in the
+    # middle band and doesn't jump over the bevel/weighted-normal anchors
+    mods = [("B2", 'BOOLEAN'), ("B1", 'BOOLEAN'), ("Weird", 'CAST'),
+            ("HF_WeightedNormal", 'WEIGHTED_NORMAL'), ("HF_Bevel", 'BEVEL')]
+    assert modifiers.sorted_order(mods) == [
+        "B2", "B1", "Weird", "HF_Bevel", "HF_WeightedNormal"]
+
+
+def test_modifier_reorder_moves_apply_to_desired():
+    current = ["WN", "BEV", "BOOL"]
+    desired = ["BOOL", "BEV", "WN"]
+    work = list(current)
+    for src, dst in modifiers.reorder_moves(current, desired):
+        work.insert(dst, work.pop(src))     # mirrors bpy modifiers.move(src, dst)
+    assert work == desired
+
+
+def test_modifier_is_sorted_and_noop_moves():
+    mods = [("HF_Bool", 'BOOLEAN'), ("HF_Bevel", 'BEVEL'),
+            ("HF_WeightedNormal", 'WEIGHTED_NORMAL')]
+    assert modifiers.is_sorted(mods)
+    names = [n for n, _t in mods]
+    assert modifiers.reorder_moves(names, names) == []
 
 
 def _run_all():

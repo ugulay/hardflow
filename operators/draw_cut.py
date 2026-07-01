@@ -1535,9 +1535,18 @@ class HARDFLOW_OT_draw(Operator):
         prefs = get_prefs(context)
         cleanup = prefs.cleanup_after_cut
         dissolve = prefs.cut_dissolve_ngons
+        fix_shading = prefs.fix_shading_after_cut
         op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION',
               'INTERSECT': 'INTERSECT'}.get(self.mode)
         failures, fallbacks = [], []
+        # Fix Shading: snapshot each target's clean normals BEFORE the cut, so the
+        # transfer bound afterwards reflects the pre-cut surface onto the n-gons.
+        normal_sources = {}
+        if fix_shading:
+            for t in targets:
+                if t is not None and t.type == 'MESH':
+                    normal_sources[t.name] = boolean.capture_normal_source(
+                        context, t)
 
         # Build the chain. SLICE = DIFFERENCE on the target + INTERSECT on a
         # duplicate (kept as the carved-off piece); CUT/MAKE/INTERSECT = the same
@@ -1571,6 +1580,11 @@ class HARDFLOW_OT_draw(Operator):
                     if dissolve:
                         # Re-quad the n-gons the cut left (topology cleanup, opt-in).
                         geometry.dissolve_boolean_ngons(tgt)
+                    # Fix Shading: bind the pre-cut normal snapshot back onto the
+                    # cut target so its new n-gons shade flat, not smeared.
+                    src = normal_sources.get(tgt.name)
+                    if src is not None:
+                        boolean.add_normal_transfer(tgt, src)
             # A rolled-back slice leaves an inconsistent spare duplicate (its
             # target was restored); drop it (and its copied mesh) rather than
             # orphan it.
@@ -1580,6 +1594,15 @@ class HARDFLOW_OT_draw(Operator):
                     bpy.data.objects.remove(other, do_unlink=True)
                 if me is not None and me.users == 0:
                     bpy.data.meshes.remove(me)
+            # A failed cut leaves the targets untouched, so the pre-cut normal
+            # snapshots are useless -- drop them rather than orphan hidden helpers.
+            if failures and normal_sources:
+                for src in list(normal_sources.values()):
+                    sme = src.data
+                    if src.name in bpy.data.objects:
+                        bpy.data.objects.remove(src, do_unlink=True)
+                    if sme is not None and sme.users == 0:
+                        bpy.data.meshes.remove(sme)
         finally:
             for c in cmds:
                 c.free()             # drop every snapshot datablock
@@ -1608,6 +1631,14 @@ class HARDFLOW_OT_draw(Operator):
             for t in targets:
                 boolean.add_boolean(t, cutter, op, solver)
         boolean.stash_cutter(context, cutter, targets[0])
+        # A fresh HF_Bool appends to the BOTTOM of the stack -- below any existing
+        # Bevel / Weighted Normal, which would cut the wrong (already-shaded)
+        # result. Reorder into hard-surface order (booleans on top) so the live
+        # preview matches a later bake.
+        if get_prefs(context).sort_modifiers_after_cut:
+            from .hardops import sort_modifier_stack
+            for t in targets:
+                sort_modifier_stack(t)
 
     def _cleanup(self, context):
         self._clear_live_boolean(context)  # strip any temp preview mods first
