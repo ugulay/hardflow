@@ -36,6 +36,7 @@ command = _load("command")
 bevel = _load("bevel")
 preview_cache = _load("preview_cache")
 parallax = _load("parallax")
+hud = _load("hud")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1093,6 +1094,60 @@ def test_parallax_delta_uv_offset_limited():
     assert abs(dux) < 1e-9 and abs(duy) < 1e-9
     dux, duy = parallax.parallax_delta_uv((0.6, 0.0, 0.8), 0.1, 8)
     assert abs(dux - (0.1 * 0.6 / 8)) < 1e-9 and abs(duy) < 1e-9
+
+
+# --- hud: shortcut bar + alignment guide math (Module 2 / viewport polish) ---
+
+def test_shortcut_bar_layout_centered():
+    lay = hud.shortcut_bar_layout([100.0, 100.0], 1000.0, gap=10.0)
+    # two 100px chips + one 10px gap = 210 total, centered in 1000 -> x0 = 395
+    assert abs(lay['bar'][2] - 210.0) < 1e-9
+    assert abs(lay['chips'][0][0] - 395.0) < 1e-9
+    assert abs(lay['chips'][1][0] - (395.0 + 110.0)) < 1e-9
+
+
+def test_shortcut_bar_layout_left_anchors_when_too_wide():
+    # a row wider than the viewport minus margins falls back to margin-anchored
+    lay = hud.shortcut_bar_layout([600.0, 600.0], 400.0, margin=24.0, gap=8.0)
+    assert lay['chips'][0][0] == 24.0
+
+
+def test_shortcut_bar_layout_empty():
+    lay = hud.shortcut_bar_layout([], 800.0)
+    assert lay['chips'] == [] and lay['bar'][2] == 0.0
+    # non-positive widths are dropped
+    lay = hud.shortcut_bar_layout([0.0, -5.0], 800.0)
+    assert lay['chips'] == []
+
+
+def test_axis_alignment_vertical_horizontal_none():
+    assert hud.axis_alignment((100, 10), (103, 400), tol=6.0) == 'V'
+    assert hud.axis_alignment((10, 200), (500, 203), tol=6.0) == 'H'
+    assert hud.axis_alignment((10, 10), (500, 400), tol=6.0) is None
+    # both within tol -> vertical wins (coincident point)
+    assert hud.axis_alignment((100, 100), (102, 102), tol=6.0) == 'V'
+
+
+def test_alignment_guides_span_and_dedupe():
+    region = (1920, 1080)
+    # two anchors on the exact same vertical line; one off on its own
+    anchors = [(300, 500), (300, 900), (800, 200)]
+    # cursor shares X with the first two anchors (300) and Y with none
+    guides = hud.alignment_guides(anchors, (301, 600), region, tol=6.0)
+    # the two anchors at x=300 collapse to a single guide
+    assert len(guides) == 1
+    (p1, p2) = guides[0]
+    assert p1 == (300, 0.0) and p2 == (300, 1080)
+
+
+def test_alignment_guides_horizontal():
+    region = (1000, 800)
+    guides = hud.alignment_guides([(400, 250)], (900, 252), region, tol=6.0)
+    assert guides == [((0.0, 250), (1000, 250))]
+
+
+def test_alignment_guides_none():
+    assert hud.alignment_guides([(10, 10)], (500, 500), (800, 600)) == []
 
 
 def _run_all():

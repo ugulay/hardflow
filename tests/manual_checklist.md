@@ -677,5 +677,28 @@ Enable **Preferences → Parallax Occlusion** (and set a **Parallax Depth**, e.g
 
 ---
 
+## Viewport polish — shortcut bar + alignment guides (Module 2)
+
+- [ ] Start **Draw Cut** (Ctrl+Shift+D). A **premium translucent shortcut bar**
+      sits centered along the bottom: chips like `[Tab] Cut`, `[B] Bevel`,
+      `[J] Live Bool`, `[V] Vertex`, `[Enter] Apply`. Toggling **B / C / J / M /
+      V / N** flips the matching chip's key box to the **accent (ON)** color live;
+      **Tab** updates the mode chip label.
+- [ ] Place a first point, then move the cursor so it is roughly **above** or
+      **level with** that point: a **dashed full-span guide line** snaps on
+      (vertical when square in X, horizontal when square in Y) and disappears when
+      you move off. With several points placed, guides appear for whichever ones
+      you line up with (near-duplicates collapse to one line).
+- [ ] The top-left HUD is now shorter (status + one hint line) since the bar
+      carries the toggles — nothing important was lost.
+- [ ] Enter **HardFlow Mode** (Ctrl+Shift+X). Same bottom bar (`[Tab] Knife`,
+      `[←/→] Plane: …`, `[X] Snap`, `[Enter] Commit`); the **Depth** chip is
+      accent-lit only on the **Extrude** verb. Alignment guides also light up
+      against placed points, alongside the existing per-plane axis guides.
+- [ ] At a **narrow viewport width** the bar left-anchors instead of sliding its
+      first chips off-screen (never clipped on the left).
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.

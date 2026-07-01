@@ -377,6 +377,13 @@ class _HardflowModeModal:
             closed = len(self.world_points) >= 3 and self._cursor is None
             hud.draw_shape(preview, line, closed=closed)
 
+        # Dynamic alignment guides: a dashed full-span line when the live cursor is
+        # square with a placed point (complements the per-plane axis guides below).
+        if screen and self._cursor is not None:
+            c = raycast.world_to_screen(region, rv3d, self._cursor)
+            if c is not None:
+                hud.draw_alignment_guides(region, screen, (c[0], c[1]))
+
         # Live cursor: translucent in-plane axis guides + a ring snap marker
         # colored by what it locked onto (premium feedback over the plain box).
         if self._cursor is not None:
@@ -401,10 +408,20 @@ class _HardflowModeModal:
                    ("   " + depth) if depth else ""))
         hud.draw_hud(region, [
             (info, accent),
-            ("Click add   Backspace undo   Tab verb   ←/→ plane   "
-             "Z / Enter / dbl-click commit   X snap   Esc cancel   [%s]"
-             % snap_txt, (0.72, 0.72, 0.72, 1.0)),
+            ("Click add   Z / dbl-click commit   [%s]" % snap_txt,
+             (0.72, 0.72, 0.72, 1.0)),
         ], title="HardFlow Mode · %s" % self.verb, accent=accent)
+
+        # Premium shortcut bar along the bottom with the live engaged state.
+        hud.draw_shortcut_bar(region, [
+            ("Tab", self.verb),
+            ("←/→", "Plane: %s" % self._plane),
+            ("PgUp/Dn", "Depth", self._active_verb == 'EXTRUDE'),
+            ("X", "Snap", self.snap),
+            ("Bksp", "Undo"),
+            ("Enter", "Commit"),
+            ("Esc", "Cancel"),
+        ])
 
 
 class HARDFLOW_OT_mode_knife(_HardflowModeModal, Operator):
