@@ -88,7 +88,7 @@ hard-surface loop:
   auto-scale, insert-grid snap, material inserts, and asset-pack export.
 
 The pure-logic core is unit-tested (114/114, no Blender needed) and every bpy path
-is verified headless in Blender 5.1.2 (121 tests); the modal tools' interactive
+is verified headless in Blender 5.1.2 (122 tests); the modal tools' interactive
 feel is checked via a manual checklist, so bug reports are very welcome.
 
 Repo / install: {{repo link}}

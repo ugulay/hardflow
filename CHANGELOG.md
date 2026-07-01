@@ -5,6 +5,8 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+## [1.17.1] — 2026-07-02
+
 ### Fixed
 - **HardFlow Mode Knife now follows the construction plane.** The Knife verb
   always swept the score along the camera **view** direction (Blender
