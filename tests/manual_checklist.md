@@ -581,6 +581,27 @@ Setup: any scene (an active object sets the plane origin; else the 3D cursor).
       undo step). Watch for: a degenerate (self-crossing / collinear) footprint —
       it should report "degenerate footprint", not crash.
 
+**HardFlow Mode Cut / Add / Slice / Intersect** (v1.17 — boolean verbs;
+`mesh.hardflow_mode_cut`, header menu ▸ Edit ▸ "HardFlow Mode: Cut", or `Tab`
+from any verb):
+
+Setup: an active **mesh** (the boolean target). Use the **SURFACE** plane (`→`)
+and draw the footprint on a face.
+- [ ] **`Tab`** cycles Knife → Extrude → **Cut → Add → Slice → Intersect** → Knife;
+      the HUD title + bottom bar show the live verb.
+- [ ] **Cut**: draw a footprint on a face, `Enter`/double-click → a notch is
+      **subtracted** clean through the mesh (auto-pierced). One `Ctrl+Z` reverts.
+- [ ] **Add**: the footprint becomes a **boss standing proud** of the surface by
+      the `PageUp`/`PageDown` depth (unioned to the mesh).
+- [ ] **Slice**: the mesh is cut in two — the carved piece stays as a separate
+      `…_slice` object.
+- [ ] **Intersect**: only the mesh volume **inside** the drawn column survives.
+- [ ] A degenerate footprint reports cleanly; a boolean that can't resolve reports
+      a solver message and leaves the mesh **unchanged** (never half-cut). No
+      `hf_mode_cutter` object is left in the scene after a commit.
+- [ ] Without an active mesh (e.g. after Extrude created a floating solid then you
+      Tab to Cut on empty selection) it reports "needs an active mesh", no crash.
+
 **Command adoption spot-check** — the `_FaceDragModal` tools (Push/Pull, Offset,
 Edge Bevel, Loop Cut) now run their live preview through
 `base.MeshSnapshotCommand` + a per-session `CommandManager`, and
@@ -650,6 +671,26 @@ and pick any image (or set an already-loaded one via the datablock picker).
       rename, and remove all work. **From Grid** fills an equal grid to then tweak.
 - [ ] A decal placed from a **custom (unequal) region** carries that region's
       aspect ratio and shows only that slice of the sheet.
+
+### Background removal / chroma key (v1.17)
+
+Setup: load a trim sheet whose graphics sit on a **flat colour** background (a
+green screen, a solid matte). Panel ▸ Trim Sheet Editor ▸ **Remove Background…**.
+
+- [ ] The dialog shows **Key Colour** (swatch), **Tolerance**, **Edge Softness**,
+      **Sample From Corner**, **Work on a Copy**.
+- [ ] Click the swatch → the **eyedropper** samples the background colour straight
+      off the displayed image (open the Image Editor or the trim canvas first).
+- [ ] **Apply** with *Work on a Copy* on → a **`<name>_cutout`** image is created,
+      becomes the active sheet, the carved **regions carry over**, and the original
+      is untouched. The background is now transparent (view over a checker / in the
+      decal material); the graphics keep their alpha.
+- [ ] **Tolerance** widens/narrows what counts as background; **Edge Softness**
+      gives an anti-aliased (feathered) edge rather than a hard jagged cut.
+- [ ] **Sample From Corner** ignores the swatch and keys the sheet-corner colour.
+- [ ] With *Work on a Copy* off it edits the sheet **in place**; the info bar
+      reports the pixel count made transparent. An image with no alpha / no pixel
+      data reports cleanly, no crash.
 
 ---
 

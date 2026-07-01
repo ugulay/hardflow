@@ -716,6 +716,28 @@ is in `tests/manual_checklist.md`.
       seed regions from a grid, and manage the region list; a "Trim Sheet
       Editor..." entry in the header Decals menu.
 
+## v1.17 — Draw-to-cut booleans + background removal
+HardFlow Mode could draw-to-*score* (Knife) and draw-to-*solid* (Extrude) but not
+draw-to-*cut*; and a trim sheet shot on a green screen had no way to become
+transparent. This closes both. Verified with 114 pure tests + the headless suite
+(boolean-verb volume checks + chroma-key in-place/copy/corner-sample); the modal
+interactions are in `tests/manual_checklist.md`.
+- [x] **HardFlow Mode boolean verbs** — `HARDFLOW_OT_mode_cut` + `_build_boolean`
+      add Cut / Add / Slice / Intersect to the `Tab` verb cycle: the footprint is
+      extruded into a prism cutter (`_boolean_cutter_mesh`; Cut/Slice/Intersect
+      auto-pierce via `_pierce_thickness`, Add stands a boss proud of the surface)
+      and boolean'd against the active mesh as an atomic `MacroCommand` of
+      `base.BooleanCutCommand`s (solver fallback + normal repair; Slice keeps the
+      intersect duplicate). Menu entry "HardFlow Mode: Cut".
+- [x] **Trim-sheet background removal (chroma key)** — `HARDFLOW_OT_trim_chroma_key`
+      makes a picked colour transparent (eyedropper or corner-sample, `Tolerance`
+      + `Edge Softness` feather; copy `<name>_cutout` with regions carried, or
+      in-place). Pure pixel math in `core/atlas.py` (`color_distance`, `pixel_rgb`,
+      `chroma_key`); numpy fast path + pure-list fallback. Panel button + N-panel.
+- [x] **SURFACE-plane "goes behind" fix** — HardFlow Mode + the draw tool now hold
+      the last good surface plane (`_surface_hold`) across a ray miss instead of
+      dropping to a VIEW plane through the object origin.
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock

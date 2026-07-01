@@ -1769,6 +1769,88 @@ def test_trim_chroma_key_sample_corner():
         hardflow.unregister()
 
 
+def _mesh_volume(obj):
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    v = bm.calc_volume(signed=False)
+    bm.free()
+    return v
+
+
+def _mode_stub(world_points, depth=1.0, plane_z=1.0):
+    """A bare _HardflowModeModal (it is a plain mixin, not an Operator) primed with
+    just the state the boolean verbs read, so _build_boolean can be driven headless
+    without a live modal/viewport. Footprint drawn on the +Z face, normal +Z."""
+    from hardflow.operators.hardflow_mode import _HardflowModeModal
+    from hardflow.core import command
+    stub = _HardflowModeModal.__new__(_HardflowModeModal)
+    stub._basis = (Vector((0, 0, plane_z)), Vector((1, 0, 0)),
+                   Vector((0, 1, 0)), Vector((0, 0, 1)))
+    stub.world_points = list(world_points)
+    stub.depth = depth
+    stub.verb = "Test"
+    stub._commands = command.CommandManager()
+    stub._mesh_cmds = []
+    return stub
+
+
+def _square_footprint(half=0.5, z=1.0):
+    return [Vector((-half, -half, z)), Vector((half, -half, z)),
+            Vector((half, half, z)), Vector((-half, half, z))]
+
+
+def _run_mode_boolean(verb, target, footprint=None, depth=1.0):
+    hardflow.register()
+    try:
+        bpy.context.view_layer.objects.active = target
+        stub = _mode_stub(footprint or _square_footprint(), depth=depth)
+        msg = stub._build_boolean(bpy.context, verb)
+        stub._commands.clear()
+        for c in stub._mesh_cmds:
+            c.free()
+        return msg
+    finally:
+        hardflow.unregister()
+
+
+def test_hardflow_mode_cut_removes_volume():
+    # CUT: a 1x1 notch pierced through a size-2 cube -> volume drops below 8.
+    _reset()
+    target = _add_cube("T", size=2.0)
+    assert abs(_mesh_volume(target) - 8.0) < 1e-4
+    msg = _run_mode_boolean('CUT', target)
+    assert "applied" in msg, msg
+    assert _mesh_volume(target) < 7.9, _mesh_volume(target)
+
+
+def test_hardflow_mode_add_grows_volume():
+    # ADD: a 1x1 boss of depth 1 standing on the +Z face -> volume ~ 8 + 1.
+    _reset()
+    target = _add_cube("T", size=2.0)
+    _run_mode_boolean('ADD', target, depth=1.0)
+    assert _mesh_volume(target) > 8.5, _mesh_volume(target)
+
+
+def test_hardflow_mode_intersect_keeps_overlap():
+    # INTERSECT: cube ∩ (1x1 column) = a 1x1x2 bar -> volume ~ 2.
+    _reset()
+    target = _add_cube("T", size=2.0)
+    _run_mode_boolean('INTERSECT', target)
+    assert abs(_mesh_volume(target) - 2.0) < 0.2, _mesh_volume(target)
+
+
+def test_hardflow_mode_slice_splits_into_two():
+    # SLICE: target keeps the difference (~6), a 'T_slice' holds the intersect (~2).
+    _reset()
+    target = _add_cube("T", size=2.0)
+    _run_mode_boolean('SLICE', target)
+    other = bpy.data.objects.get("T_slice")
+    assert other is not None
+    assert abs(_mesh_volume(target) - 6.0) < 0.3, _mesh_volume(target)
+    assert abs(_mesh_volume(other) - 2.0) < 0.3, _mesh_volume(other)
+
+
 def test_conform_trim_decal():
     _reset()
     target = _add_cube("Target", size=2.0)
@@ -2451,13 +2533,20 @@ def test_mode_shell_verb_and_plane_cycle():
     import types
     from hardflow.operators import hardflow_mode as hm
     assert "SURFACE" in hm._PLANES
-    assert hm._VERBS == ("KNIFE", "EXTRUDE")
+    assert hm._VERBS == ("KNIFE", "EXTRUDE", "CUT", "ADD", "SLICE", "INTERSECT")
+    assert hm._BOOL_OPS == {"CUT": "DIFFERENCE", "ADD": "UNION",
+                            "INTERSECT": "INTERSECT"}
     assert hm.HARDFLOW_OT_mode_knife._START_VERB == "KNIFE"
     assert hm.HARDFLOW_OT_mode_extrude._START_VERB == "EXTRUDE"
+    assert hm.HARDFLOW_OT_mode_cut._START_VERB == "CUT"
     shell = hm._HardflowModeModal
     fake = types.SimpleNamespace(_active_verb="KNIFE", verb="Knife", _plane="VIEW")
     shell._cycle_verb(fake)
     assert fake._active_verb == "EXTRUDE" and fake.verb == "Extrude"
+    shell._cycle_verb(fake)
+    assert fake._active_verb == "CUT" and fake.verb == "Cut"     # ... on to booleans
+    # from the last verb, Tab wraps back to Knife
+    fake._active_verb = hm._VERBS[-1]
     shell._cycle_verb(fake)
     assert fake._active_verb == "KNIFE" and fake.verb == "Knife"
     # Plane cycle steps VIEW -> SURFACE -> ... and wraps.

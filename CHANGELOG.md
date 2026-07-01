@@ -5,7 +5,27 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-07-02
+
+Draw-to-cut booleans in HardFlow Mode + trim-sheet background removal. The pure
+suite grows to 114 tests (`python tests/test_core.py`); headless coverage adds
+the boolean verbs (real cut/add/slice/intersect volume checks) and the chroma
+key (in-place, copy-with-regions, corner-sample).
+
 ### Added
+- **HardFlow Mode boolean verbs — Cut / Add / Slice / Intersect
+  (`HARDFLOW_OT_mode_cut`).** The shadowing shell was draw-to-*score* (Knife) and
+  draw-to-*solid* (Extrude); it can now draw-to-*cut*. Each verb extrudes the
+  drawn footprint into a prism cutter and booleans it against the active mesh:
+  **Cut** = DIFFERENCE, **Add** = UNION (a boss standing proud of the surface),
+  **Slice** = DIFFERENCE on the target + a kept INTERSECT duplicate, **Intersect**
+  = keep the overlap. Cut/Slice/Intersect auto-size the cutter to pierce the mesh
+  clean through; `PageUp`/`PageDown` set the depth (a floor for the piercing
+  verbs, the boss height for Add). Applied as one atomic `MacroCommand` of
+  `BooleanCutCommand`s (solver fallback + cutter-normal repair; a failure rolls
+  the whole thing back), so the mode session is still a single undo step. Reach
+  them by `Tab`-cycling from any verb, by **Ctrl+Shift+X** then Tab, or straight
+  in on Cut from the Edit menu (**"HardFlow Mode: Cut"**).
 - **Trim-sheet background removal / chroma key
   (`HARDFLOW_OT_trim_chroma_key`).** Make a chosen colour transparent on the
   active trim sheet so a sheet of graphics shot on a green screen (or any flat
@@ -17,6 +37,15 @@ logic: minor versions add features, patch versions fix bugs.
   Editor N-panel section. The pixel math is pure and unit-tested
   (`core/atlas.color_distance` / `pixel_rgb` / `chroma_key`); the operator uses a
   numpy fast path with a pure-list fallback.
+
+### Fixed
+- **HardFlow Mode + draw tool SURFACE plane "goes behind the surface".** On a ray
+  miss (cursor off the mesh silhouette, or a first click that just missed) the
+  construction plane fell back to a VIEW plane through the object origin, so the
+  cursor detached from the face and drew at the object's mid-depth. Both tools now
+  hold the last good surface plane (`_surface_hold`) across a miss.
+- Two headless-suite tests were flushing the depsgraph (`view_layer.update()`)
+  and comparing bpy modifier wrappers by name instead of `is`.
 
 ## [1.16.0] — 2026-07-01
 

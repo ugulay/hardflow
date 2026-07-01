@@ -13,12 +13,12 @@ price tag.
 [![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-EA7600?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Extension](https://img.shields.io/badge/Blender-Extension-orange?logo=blender&logoColor=white)](https://extensions.blender.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.16.0-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.17.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 </div>
 
-> **Status — under active development.** **Every roadmap feature through v1.16 is
+> **Status — under active development.** **Every roadmap feature through v1.17 is
 > implemented** — the boolean cut loop (Cut / Slice / Make / Join / Intersect /
 > Knife) with Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes,
 > world-scale + vertex/edge snapping, the non-destructive flow, the full decal
@@ -43,8 +43,13 @@ price tag.
 > via the new pure `core/preview_cache`), and the **v1.16 Trim Sheet UV editor**
 > (carve a trim sheet into free, unequal named UV rectangles — draw / resize by
 > handle / move / guillotine split — stored on the Image datablock; a decal then
-> borrows any region). The pure-logic core is unit-tested
-> (`84/84`, no Blender required) and bpy paths add headless coverage (run live
+> borrows any region), and the **v1.17 draw-to-cut booleans + background removal**
+> (HardFlow Mode gains **Cut / Add / Slice / Intersect** verbs — the footprint is
+> extruded into a cutter and boolean'd against the active mesh on the shared shell
+> — and the trim sheet gains a **chroma-key** tool that makes a picked colour
+> transparent to lift graphics off a green-screen / flat background). The
+> pure-logic core is unit-tested
+> (`114/114`, no Blender required) and bpy paths add headless coverage (run live
 > against a standalone `bpy` build + verified in Blender 5.1.2); the modal
 > tools' interactive feel is checked via
 > [tests/manual_checklist.md](tests/manual_checklist.md). See
@@ -205,6 +210,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Image library | Folder of PNG/JPG/TGA placed from an icon grid | `core/decal_image.py`, `ui/decal_library.py` |
 | Trim sheets | Slice a sheet into a grid; place / cycle individual cells | `core/atlas.py slice_grid` |
 | Trim sheet UV editor (v1.16) | Carve a sheet into free, unequal named UV rectangles (draw / resize / move / split) stored on the image; place any region as a decal | `operators/trim_editor.py`, `core/atlas.py`, `ui/trim_panel.py` |
+| Background removal / chroma key (v1.17) | Make a picked colour transparent on a trim sheet — knock out a green-screen / flat background so the graphics separate; eyedropper or corner-sample, tolerance + edge-softness feather, copy or in-place | `operators/trim_editor.py HARDFLOW_OT_trim_chroma_key`, `core/atlas.py chroma_key` |
 | Atlasing | Pack every image decal into one atlas + one shared material | `core/atlas.py pack_shelves` |
 | Create decal (v1.7) | Bake normal/height/alpha out of high-poly source into the library | `operators/decals.py`, `core/decal.py` |
 | Material match (v1.7) | Match a decal's blend to the target's active material | `core/decal.py match_decal_to_material` |
@@ -288,7 +294,8 @@ live subdivision-tuning pass — see `docs/hardflow_mode_plan.md`.*
 | Shadowing Engine | HardFlow Mode owns its own modal loop and routes the raw mouse through the core snap chain to bmesh — it never invokes Blender's native modal tools | `operators/hardflow_mode.py _HardflowModeModal` |
 | HardFlow Mode: Knife | Draw a snapped polyline on the Ghost Grid, score it onto the active mesh | `operators/hardflow_mode.py HARDFLOW_OT_mode_knife` |
 | HardFlow Mode: Extrude | Draw a footprint, PgUp/PgDn depth, build a new prism solid along the plane normal | `operators/hardflow_mode.py HARDFLOW_OT_mode_extrude`, `core/geometry.py build_prism` |
-| Mode plane + verb cycle | The shell cycles VIEW / **SURFACE** (aligned to the face under the first click) / X / Y / Z, and `Tab` switches the active verb (Knife ↔ Extrude) in-session; enter it from **Ctrl+Shift+X** or the **Edit pie** | `operators/hardflow_mode.py _surface_basis_at/_cycle_verb`, `keymaps.py`, `ui/pie.py` |
+| HardFlow Mode: Cut / Add / Slice / Intersect (v1.17) | Draw a footprint, extrude it into a cutter and boolean it against the active mesh — DIFFERENCE / UNION / split-in-two / keep-overlap — as an atomic solver-fallback chain (Cut/Slice/Intersect auto-pierce; Add stands a boss proud of the surface) | `operators/hardflow_mode.py HARDFLOW_OT_mode_cut/_build_boolean`, `operators/base.py BooleanCutCommand`, `core/boolean.py robust_boolean` |
+| Mode plane + verb cycle | The shell cycles VIEW / **SURFACE** (aligned to the face under the first click) / X / Y / Z, and `Tab` cycles the active verb (Knife → Extrude → **Cut → Add → Slice → Intersect**) in-session; enter it from **Ctrl+Shift+X** or the **Edit pie / menu** | `operators/hardflow_mode.py _surface_basis_at/_cycle_verb`, `keymaps.py`, `ui/pie.py` |
 | Per-modal atomic macro | A tool session's edits live in a Command journal and commit as **one** Blender undo step; `Backspace` steps back, `Esc` rolls the session back. Now drives the direct-modeling tools' live preview (Push/Pull, Offset, Edge Bevel, Loop Cut) | `core/command.py`, `operators/base.py MeshSnapshotCommand`, `operators/face_tool.py` |
 | Atomic boolean chain | N cutters applied as an all-or-nothing MacroCommand — a mid-chain failure rolls the whole chain back (no half-baked cutters, no orphaned slice piece). Wired into the draw-cut destructive apply | `operators/base.py BooleanCutCommand/boolean_chain`, `operators/draw_cut.py _apply_destructive` |
 | Smart Bevel & support loops | Bevel + support/holding loops so the edge survives Subdivision (`S` on Edge Bevel, `-`/`=` tightness) — EXPERIMENTAL | `core/bevel.py support_loop_positions`, `core/geometry.py smart_bevel_edges` |
@@ -305,7 +312,7 @@ Select a mesh in Object Mode:
 
 - **Alt+Q** → pie menu (all tools)
 - **Ctrl+Shift+D** → direct drawing tool
-- **Ctrl+Shift+X** → HardFlow Mode (Knife verb; `Tab` switches to Extrude)
+- **Ctrl+Shift+X** → HardFlow Mode (Knife verb; `Tab` cycles Extrude → Cut → Add → Slice → Intersect)
 
 In drawing mode:
 
@@ -353,10 +360,12 @@ Offset, the draw tool, and snapping also work in **Edit Mode** (v1.3).
 > Object-Mode Edge Bevel / Loop Cut and Blender's own modifiers instead.
 
 **HardFlow Mode:** **Ctrl+Shift+X**, pie ▸ Edit ▸ **HardFlow Mode**, or header
-menu ▸ Edit ▸ **"HardFlow Mode: Knife"** / **"…: Extrude"** (or F3). Click to place
+menu ▸ Edit ▸ **"HardFlow Mode: Knife"** / **"…: Extrude"** / **"…: Cut"** (or F3).
+Click to place
 snapped points; `←/→` cycle the construction plane (VIEW / **SURFACE** — locked to
-the face under the first click / X / Y / Z), **`Tab`** switches the active verb
-(Knife ↔ Extrude) without leaving the session, Backspace steps back, `Z` / Enter /
+the face under the first click / X / Y / Z), **`Tab`** cycles the active verb
+(Knife → Extrude → **Cut → Add → Slice → Intersect**) without leaving the session,
+Backspace steps back, `Z` / Enter /
 double-click commit, Esc cancels. In Extrude, **PgUp / PgDn** set the depth. The
 whole session is one undo step.
 

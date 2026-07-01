@@ -22,7 +22,7 @@ import bpy
 from bpy.types import Operator
 from mathutils import Vector
 
-from ..core import raycast, grid, snapping, geometry, command
+from ..core import raycast, grid, snapping, geometry, command, boolean
 from ..preferences import get_prefs
 from ..ui import draw as hud
 from . import base
@@ -34,8 +34,13 @@ from . import base
 _PLANES = ('VIEW', 'SURFACE', 'X', 'Y', 'Z')
 
 # The tool verbs Tab cycles between within one mode session, and their HUD labels.
-_VERBS = ('KNIFE', 'EXTRUDE')
-_VERB_LABELS = {'KNIFE': 'Knife', 'EXTRUDE': 'Extrude'}
+# KNIFE / EXTRUDE are the non-boolean verbs; CUT / ADD / SLICE / INTERSECT extrude
+# the footprint into a cutter and boolean it against the active mesh (draw-to-cut).
+_VERBS = ('KNIFE', 'EXTRUDE', 'CUT', 'ADD', 'SLICE', 'INTERSECT')
+_VERB_LABELS = {'KNIFE': 'Knife', 'EXTRUDE': 'Extrude', 'CUT': 'Cut',
+                'ADD': 'Add', 'SLICE': 'Slice', 'INTERSECT': 'Intersect'}
+# The boolean verbs and the modifier operation each maps to.
+_BOOL_OPS = {'CUT': 'DIFFERENCE', 'ADD': 'UNION', 'INTERSECT': 'INTERSECT'}
 
 
 class _HardflowModeModal:
@@ -290,23 +295,26 @@ class _HardflowModeModal:
     # --- verb dispatch (Tab switches self._active_verb) ------------------
 
     def _handle_verb_key(self, context, event):
-        """Extrude owns PageUp/PageDown to set its depth; Knife has no extra key."""
-        if self._active_verb == 'EXTRUDE' and event.type in {'PAGE_UP',
-                                                              'PAGE_DOWN'}:
+        """Every verb except Knife owns PageUp/PageDown to set its depth (Extrude
+        height, boolean cutter reach); Knife scores at zero depth and has no key."""
+        if self._active_verb != 'KNIFE' and event.type in {'PAGE_UP',
+                                                            'PAGE_DOWN'}:
             step = self._grid if event.type == 'PAGE_UP' else -self._grid
             self.depth = max(self._grid, round(self.depth + step, 6))
             return True
         return False
 
     def _verb_hud(self):
-        if self._active_verb == 'EXTRUDE':
+        if self._active_verb != 'KNIFE':
             return "   depth %.3f m (PgUp/PgDn)" % self.depth
         return ""
 
     def _build(self, context):
         if self._active_verb == 'KNIFE':
             return self._build_knife(context)
-        return self._build_extrude(context)
+        if self._active_verb == 'EXTRUDE':
+            return self._build_extrude(context)
+        return self._build_boolean(context, self._active_verb)
 
     def _build_knife(self, context):
         """Score the drawn footprint onto the active mesh as a MeshSnapshotCommand,
@@ -342,6 +350,80 @@ class _HardflowModeModal:
         context.view_layer.objects.active = obj
         return ("HardFlow Mode: extruded a %d-gon solid (depth %.3f m)"
                 % (len(self.world_points), self.depth))
+
+    # --- boolean verbs (draw-to-cut) --------------------------------------
+
+    def _pierce_thickness(self, target):
+        """A cutter depth big enough to pierce `target` clean through along the
+        plane normal, never below the live depth. The footprint sits at the SURFACE
+        (mid-cutter), so only half the thickness reaches inward -- size it at
+        2.2 x the bounding-box diagonal so that inward half (~1.1 x diag) always
+        clears the whole mesh wherever the footprint was drawn on it."""
+        diag = 0.1
+        if target is not None:
+            d = target.dimensions
+            diag = (d.x * d.x + d.y * d.y + d.z * d.z) ** 0.5
+        return max(diag * 2.2, self.depth, 0.1)
+
+    def _boolean_cutter_mesh(self, context, verb, target):
+        """The prism cutter for a boolean verb. CUT/SLICE/INTERSECT straddle the
+        surface with a pierce-through thickness (the footprint sits mid-cutter so
+        it reaches both ways); ADD stands a boss of `depth` proud of the surface
+        along +normal. Returns mesh data, or None on a degenerate footprint."""
+        origin, right, up, normal = self._basis
+        if verb == 'ADD':
+            shift = normal * (self.depth * 0.5)
+            corners = [w + shift for w in self.world_points]
+            thickness = self.depth
+        else:                                   # CUT / SLICE / INTERSECT
+            corners = list(self.world_points)
+            thickness = self._pierce_thickness(target)
+        return geometry.build_prism(corners, normal, thickness,
+                                    name="hf_mode_cutter")
+
+    def _build_boolean(self, context, verb):
+        """Extrude the drawn footprint into a cutter and boolean it against the
+        active mesh: CUT (difference), ADD (union), INTERSECT (keep the overlap),
+        SLICE (difference on the target + intersect on a kept duplicate). One
+        atomic MacroCommand of BooleanCutCommands, so a solver failure rolls the
+        whole thing back instead of leaving a half-cut mesh; the cutter is
+        destructive (removed after applying)."""
+        target = context.active_object
+        if target is None or target.type != 'MESH':
+            raise RuntimeError("%s needs an active mesh (Tab to Extrude)"
+                               % self.verb)
+        mesh = self._boolean_cutter_mesh(context, verb, target)
+        if mesh is None:
+            raise RuntimeError("degenerate footprint")
+        cutter = bpy.data.objects.new("hf_mode_cutter", mesh)
+        context.collection.objects.link(cutter)
+
+        solver = get_prefs(context).default_solver
+        other = None
+        if verb == 'SLICE':
+            other = boolean.duplicate_object(context, target)
+            pairs = [(target, 'DIFFERENCE'), (other, 'INTERSECT')]
+        else:
+            pairs = [(target, _BOOL_OPS[verb])]
+        cmds = [base.BooleanCutCommand(context, tgt, cutter, op, solver,
+                                       snapshot_name="hf_mode_bool_%d" % i)
+                for i, (tgt, op) in enumerate(pairs)]
+        self._mesh_cmds.extend(cmds)
+        macro = command.MacroCommand(cmds, label="HardFlow %s" % self.verb)
+        try:
+            self._commands.do(macro)            # atomic: rolls back on failure
+        except Exception:
+            if other is not None and other.name in bpy.data.objects:
+                bpy.data.objects.remove(other, do_unlink=True)
+            if cutter.name in bpy.data.objects:
+                bpy.data.objects.remove(cutter, do_unlink=True)
+            raise
+        bpy.data.objects.remove(cutter, do_unlink=True)   # destructive cutter
+        context.view_layer.objects.active = target
+        note = ""
+        if cmds and cmds[-1].solver_used == 'FAST' and solver != 'FAST':
+            note = " (FAST solver fallback)"
+        return "HardFlow Mode: %s applied%s" % (self.verb, note)
 
     # --- HUD --------------------------------------------------------------
 
@@ -470,3 +552,24 @@ class HARDFLOW_OT_mode_extrude(_HardflowModeModal, Operator):
                       "into a solid (Tab -> Knife)")
 
     _START_VERB = 'EXTRUDE'
+
+
+class HARDFLOW_OT_mode_cut(_HardflowModeModal, Operator):
+    """HardFlow Mode, entered on the Cut verb: draw a snapped footprint on the
+    Ghost Grid, extrude it into a cutter and boolean-subtract it from the active
+    mesh -- the draw-to-cut hard-surface staple, on the shared shell. Tab cycles
+    on to Add / Slice / Intersect / Knife / Extrude; PageUp/PageDown set the
+    cutter depth (Cut/Slice/Intersect auto-pierce, so depth is only a floor)."""
+
+    bl_idname = "mesh.hardflow_mode_cut"
+    bl_label = "HardFlow Mode Cut"
+    bl_description = ("Draw a snapped footprint and boolean-cut it from the active "
+                      "mesh (Tab -> Add / Slice / Intersect)")
+
+    _START_VERB = 'CUT'
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (obj is not None and obj.type == 'MESH'
+                and context.mode == 'OBJECT')

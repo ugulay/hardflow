@@ -70,6 +70,7 @@ _EDIT_ITEMS = (
     ("mesh.hardflow_mode_knife", "HardFlow Mode: Knife", 'MOD_LINEART', {}),
     ("mesh.hardflow_mode_extrude", "HardFlow Mode: Extrude",
      'MOD_SIMPLEDEFORM', {}),
+    ("mesh.hardflow_mode_cut", "HardFlow Mode: Cut", 'MOD_BOOLEAN', {}),
 )
 
 _DISPLAY_ITEMS = (

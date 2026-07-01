@@ -13,7 +13,7 @@ converts far better than a still.
 ## 🐦 X / Twitter (≤ 280 chars)
 
 ```
-Hardflow {{1.15.0}} is out — a FREE, open-source hard-surface boolean modeling
+Hardflow {{1.17.0}} is out — a FREE, open-source hard-surface boolean modeling
 toolkit for Blender 4.2+.
 
 Draw-to-cut booleans, world-scale snapping, decals, kitbash assets, Push/Pull &
@@ -35,8 +35,10 @@ What's inside 👇
 • Push/Pull, Offset, Object-Mode Edge Bevel + Loop Cut, construction grid, loft
 • Pipe / cable / Follow-Me sweep (L/U/T/I/box sections)
 • Full decal pipeline + bake + atlasing + create/match
+• Trim-sheet UV editor + background removal (chroma-key a green screen to alpha)
 • Kitbash INSERT assets w/ live preview, auto-scale, asset-pack export
-• Super Modeling Mode: SketchUp-fluid Ghost-Grid shell + atomic per-session undo
+• Super Modeling Mode: SketchUp-fluid Ghost-Grid shell + atomic per-session undo,
+  now with draw-to-cut Cut / Add / Slice / Intersect verbs
 ```
 
 ---
@@ -70,20 +72,23 @@ hard-surface loop:
   construction grid, guides, and loft/bridge.
 - **Super Modeling Mode** — a streamlined SketchUp-fluid shell that shadows the
   native tools on its own Ghost-Grid snap chain (VIEW/SURFACE/X/Y/Z plane cycle,
-  `Tab` cycles Knife ↔ Extrude), with a per-tool undo journal so a whole tool
-  session commits as **one** atomic Blender undo step.
+  `Tab` cycles Knife → Extrude → **Cut / Add / Slice / Intersect** draw-to-cut
+  booleans), with a per-tool undo journal so a whole tool session commits as
+  **one** atomic Blender undo step.
 - **Smart Bevel** — a hard-surface bevel that drops support/holding loops so the
   edge survives Subdivision, now topology-safe on irregular post-boolean n-gons
   (experimental).
 - **Curves & sweeps** — surface-draping pipe (round/square/rect), sagging cable,
   and a Follow-Me sweep that runs an L/U/T/I/box section along a drawn path.
-- **Decals** — place, PBR material, parallax, bake, image library, trim sheets,
-  atlasing, plus create/match/retrim/conform + an editable library.
+- **Decals & trim sheets** — place, PBR material, parallax, bake, image library,
+  a free-rectangle **trim-sheet UV editor** with **background removal** (chroma-key
+  a flat/green-screen background to transparency), atlasing, plus
+  create/match/retrim/conform + an editable library.
 - **Kitbash assets** — INSERTs from a .blend library with a live preview,
   auto-scale, insert-grid snap, material inserts, and asset-pack export.
 
-The pure-logic core is unit-tested (76/76, no Blender needed) and every bpy path
-is verified headless in Blender 5.1.2 (106 tests); the modal tools' interactive
+The pure-logic core is unit-tested (114/114, no Blender needed) and every bpy path
+is verified headless in Blender 5.1.2 (121 tests); the modal tools' interactive
 feel is checked via a manual checklist, so bug reports are very welcome.
 
 Repo / install: {{repo link}}
@@ -96,7 +101,7 @@ features stay isolated.
 
 ## 🎨 BlenderArtists forum
 
-**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.15.0}})`
+**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.17.0}})`
 
 **Body:** same as the Reddit body above. BlenderArtists supports embedded video —
 lead with a GIF/clip and put the install link near the top.
@@ -106,7 +111,7 @@ lead with a GIF/clip and put the install link near the top.
 ## 💼 LinkedIn
 
 ```
-Excited to share Hardflow {{1.15.0}} — a free, open-source hard-surface modeling
+Excited to share Hardflow {{1.17.0}} — a free, open-source hard-surface modeling
 toolkit for Blender 4.2+. 🛠️
 
 One GPLv3 add-on for the whole loop: draw-to-cut booleans, world-scale snapping,
@@ -115,7 +120,7 @@ pipeline, kitbash INSERT assets, and a SketchUp-fluid "Super Modeling Mode" with
 atomic per-session undo — no license fee.
 
 Built with a strict, testable architecture (pure logic separated from Blender's
-API, 76/76 unit tests green). Open to contributors and feedback.
+API, 114/114 unit tests green). Open to contributors and feedback.
 
 ⬇️ {{repo link}}
 
@@ -127,7 +132,7 @@ API, 76/76 unit tests green). Open to contributors and feedback.
 ## 🐘 Mastodon (≤ 500 chars)
 
 ```
-Hardflow {{1.15.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
+Hardflow {{1.17.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
 for #Blender 4.2+.
 
 Draw-to-cut booleans, world-scale snapping, decals, kitbash assets, Push/Pull,
@@ -142,13 +147,19 @@ and profile sweeps — all without a price tag.
 ## 📝 GitHub Release notes (template)
 
 ```
-## Hardflow v{{1.15.0}}
+## Hardflow v{{1.17.0}}
 
-{{One-line summary of the milestone.}}
+Draw-to-cut booleans in HardFlow Mode + trim-sheet background removal.
 
 ### Highlights
-- {{feature}}
-- {{feature}}
+- **HardFlow Mode gains Cut / Add / Slice / Intersect verbs** — draw a footprint,
+  it's extruded into a cutter and boolean'd against the active mesh, on the same
+  Ghost-Grid shell, as one atomic (solver-fallback) undo step.
+- **Trim-sheet background removal (chroma key)** — make a picked colour transparent
+  to lift graphics off a green-screen / flat background; eyedropper or
+  corner-sample, tolerance + edge-softness feather, non-destructive copy or in-place.
+- SURFACE-plane fix: the draw tools no longer snap the cursor "behind" the surface
+  on a ray miss.
 
 ### Install
 Blender 4.2+: Edit → Preferences → Get Extensions → ⌄ → Install from Disk →
@@ -162,7 +173,7 @@ select the hardflow zip.
 ## ✅ Launch checklist
 
 - [ ] Tag the release and write GitHub Release notes (template above)
-- [ ] Attach the built `hardflow-{{1.15.0}}.zip` to the release
+- [ ] Attach the built `hardflow-{{1.17.0}}.zip` to the release
 - [ ] Record fresh clips (cut, Push/Pull, decal/asset, sweep)
 - [ ] Post to X, Reddit, BlenderArtists, LinkedIn, Mastodon
 - [ ] Pin the announcement in GitHub Discussions
