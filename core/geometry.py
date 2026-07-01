@@ -5,6 +5,7 @@ import bpy
 import bmesh
 
 from . import bevel as _bevel
+from . import topology as _topology
 
 
 def snapshot_mesh(obj, name="hf_snapshot"):
@@ -1103,17 +1104,66 @@ def _join_tris(bm, faces):
         bmesh.ops.join_triangles(bm, faces=faces, **kw)
 
 
-def dissolve_boolean_ngons(obj, only_ngons=True, rejoin_quads=True):
+def _clean_boolean_slivers(bm, merge_dist=1e-4, degenerate_dist=1e-4,
+                           collinear_eps=1e-6):
+    """Stabilizing cleanup on `bm` before re-quadding (Module 4 / SubD stability):
+
+      1. **merge coincident verts** (`remove_doubles`, `merge_dist`) -- a boolean
+         drops duplicate verts along the seam;
+      2. **collapse near-zero-area geometry** (`dissolve_degenerate`,
+         `degenerate_dist`) -- the zero-length edges + sliver faces a cut leaves;
+      3. **dissolve redundant mid-edge verts** -- a valence-2 vertex whose two
+         neighbours are collinear with it (core.topology.redundant_vertex) adds
+         nothing to a straight cut line but pinches a Subdivision surface.
+
+    Each stage narrows the garbage a near-degenerate boolean result carries into a
+    Subdivision modifier. In-place; returns the number of redundant verts
+    dissolved. The caller wraps this so a cleanup hiccup never loses the mesh."""
+    if merge_dist > 0.0 and bm.verts:
+        bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=merge_dist)
+    if degenerate_dist > 0.0 and bm.edges:
+        bmesh.ops.dissolve_degenerate(bm, dist=degenerate_dist, edges=bm.edges[:])
+    # Redundant valence-2 verts on a straight run -- collected AFTER the ops above
+    # so every reference is live.
+    redundant = []
+    for v in bm.verts:
+        le = v.link_edges
+        if len(le) != 2:
+            continue
+        a = le[0].other_vert(v).co
+        c = le[1].other_vert(v).co
+        if _topology.redundant_vertex(tuple(a), tuple(v.co), tuple(c), collinear_eps):
+            redundant.append(v)
+    if redundant:
+        bmesh.ops.dissolve_verts(bm, verts=redundant)
+    return len(redundant)
+
+
+def dissolve_boolean_ngons(obj, only_ngons=True, rejoin_quads=True,
+                           clean_slivers=True, merge_dist=1e-4,
+                           degenerate_dist=1e-4):
     """Clean up the n-gons a boolean cut (or a bevel) leaves behind: triangulate
     the 5+-sided faces, then -- when `rejoin_quads` -- join the fresh triangles
     back into quads where the surface stays flat, so the result is quad-friendly
     again instead of a triangle soup. Object Mode, bmesh only (no bpy.ops).
 
-    `only_ngons` limits the pass to faces with more than 4 sides (tris and quads
-    are left alone); pass False to re-triangulate every face. Returns the number
-    of n-gon faces that were triangulated (0 when the mesh is already clean)."""
+    When `clean_slivers` (Module 4 / MeshMachine-parity SubD stability), a
+    stabilizing pass runs FIRST (_clean_boolean_slivers): merge doubles, collapse
+    near-zero-area faces / zero-length edges, and dissolve redundant collinear
+    valence-2 verts -- the degenerate garbage a boolean scatters that wrecks a
+    Subdivision surface. Wrapped so a cleanup hiccup degrades to the plain re-quad
+    rather than losing the mesh.
+
+    `only_ngons` limits the re-quad pass to faces with more than 4 sides (tris and
+    quads are left alone); pass False to re-triangulate every face. Returns the
+    number of n-gon faces that were triangulated (0 when already clean)."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
+    if clean_slivers:
+        try:
+            _clean_boolean_slivers(bm, merge_dist, degenerate_dist)
+        except (RuntimeError, ValueError) as ex:
+            print("[Hardflow] boolean sliver cleanup skipped: %s" % ex)
     ngons = [f for f in bm.faces if len(f.verts) > (4 if only_ngons else 2)]
     n = len(ngons)
     if n:
@@ -1122,6 +1172,7 @@ def dissolve_boolean_ngons(obj, only_ngons=True, rejoin_quads=True):
             fresh = [f for f in res.get('faces', ()) if f.is_valid]
             if fresh:
                 _join_tris(bm, fresh)
+    if n or clean_slivers:
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(obj.data)
     obj.data.update()
@@ -1221,7 +1272,10 @@ def smart_bevel_edges(obj, edge_keys, width, segments=2, profile=0.5,
     bevel_faces = set(f for f in res.get('faces', ()) if f.is_valid)
 
     if support and bevel_faces:
-        offsets = _bevel.support_loop_positions(width, tightness, count=1)
+        # Bevel-exact placement: the offset is tightened for a rounded (multi-
+        # segment) bevel, which already braces the edge along its own profile.
+        offsets = _bevel.support_loop_positions(
+            width, tightness, count=1, segments=segments)
         offset = offsets[0] if offsets else 0.0
         if offset > 0.0:
             # A shoulder edge borders the bevel strip: exactly one bevel face and

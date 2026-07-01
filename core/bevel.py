@@ -27,7 +27,46 @@ def holding_loop_factor(tightness=0.5):
     return loose + (tight - loose) * t
 
 
-def support_loop_positions(width, tightness=0.5, count=1):
+def seg_factor(segments):
+    """How much tighter the holding loop hugs the bevel as the bevel gains its own
+    `segments` of rounding. A single-segment chamfer carries no support of its own,
+    so the factor is 1.0 (leaves the classic placement unchanged); a rounded bevel
+    already braces the edge along its profile, so the holding loop moves in by
+    ``2 / (segments + 1)`` to preserve the modeled radius instead of letting
+    Subdivision balloon it. Pure, monotonically decreasing, clamped to (0, 1].
+
+        >>> seg_factor(1)   # chamfer -> no change
+        1.0
+        >>> seg_factor(3)   # rounder bevel -> half the offset
+        0.5
+    """
+    s = max(1, int(segments))
+    return 2.0 / (s + 1)
+
+
+def subdiv_fillet_radius(offset, segments=1):
+    """Approximate radius of the rounded fillet a holding loop sitting `offset`
+    meters from a sharp edge produces under Catmull-Clark subdivision. The
+    limit-surface rule of thumb is radius ~= offset for a lone holding loop; a
+    beveled band with more `segments` of its own support tightens the effective
+    radius toward ``offset * seg_factor(segments)``. Pure, monotonic in offset,
+    0 for a non-positive offset. Inverse of `support_offset_for_radius`."""
+    if offset <= 0.0:
+        return 0.0
+    return offset * seg_factor(segments)
+
+
+def support_offset_for_radius(radius, segments=1):
+    """The holding-loop offset needed to yield a target subdivided fillet `radius`
+    -- the inverse of `subdiv_fillet_radius`. Lets the caller place the support
+    loop so the subdivided corner matches a chosen radius instead of guessing.
+    Pure; 0 for a non-positive radius."""
+    if radius <= 0.0:
+        return 0.0
+    return radius / seg_factor(segments)
+
+
+def support_loop_positions(width, tightness=0.5, count=1, segments=1):
     """Absolute offset distances (in `width`'s units, i.e. meters) from the new
     bevel border at which to drop holding / support loops on each flanking face,
     so a bevel of size `width` survives Subdivision without softening.
@@ -36,9 +75,12 @@ def support_loop_positions(width, tightness=0.5, count=1):
     per side fan outward, each `holding_loop_factor` further than the last. An
     empty list for a non-positive width or count (nothing to support).
 
-    The caller (geometry.smart_bevel_edges) clamps these against the real
-    flanking-face size before splitting -- this function is deliberately unaware
-    of the mesh so it stays pure and testable.
+    `segments` makes the placement bevel-exact: a rounded bevel (segments > 1)
+    already braces the edge along its own profile, so every offset is scaled by
+    `seg_factor(segments)` (1.0 for a single-segment chamfer, so the default is
+    unchanged). The caller (geometry.smart_bevel_edges) clamps these against the
+    real flanking-face size before splitting -- this function is deliberately
+    unaware of the mesh so it stays pure and testable.
 
         >>> support_loop_positions(0.1, tightness=0.5)
         [0.0325]
@@ -46,10 +88,12 @@ def support_loop_positions(width, tightness=0.5, count=1):
         [0.005]
         >>> support_loop_positions(0.1, tightness=0.5, count=2)
         [0.0325, 0.065]
+        >>> support_loop_positions(0.1, tightness=0.5, segments=3)  # rounder -> tighter
+        [0.01625]
     """
     if width <= 0.0 or count < 1:
         return []
-    base = width * holding_loop_factor(tightness)
+    base = width * holding_loop_factor(tightness) * seg_factor(segments)
     return [round(base * (i + 1), 6) for i in range(int(count))]
 
 
@@ -100,17 +144,19 @@ def flank_can_support(flank_length, width, min_ratio=1.5):
     return flank_length >= min_ratio * width
 
 
-def support_loop_fractions(width, flank_length, tightness=0.5, count=1):
+def support_loop_fractions(width, flank_length, tightness=0.5, count=1,
+                           segments=1):
     """The same holding-loop offsets expressed as fractions in (0, 1) of a
     flanking face of length `flank_length` -- the form a face-local edge split
     consumes (split at fraction `f` from the bevel border). Offsets that would
     fall on or past the far edge are clamped just inside it (0.98) so the split
-    never produces a zero-area sliver. Empty list when there is nothing to place
-    or the flank is degenerate."""
+    never produces a zero-area sliver. `segments` is the bevel-exact tightening
+    (see support_loop_positions). Empty list when there is nothing to place or the
+    flank is degenerate."""
     if flank_length <= 0.0:
         return []
     fracs = []
-    for off in support_loop_positions(width, tightness, count):
+    for off in support_loop_positions(width, tightness, count, segments):
         f = off / flank_length
         fracs.append(round(min(0.98, max(0.02, f)), 6))
     # Deduplicate collapsed clamps while preserving order (two loops that both

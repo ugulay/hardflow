@@ -700,5 +700,21 @@ Enable **Preferences → Parallax Occlusion** (and set a **Parallax Depth**, e.g
 
 ---
 
+## Topology & SubD stability (Module 4)
+
+- [ ] Cut a boolean into a cube, then add a **Subdivision Surface** modifier.
+      Toggle **Preferences → Re-quad Cut N-gons** on and re-cut: the cut border
+      should subdivide **without pinches / dark sliver artifacts** (the
+      `_clean_boolean_slivers` pass dissolved the near-zero-area faces + redundant
+      cut-line verts). The N-gon count around the cut drops vs. the old behavior.
+- [ ] **Edge Bevel → `S` (Smart)** on a cube edge, raise **segments** with `[ ]`:
+      the support/holding loop now sits **tighter** on a rounder bevel (seg-aware
+      placement) and the beveled edge holds its radius under Subdivision instead
+      of ballooning. HUD still reports `+N loops, M clamped`.
+- [ ] Smart Bevel on an **irregular boolean off-cut** still never collapses a thin
+      flank (the `flank_can_support` barrier), it just adds fewer loops.
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.

@@ -2467,6 +2467,28 @@ def test_smart_sharpen_operator_idempotent():
         hardflow.unregister()
 
 
+def test_dissolve_boolean_ngons_cleans_redundant_vert():
+    _reset()
+    import bmesh
+    me = bpy.data.meshes.new("Sliver")
+    bm = bmesh.new()
+    v0 = bm.verts.new((0, 0, 0))
+    v1 = bm.verts.new((0.5, 0, 0))    # redundant midpoint on the bottom edge
+    v2 = bm.verts.new((1, 0, 0))
+    v3 = bm.verts.new((1, 1, 0))
+    v4 = bm.verts.new((0, 1, 0))
+    bm.faces.new((v0, v1, v2, v3, v4))
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("Sliver", me)
+    bpy.context.collection.objects.link(ob)
+    geometry.dissolve_boolean_ngons(ob, clean_slivers=True)
+    # the collinear mid-edge vertex is dissolved -> a clean quad, no SubD pinch
+    assert len(ob.data.vertices) == 4, len(ob.data.vertices)
+    assert len(ob.data.polygons) == 1, len(ob.data.polygons)
+    assert len(ob.data.polygons[0].vertices) == 4
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

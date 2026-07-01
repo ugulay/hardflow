@@ -38,6 +38,7 @@ preview_cache = _load("preview_cache")
 parallax = _load("parallax")
 hud = _load("hud")
 hardsurface = _load("hardsurface")
+topology = _load("topology")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1188,6 +1189,73 @@ def test_adaptive_bevel_width():
     assert abs(hardsurface.adaptive_bevel_width((10.0, 10.0, 0.5)) - 0.005) < 1e-9
     # degenerate -> the floor
     assert hardsurface.adaptive_bevel_width((0.0, 0.0, 0.0)) == 1e-4
+
+
+# --- topology: near-zero-area / redundant-vert predicates (Module 4) ---------
+
+def test_triangle_area():
+    assert abs(topology.triangle_area((0, 0, 0), (1, 0, 0), (0, 1, 0))
+               - 0.5) < 1e-9
+    # collinear triangle -> zero area
+    assert topology.triangle_area((0, 0, 0), (1, 0, 0), (2, 0, 0)) == 0.0
+
+
+def test_polygon_area_unit_square_translation_invariant():
+    sq = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    assert abs(topology.polygon_area(sq) - 1.0) < 1e-9
+    # translating the whole polygon must not change its area (Newell property)
+    far = [(x + 10, y + 5, z + 3) for (x, y, z) in sq]
+    assert abs(topology.polygon_area(far) - 1.0) < 1e-9
+    # a tilted planar square still measures 1.0
+    tilt = [(0, 0, 0), (1, 0, 0), (1, 1, 1), (0, 1, 1)]
+    assert abs(topology.polygon_area(tilt) - 2 ** 0.5) < 1e-9
+    assert topology.polygon_area([(0, 0, 0), (1, 0, 0)]) == 0.0   # <3 pts
+
+
+def test_is_sliver():
+    good = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    assert topology.is_sliver(good) is False
+    # a near-zero-area needle triangle is a sliver
+    needle = [(0, 0, 0), (1, 0, 0), (0.5, 1e-9, 0)]
+    assert topology.is_sliver(needle) is True
+    assert topology.is_sliver([(0, 0, 0), (1, 0, 0)]) is True     # degenerate
+
+
+def test_collinear_and_redundant_vertex():
+    assert topology.collinear((0, 0, 0), (1, 0, 0), (2, 0, 0)) is True
+    assert topology.collinear((0, 0, 0), (1, 1, 0), (2, 0, 0)) is False
+    # redundant_vertex: a mid-edge vert on a straight run is removable
+    assert topology.redundant_vertex((0, 0, 0), (1, 0, 0), (2, 0, 0)) is True
+    assert topology.redundant_vertex((0, 0, 0), (1, 0.5, 0), (2, 0, 0)) is False
+
+
+# --- bevel: bevel-exact (segment-aware) support-loop placement (Module 4) -----
+
+def test_seg_factor_monotonic():
+    assert bevel.seg_factor(1) == 1.0            # chamfer: unchanged
+    assert bevel.seg_factor(3) == 0.5
+    assert bevel.seg_factor(0) == 1.0            # clamped to >=1
+    assert bevel.seg_factor(2) < bevel.seg_factor(1)   # rounder -> tighter
+
+
+def test_subdiv_fillet_radius_roundtrip():
+    for segments in (1, 2, 4):
+        off = 0.08
+        r = bevel.subdiv_fillet_radius(off, segments)
+        assert abs(bevel.support_offset_for_radius(r, segments) - off) < 1e-9
+    assert bevel.subdiv_fillet_radius(0.0) == 0.0
+    assert bevel.support_offset_for_radius(-1.0) == 0.0
+
+
+def test_support_loop_positions_segment_aware():
+    # segments=1 keeps the classic placement (backward compatible)
+    assert bevel.support_loop_positions(0.1, tightness=0.5) == [0.0325]
+    # a 3-segment (rounded) bevel tightens by seg_factor(3)=0.5
+    assert bevel.support_loop_positions(0.1, tightness=0.5, segments=3) \
+        == [0.01625]
+    # fractions form respects segments too (offset 0.01625 over a 0.5 flank)
+    fr = bevel.support_loop_fractions(0.1, 0.5, tightness=0.5, segments=3)
+    assert fr == [0.0325]
 
 
 def _run_all():
