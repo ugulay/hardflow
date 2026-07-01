@@ -74,6 +74,7 @@ class _HardflowModeModal:
         self._snap_kind = None                  # 'VERT'/'MID'/'EDGE'/'GRID'/None
         self._plane = 'VIEW'                     # construction plane (arrow keys)
         self._surface_basis = None              # cached at first click on SURFACE
+        self._surface_hold = None               # last good SURFACE plane (miss hold)
         self._surface_miss = False              # SURFACE ray missed geometry
         self._last_co = (event.mouse_region_x, event.mouse_region_y)
         self._active_verb = self._START_VERB    # Tab cycles Knife <-> Extrude
@@ -118,7 +119,12 @@ class _HardflowModeModal:
             # First click on the SURFACE plane locks the construction basis to the
             # face under the cursor, so the whole footprint stays on one plane.
             if self._plane == 'SURFACE' and self._surface_basis is None:
-                self._surface_basis = self._surface_basis_at(context, co)
+                # Lock to the face under the click; if the click just missed the
+                # surface, fall back to the last face we hovered (the held plane)
+                # rather than leaving the basis unlocked and drawing at object
+                # depth.
+                self._surface_basis = (self._surface_basis_at(context, co)
+                                       or self._surface_hold)
                 self._basis = self._plane_basis(context)
                 self._cursor = self._snap_screen(context, co)
             if self._cursor is not None:
@@ -135,6 +141,7 @@ class _HardflowModeModal:
               and event.value == 'PRESS'):
             self._cycle_plane(1 if event.type == 'RIGHT_ARROW' else -1)
             self._surface_basis = None          # re-track the surface on the new plane
+            self._surface_hold = None           # drop any held plane from a prior pass
             self._basis = self._plane_basis(context)
             self._cursor = self._snap_screen(context, co)
 
@@ -209,7 +216,13 @@ class _HardflowModeModal:
         if self._plane == 'SURFACE':
             b = self._surface_basis
             if b is None:                        # before the first click: preview-track
-                b = self._surface_basis_at(context, self._last_co)
+                live = self._surface_basis_at(context, self._last_co)
+                if live is not None:
+                    self._surface_hold = live    # remember the last face hovered
+                # On a miss, hold the last good surface plane instead of snapping
+                # the cursor onto the object-centre VIEW plane -- that jump is
+                # what reads as the cursor "going behind" the surface.
+                b = live if live is not None else self._surface_hold
             self._surface_miss = b is None
             return b if b is not None else self._view_basis(context, origin)
         self._surface_miss = False
