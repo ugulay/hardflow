@@ -1868,6 +1868,83 @@ def test_gizmo_arrow_shape_is_triangle_soup():
     assert min(zs) == 0.0 and max(zs) > 0.5
 
 
+# --- bisect_plane + operator-layer Command Pattern (base.py) ----------------
+
+def test_bisect_plane_slices_cube():
+    _reset()
+    ob = _add_cube("Bisect", size=2.0)
+    before = len(ob.data.vertices)
+    cut = geometry.bisect_plane(ob, Vector((0, 0, 0)), Vector((0, 0, 1)))
+    assert cut > 0, cut                       # a mid-cube slice adds a cut loop
+    assert len(ob.data.vertices) > before
+    # a degenerate (zero-length) normal is a no-op, not a crash
+    assert geometry.bisect_plane(ob, Vector((0, 0, 0)), Vector((0, 0, 0))) == 0
+
+
+def test_place_point_command_execute_undo_redo():
+    from hardflow.operators import base
+    pts = []
+    cmd = base.PlacePointCommand(pts, (1.0, 2.0, 3.0))
+    cmd.execute()
+    assert pts == [(1.0, 2.0, 3.0)]
+    cmd.execute()                             # idempotent: still one point
+    assert pts == [(1.0, 2.0, 3.0)]
+    cmd.undo()
+    assert pts == []
+    cmd.redo()                                # HardFlowCommand.redo re-applies
+    assert pts == [(1.0, 2.0, 3.0)]
+
+
+def test_mesh_snapshot_command_preview_commit_undo():
+    _reset()
+    from hardflow.operators import base
+    ob = _add_cube("Snap", size=2.0)
+    before = len(ob.data.vertices)
+
+    def _slice(o):
+        geometry.bisect_plane(o, Vector((0, 0, 0)), Vector((0, 0, 1)))
+
+    cmd = base.MeshSnapshotCommand(ob, _slice, label="slice")
+    cmd.execute()                             # snapshot 'before' + apply
+    applied = len(ob.data.vertices)
+    assert applied > before
+    cmd.execute()                             # guard: no second apply
+    assert len(ob.data.vertices) == applied
+    cmd.reapply()                             # preview frame: restore + re-edit
+    assert len(ob.data.vertices) == applied   # same result, never stacked
+    cmd.undo()                                # restore the 'before' snapshot
+    assert len(ob.data.vertices) == before
+    cmd.free()                                # drop the snapshot datablock
+    cmd.free()                                # idempotent
+
+
+def test_mesh_snapshot_command_in_macro_rolls_back():
+    # A two-edit macro on a real mesh: a mid-chain failure restores every mesh
+    # snapshot, so nothing is left half-applied (the boolean-chain guarantee).
+    _reset()
+    from hardflow.operators import base
+    from hardflow.core import command
+    ob = _add_cube("Macro", size=2.0)
+    before = len(ob.data.vertices)
+    good = base.MeshSnapshotCommand(
+        ob, lambda o: geometry.bisect_plane(o, Vector((0, 0, 0)),
+                                            Vector((0, 0, 1))), label="ok")
+
+    def _boom(_o):
+        raise RuntimeError("solver failed")
+    bad = base.MeshSnapshotCommand(ob, _boom, label="bad")
+    macro = command.MacroCommand([good, bad], label="chain")
+    raised = False
+    try:
+        macro.execute()
+    except RuntimeError:
+        raised = True
+    assert raised and not macro.done
+    assert len(ob.data.vertices) == before    # 'good' edit was rolled back
+    good.free()
+    bad.free()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

@@ -22,26 +22,7 @@ from mathutils import Vector
 from ..core import raycast, grid, snapping, geometry, command
 from ..preferences import get_prefs
 from ..ui import draw as hud
-
-
-class _AddPointCommand(command.Command):
-    """Placing one polyline point, as a reversible command: execute appends the
-    (already snapped) world point, undo pops it. This is what lets Backspace =
-    manager.undo() and Esc = manager.undo_all() fall out for free, instead of the
-    operator hand-rolling a second parallel history."""
-
-    label = "Add point"
-
-    def __init__(self, points, point):
-        super().__init__()
-        self._points = points
-        self._point = point
-
-    def _apply(self):
-        self._points.append(self._point)
-
-    def _revert(self):
-        self._points.pop()
+from . import base
 
 
 class HARDFLOW_OT_mode_knife(Operator):
@@ -75,6 +56,7 @@ class HARDFLOW_OT_mode_knife(Operator):
         self._cursor = None                     # live snapped cursor (world)
         self._snap_kind = None                  # 'VERT'/'MID'/'EDGE'/'GRID'/None
         self._commands = command.CommandManager()
+        self._mesh_cmds = []                    # MeshSnapshotCommands to free()
 
         # Ghost Grid basis: a view-facing plane through the active object origin.
         # (SURFACE / X / Y / Z planes drop in here later -- same as draw_cut.)
@@ -105,8 +87,8 @@ class HARDFLOW_OT_mode_knife(Operator):
 
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             if self._cursor is not None:
-                self._commands.do(
-                    _AddPointCommand(self.world_points, self._cursor.copy()))
+                self._commands.do(base.PlacePointCommand(
+                    self.world_points, self._cursor.copy()))
 
         elif event.type == 'BACK_SPACE' and event.value == 'PRESS':
             self._commands.undo()               # step one placement back
@@ -179,9 +161,12 @@ class HARDFLOW_OT_mode_knife(Operator):
     # --- commit / teardown ------------------------------------------------
 
     def _commit(self, context):
-        """Score the drawn footprint onto the active mesh. The knife itself is the
-        single committed change, so it rides Blender's own REGISTER|UNDO step; the
-        in-modal CommandManager history is dropped once we hand off."""
+        """Score the drawn footprint onto the active mesh as a MeshSnapshotCommand
+        (base.py). It joins the in-modal journal alongside the point commands, so
+        the knife is undoable mid-session too. On success the journal is cleared
+        and the snapshots freed: the whole session is now ONE operator invocation,
+        which Blender records as a single (atomic) undo step on FINISHED -- we do
+        NOT push per-step undo of our own."""
         if len(self.world_points) < 3:
             self.report({'WARNING'}, "Need at least 3 points to knife")
             return {'RUNNING_MODAL'}
@@ -189,18 +174,31 @@ class HARDFLOW_OT_mode_knife(Operator):
         mw_inv = obj.matrix_world.inverted_safe()
         local = [mw_inv @ w for w in self.world_points]
         view_dir = mw_inv.to_3x3() @ raycast.view_direction(context.region_data)
+
+        def _score(o):
+            geometry.knife_polygon(o, local, view_dir)
+
+        knife = base.MeshSnapshotCommand(obj, _score, label="Knife",
+                                         snapshot_name="hf_mode_knife")
+        self._mesh_cmds.append(knife)
         try:
-            scored = geometry.knife_polygon(obj, local, view_dir)
+            self._commands.do(knife)     # snapshot 'before' + score, recorded
         except Exception as ex:   # noqa: BLE001 -- prototype: report, don't crash
             self.report({'ERROR'}, "HardFlow knife: %s" % ex)
             self._cleanup(context)
             return {'CANCELLED'}
-        self._commands.clear()
-        self.report({'INFO'}, "HardFlow Mode: scored %d edge(s)" % scored)
+        self._commands.clear()           # hand the net change to Blender's undo
+        self.report({'INFO'}, "HardFlow Mode: knifed the drawn footprint")
         self._cleanup(context)
         return {'FINISHED'}
 
     def _cleanup(self, context):
+        # Free every mesh snapshot regardless of undo/redo-stack state (a
+        # committed edit keeps the mutated mesh; a cancelled one was already
+        # restored by undo_all above). free() is idempotent.
+        for cmd in self._mesh_cmds:
+            cmd.free()
+        self._mesh_cmds = []
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
