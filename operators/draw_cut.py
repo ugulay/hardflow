@@ -131,6 +131,7 @@ class HARDFLOW_OT_draw(Operator):
         self._raw_cursor = (0, 0)  # snapped cursor before any typed-size lock
         self._snap_hit = None     # (screen_point, kind) -- for visual marker
         self._surface_basis = None  # locked (origin,right,up,normal) in SURFACE
+        self._surface_hold = None   # last good SURFACE plane, held over a ray miss
         self._surface_miss = False  # SURFACE ray missed -> fell back to VIEW
         self._edges_basis = None    # locked basis from selected edges (EDGES plane)
         self._forced_main_key = None  # Ctrl+Click main-edge override (vert-idx set)
@@ -361,6 +362,7 @@ class HARDFLOW_OT_draw(Operator):
                 self.world_points = []
                 self._commands.clear()      # and drop its placement journal
                 self._surface_basis = None  # re-pick the surface on next click
+                self._surface_hold = None   # drop any held plane from the old pass
                 self._edges_basis = None    # re-read the selected edges for EDGES
                 self._forced_main_key = None  # drop the Ctrl+Click main-edge pick
                 self.grid_origin = None     # the old origin is off the new plane
@@ -413,8 +415,12 @@ class HARDFLOW_OT_draw(Operator):
 
     def _lock_surface_basis(self, context, screen_co):
         """Capture and cache the surface basis at the first click so the whole
-        shape stays on one plane. Falls back silently to VIEW if no surface."""
-        self._surface_basis = self._surface_basis_at(context, screen_co)
+        shape stays on one plane. If the click just missed the surface, fall back
+        to the last face hovered (the held plane) rather than dropping to the
+        object-centre VIEW plane; only a click that never saw a surface falls to
+        VIEW."""
+        self._surface_basis = (self._surface_basis_at(context, screen_co)
+                               or self._surface_hold)
 
     def _capture_edges_basis(self, context):
         """'Grid plane on edge(s)': build a construction basis from
@@ -508,7 +514,13 @@ class HARDFLOW_OT_draw(Operator):
             b = self._surface_basis
             if b is None:
                 # Before the first click, preview-track the face under the cursor.
-                b = self._surface_basis_at(context, self.cursor)
+                live = self._surface_basis_at(context, self.cursor)
+                if live is not None:
+                    self._surface_hold = live   # remember the last face hovered
+                # On a miss, hold the last good surface plane instead of dropping
+                # to the object-centre VIEW plane -- that jump reads as the cursor
+                # "going behind" the surface.
+                b = live if live is not None else self._surface_hold
             self._surface_miss = b is None
             basis = b if b is not None else self._view_basis(context)
         else:
