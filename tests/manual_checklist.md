@@ -405,6 +405,12 @@ Setup: a cube in Object Mode, selected/active.
       the wrong spot or a T-junction on a non-quad flank — this is the "tune live"
       caveat; headless only checks that Smart never *removes* geometry
       (`test_smart_bevel_edges`).
+- [ ] **N-panel ▸ Cutter Options ▸ Topology** — enabling **Smart Edge Bevel**
+      makes the tool start with `SMART` already on; enabling **Re-quad Cut N-gons**
+      then drawing a **Cut** (§1) leaves the cut faces re-quadded (no 5+-gons) and
+      **Apply Cutters** does the same when baking live booleans. Both default off,
+      so the normal cut/bevel result is unchanged until toggled
+      (`test_boolean_cut_ngon_cleanup_pipeline`).
 - [ ] Headless geometry is covered by `test_nearest_edge_on_face` +
       `test_bevel_object_edges` (+ `test_smart_bevel_edges`); the modal/raycast
       pick needs this GUI pass.

@@ -274,6 +274,10 @@ class HARDFLOW_PT_cutter_options(Panel):
         row.prop(prefs, "draw_array_axis", text="")
         col.label(text="Live keys while drawing: -/= , . A D B C J",
                   icon='INFO')
+        col.separator()
+        col.label(text="Topology")
+        col.prop(prefs, "cut_dissolve_ngons")
+        col.prop(prefs, "smart_bevel_default")
 
 
 class HARDFLOW_PT_modifiers(Panel):

@@ -33,6 +33,14 @@ logic: minor versions add features, patch versions fix bugs.
     holding-loop placement wants a live cube→Subdivision tuning pass, tracked in
     the manual checklist). Pure tests for the placement math + headless
     `test_smart_bevel_edges` / `test_dissolve_boolean_ngons`.
+    - **Wired into the boolean pipeline (opt-in).** A new **Re-quad Cut N-gons**
+      preference (`cut_dissolve_ngons`, default off) runs `dissolve_boolean_ngons`
+      after a destructive draw Cut/Make/Intersect *and* after **Apply Cutters**, so
+      the "auto-clean the n-gons a boolean leaves" flow is one toggle. A
+      **Smart Edge Bevel** preference (`smart_bevel_default`) makes Edge Bevel start
+      in Smart mode. Both live in N-panel ▸ Cutter Options ▸ Topology. Headless
+      `test_boolean_cut_ngon_cleanup_pipeline` (real cut → n-gons → clean) +
+      `test_topology_prefs_registered`.
 
 ### Fixed
 - **Decals didn't conform to curved / multi-face surfaces** — `build_decal_mesh`

@@ -38,7 +38,7 @@ primitives** (Cylinder/Cone/Sphere/Tube), new **boolean draw shapes**
 **Sweep / Follow-Me** tool (L/U/T/I/box cross-sections on the shared
 `pipe._CurveDraw` base), and a **live boolean preview** (`J`) plus N-panel
 **Cutter Options**. Code is syntax-verified with pure + headless tests (70 pure +
-87 headless); the new bpy paths are live-verified in Blender 5.1.2, and full GUI
+89 headless); the new bpy paths are live-verified in Blender 5.1.2, and full GUI
 verification of the modal interactions is tracked in `tests/manual_checklist.md`.
 Roadmap: `ROADMAP.md`.
 

@@ -83,7 +83,7 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
         self.width = 0.0
         self.segments = 2
         self.loop = False           # L: bevel the whole connected edge loop
-        self.smart = False          # S: Smart Bevel (support loops + n-gon clean)
+        self.smart = get_prefs(context).smart_bevel_default   # S toggles live
         self.tightness = 0.5        # - / = : how hard support loops hug the bevel
         self._edge_key = None       # (vi, vj) edge under cursor / locked
         self._edge_world = None     # (Vector, Vector) world endpoints for drawing

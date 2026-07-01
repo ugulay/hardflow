@@ -902,6 +902,37 @@ def test_dissolve_boolean_ngons():
     assert len(cube.data.polygons) == faces_before        # untouched
 
 
+def test_boolean_cut_ngon_cleanup_pipeline():
+    # The real Ask-3 pipeline: a boolean DIFFERENCE leaves n-gons on the cut;
+    # dissolve_boolean_ngons re-quads them so no face has more than 4 sides.
+    _reset()
+    target = _add_cube("NgonTarget", size=2.0)
+    _activate(target)
+    cutter = _add_cube("NgonCutter", size=1.0, location=(1.0, 1.0, 0.0))
+    ok, _used, _msg = boolean.robust_boolean(bpy.context, target, cutter,
+                                             'DIFFERENCE', 'EXACT')
+    assert ok, "boolean cut failed"
+    ngons_before = sum(1 for p in target.data.polygons if len(p.vertices) > 4)
+    cleaned = geometry.dissolve_boolean_ngons(target)
+    ngons_after = sum(1 for p in target.data.polygons if len(p.vertices) > 4)
+    # the cleanup reports what it processed and leaves no n-gons behind
+    assert cleaned == ngons_before, (cleaned, ngons_before)
+    assert ngons_after == 0, "n-gons survived the cleanup"
+
+
+def test_topology_prefs_registered():
+    # The Super Modeling Mode topology toggles register with safe (off) defaults,
+    # so enabling them is opt-in and the default cut/bevel behaviour is unchanged.
+    _reset()
+    hardflow.register()
+    try:
+        prefs = bpy.context.preferences.addons[_PKG].preferences
+        assert prefs.cut_dissolve_ngons is False
+        assert prefs.smart_bevel_default is False
+    finally:
+        hardflow.unregister()
+
+
 def test_loop_cut():
     # Loop cut on a 3x3 quad grid: the ring of an interior horizontal edge is the
     # full column (4 edges); subdividing it inserts a loop -> +4 verts, +3 faces.

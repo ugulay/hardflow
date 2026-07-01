@@ -283,6 +283,13 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "merge coplanar faces)",
         default=False,
     )
+    cut_dissolve_ngons: BoolProperty(
+        name="Re-quad Cut N-gons",
+        description="After a destructive boolean cut, triangulate + rejoin the "
+                    "n-gons the cut left so the surface stays quad-friendly "
+                    "(core.geometry.dissolve_boolean_ngons)",
+        default=False,
+    )
     live_boolean_preview: BoolProperty(
         name="Live Boolean Preview",
         description="While drawing a Cut/Make/Intersect, show the actual boolean "
@@ -307,6 +314,13 @@ class HARDFLOW_Preferences(AddonPreferences):
         name="Bevelled Cutter",
         description="Default: chamfer the cutter walls so the recess has bevelled "
                     "sides; toggle live with C",
+        default=False,
+    )
+    smart_bevel_default: BoolProperty(
+        name="Smart Edge Bevel",
+        description="Object-Mode Edge Bevel starts in Smart mode: add support / "
+                    "holding loops and clean n-gons so the bevel survives "
+                    "Subdivision (toggle live with S). EXPERIMENTAL",
         default=False,
     )
     draw_array_count: IntProperty(
@@ -387,10 +401,12 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "non_destructive")
         col.prop(self, "multi_object")
         col.prop(self, "cleanup_after_cut")
+        col.prop(self, "cut_dissolve_ngons")
         col.prop(self, "live_boolean_preview")
         col.prop(self, "draw_inset")
         col.prop(self, "draw_bevel_cut")
         col.prop(self, "draw_cutter_bevel")
+        col.prop(self, "smart_bevel_default")
         row = col.row(align=True)
         row.prop(self, "draw_array_count")
         row.prop(self, "draw_array_axis", text="")
