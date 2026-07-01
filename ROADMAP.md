@@ -578,6 +578,50 @@ tools instead. All pure math is unit-tested; the bpy paths add headless coverage
       5.1.2 (axis aligns to the clicked edge within ~0.02deg); headless
       `test_face_edge_tangent_near_point`.
 
+## v1.14 — Super Modeling Mode (in progress)
+Evolve the toolkit toward SketchUp fluidity + a pro hard-surface pipeline on three
+foundation layers, each fitting the one-directional (ui/ops → core) architecture.
+Landed items are syntax + pure + headless verified (70 pure + 89 headless); the
+modal GUI is tracked in `tests/manual_checklist.md` §16/§20. Design + status:
+`docs/hardflow_mode_plan.md`, `docs/command_refactor.md`.
+
+**Shadowing Engine** — shadow native tools instead of wrapping them (a modal
+operator can't intercept another modal's events):
+- [x] **Shared `_HardflowModeModal` shell** — own modal loop + Ghost-Grid snap
+      chain (`raycast`+`snapping`+`grid`) + VIEW/X/Y/Z plane cycle + per-session
+      Command journal + HUD, subclassed by the verbs (`operators/hardflow_mode.py`).
+- [x] **Knife verb** — draw a snapped polyline, score it onto the active mesh
+      (`HARDFLOW_OT_mode_knife`).
+- [x] **Extrude verb** — draw a footprint, PgUp/PgDn depth, build a new prism solid
+      (`HARDFLOW_OT_mode_extrude` → `geometry.build_prism`). Header menu ▸ Edit.
+- [ ] Promote the richer SURFACE / EDGES planes from `draw_cut._plane_basis` onto
+      the shared shell; one keymap + pie slot to enter the mode with `Tab` cycling
+      the active verb.
+
+**Per-modal atomic macro (Command-Pattern undo)** — the fix for "undo crashes in
+long boolean chains":
+- [x] **Pure journal** — `Command`/`CallbackCommand`/`MacroCommand`/`CommandManager`
+      (`core/command.py`, unit-tested): idempotent do/undo, atomic macro rollback.
+- [x] **bpy-aware commands** — `HardFlowCommand`/`MeshSnapshotCommand`/
+      `PlacePointCommand` over the `snapshot_mesh`/`restore_mesh` flow
+      (`operators/base.py`); a modal session commits as ONE Blender undo step.
+- [x] **Atomic boolean chain** — `BooleanCutCommand`/`boolean_chain`: N cutters as
+      an all-or-nothing MacroCommand (headless `test_boolean_chain_command_atomic`).
+- [ ] Adopt the CommandManager in the shipping `_FaceDragModal` tools (Push/Pull,
+      Offset, Edge Bevel, Loop Cut) and wire `boolean_chain` into `draw_cut`'s
+      destructive apply — mechanical, but wants a live pass first.
+
+**Smart Topology** — beyond a plain chamfer:
+- [x] **Smart Bevel support loops** — `core/bevel.support_loop_positions` (pure) +
+      `geometry.smart_bevel_edges` (bevel + holding loops via `_flank_support_loop`,
+      topology-preserving), `S` toggle + `-`/`=` tightness on Edge Bevel.
+      EXPERIMENTAL (headless `test_smart_bevel_edges`; exact placement wants a live
+      cube→Subdivision pass).
+- [x] **Boolean n-gon cleanup** — `geometry.dissolve_boolean_ngons` re-quads the
+      n-gons a boolean/bevel leaves; opt-in preference `cut_dissolve_ngons` wired
+      into the destructive Cut and Apply Cutters (headless
+      `test_boolean_cut_ngon_cleanup_pipeline`).
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock
