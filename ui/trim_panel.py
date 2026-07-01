@@ -37,6 +37,8 @@ class HARDFLOW_PT_trim(Panel):
                      icon='UV_DATA')
         row.operator("object.hardflow_trim_grid_regions", text="From Grid",
                      icon='MESH_GRID')
+        layout.operator("object.hardflow_trim_chroma_key",
+                        text="Remove Background…", icon='IMAGE_ALPHA')
 
         if not len(trim.regions):
             layout.label(text="No regions yet — Open Editor to cut", icon='INFO')

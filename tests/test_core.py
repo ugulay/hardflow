@@ -652,6 +652,50 @@ def test_remap_uv_composes_into_slot():
     assert atlas.remap_uv(0.5, 0.5, slot) == (0.75, 0.25)  # center -> slot center
 
 
+# --- atlas: chroma-key background removal ------------------------------------
+
+def test_color_distance():
+    assert atlas.color_distance((0, 0, 0), (0, 0, 0)) == 0.0
+    assert abs(atlas.color_distance((0, 0, 0), (1, 1, 1)) - 3 ** 0.5) < 1e-9
+    assert abs(atlas.color_distance((0.0, 0.0, 0.0), (0.0, 3.0, 4.0)) - 5.0) < 1e-9
+
+
+def test_pixel_rgb_indexes_and_guards():
+    # a 2x2 RGBA image; pixel (1,0) has a distinctive colour
+    px = [0.0] * 16
+    px[4:8] = [0.2, 0.4, 0.6, 1.0]           # pixel at column 1, row 0
+    assert atlas.pixel_rgb(px, 2, 1, 0) == (0.2, 0.4, 0.6)
+    assert atlas.pixel_rgb(px, 2, 0, 0) == (0.0, 0.0, 0.0)
+    assert atlas.pixel_rgb(px, 2, 5, 5) == (0.0, 0.0, 0.0)   # out of range -> guard
+
+
+def test_chroma_key_cuts_matching_pixels():
+    # three pixels: exact green key, a near-green, and a far red
+    px = [0.0, 1.0, 0.0, 1.0,          # exact key colour
+          0.05, 0.95, 0.05, 1.0,       # near green (d ~= 0.087)
+          1.0, 0.0, 0.0, 1.0]          # red, far away
+    count = atlas.chroma_key(px, (0.0, 1.0, 0.0), tolerance=0.1, softness=0.0)
+    assert count == 2                  # the two greens are cut
+    assert px[3] == 0.0                # exact green -> transparent
+    assert px[7] == 0.0                # near green within tolerance -> transparent
+    assert px[11] == 1.0               # red untouched
+
+
+def test_chroma_key_feathers_edge():
+    px = [0.05, 0.95, 0.05, 1.0]       # d ~= 0.0866 from (0,1,0)
+    count = atlas.chroma_key(px, (0.0, 1.0, 0.0), tolerance=0.05, softness=0.1)
+    assert count == 0                  # outside the hard-cut tolerance
+    assert 0.0 < px[3] < 1.0           # but faded in the feather band
+    assert abs(px[3] - (0.0866 - 0.05) / 0.1) < 0.02
+
+
+def test_chroma_key_only_lowers_alpha():
+    # a pixel already half-transparent stays <= its original alpha in the feather
+    px = [0.05, 0.95, 0.05, 0.3]
+    atlas.chroma_key(px, (0.0, 1.0, 0.0), tolerance=0.05, softness=0.1)
+    assert px[3] <= 0.3                # feather min() never raises existing alpha
+
+
 # --- atlas: free-rectangle trim editor ---------------------------------------
 
 def test_normalize_rect_orders_and_clamps():

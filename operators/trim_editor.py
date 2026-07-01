@@ -14,7 +14,7 @@
 import bpy
 from bpy.types import Operator, PropertyGroup
 from bpy.props import (BoolProperty, CollectionProperty, FloatProperty,
-                       IntProperty, StringProperty)
+                       FloatVectorProperty, IntProperty, StringProperty)
 from bpy_extras.io_utils import ImportHelper
 
 from ..core import atlas
@@ -436,6 +436,191 @@ def _launch_editor(context, op, image_name):
         result = bpy.ops.object.hardflow_trim_editor('INVOKE_DEFAULT',
                                                      image_name=image_name)
     return {'CANCELLED'} if result == {'CANCELLED'} else {'FINISHED'}
+
+
+# --- chroma-key background removal -------------------------------------------
+
+def _corner_key_color(img):
+    """Average of the four corner pixels of `img` -- a robust guess at a flat
+    background colour when the user would rather sample than pick. Reads straight
+    from image.pixels (indexable); assumes a 4-channel image with pixel data."""
+    w, h = img.size
+    px = img.pixels
+    acc = [0.0, 0.0, 0.0]
+    corners = ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1))
+    for x, y in corners:
+        r, g, b = atlas.pixel_rgb(px, w, x, y)
+        acc[0] += r
+        acc[1] += g
+        acc[2] += b
+    return (acc[0] * 0.25, acc[1] * 0.25, acc[2] * 0.25)
+
+
+def _apply_chroma_key(img, key_rgb, tolerance, softness):
+    """Knock the key colour out of `img` (alpha -> 0, feathered by softness).
+    Uses numpy for speed when available (Blender ships it) and falls back to the
+    pure atlas.chroma_key on a plain list. Returns the count of fully-cut pixels,
+    or -1 when the image has no editable RGBA pixel data."""
+    w, h = img.size
+    if not (w and h) or img.channels != 4:
+        return -1
+    n = w * h * 4
+    if len(img.pixels) < n:
+        return -1
+    try:
+        import numpy as np
+        buf = np.empty(n, dtype=np.float32)
+        img.pixels.foreach_get(buf)
+        px = buf.reshape(-1, 4)
+        key = np.asarray(key_rgb[:3], dtype=np.float32)
+        d = np.sqrt(((px[:, :3] - key) ** 2).sum(axis=1))
+        alpha = px[:, 3]
+        cut = d <= tolerance
+        alpha[cut] = 0.0
+        if softness > 0.0:
+            band = (~cut) & (d < tolerance + softness)
+            alpha[band] = np.minimum(alpha[band], (d[band] - tolerance) / softness)
+        img.pixels.foreach_set(buf)
+        return int(cut.sum())
+    except ImportError:
+        data = [0.0] * n
+        img.pixels.foreach_get(data)
+        count = atlas.chroma_key(data, key_rgb, tolerance, softness)
+        img.pixels.foreach_set(data)
+        return count
+
+
+def _copy_trim(src, dst):
+    """Copy the trim-region layout from one sheet image onto another (so a cutout
+    copy keeps the regions already carved on the source)."""
+    st, dt = src.hardflow_trim, dst.hardflow_trim
+    dt.regions.clear()
+    for r in st.regions:
+        nr = dt.regions.add()
+        nr.name = r.name
+        _write(nr, _rect(r))
+    dt.active = st.active
+
+
+def _mirror_pixels(src, dst):
+    """Copy src's current pixels onto dst (same size assumed). Done explicitly
+    because Image.copy() does NOT carry the edited pixels of a generated image,
+    and a reused cutout must re-key from the clean source, not its last result."""
+    n = src.size[0] * src.size[1] * 4
+    if len(src.pixels) < n or len(dst.pixels) < n:
+        return
+    try:
+        import numpy as np
+        buf = np.empty(n, dtype=np.float32)
+        src.pixels.foreach_get(buf)
+        dst.pixels.foreach_set(buf)
+    except ImportError:
+        buf = [0.0] * n
+        src.pixels.foreach_get(buf)
+        dst.pixels.foreach_set(buf)
+
+
+def _get_or_make_cutout(src):
+    """The '<name>_cutout' sibling of `src`, created as a copy of src or refreshed
+    from src's current pixels if it already exists -- so re-running / adjusting
+    the operator re-keys from the clean source instead of compounding."""
+    name = src.name + "_cutout"
+    dst = bpy.data.images.get(name)
+    if (dst is None or dst == src or tuple(dst.size) != tuple(src.size)
+            or dst.channels != src.channels):
+        if dst is not None and dst != src:   # size/format drift -> rebuild clean
+            bpy.data.images.remove(dst)
+        dst = src.copy()
+        dst.name = name
+    _mirror_pixels(src, dst)
+    _copy_trim(src, dst)
+    return dst
+
+
+class HARDFLOW_OT_trim_chroma_key(Operator):
+    bl_idname = "object.hardflow_trim_chroma_key"
+    bl_label = "Remove Background (Chroma Key)"
+    bl_description = ("Make a chosen colour transparent on the trim sheet -- knock "
+                      "out a green-screen / flat background so the graphics on it "
+                      "separate cleanly. Sample the colour with the picker's "
+                      "eyedropper, or auto-sample the sheet corner")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    image_name: StringProperty()
+    key_color: FloatVectorProperty(
+        name="Key Colour", subtype='COLOR', size=3, min=0.0, max=1.0,
+        default=(0.0, 1.0, 0.0),
+        description="Background colour to remove (click the swatch, then use the "
+                    "eyedropper to sample it off the image)",
+    )
+    tolerance: FloatProperty(
+        name="Tolerance", default=0.20, min=0.0, max=1.732, subtype='FACTOR',
+        description="How close a pixel's colour must be to the key colour to be "
+                    "fully cut out (RGB distance)",
+    )
+    softness: FloatProperty(
+        name="Edge Softness", default=0.08, min=0.0, max=1.0, subtype='FACTOR',
+        description="Width of the feather band just past the tolerance where alpha "
+                    "fades out, for a soft anti-aliased edge",
+    )
+    sample_corner: BoolProperty(
+        name="Sample From Corner", default=False,
+        description="Ignore the key colour above and take it from the average of "
+                    "the sheet's four corners (a flat background)",
+    )
+    duplicate: BoolProperty(
+        name="Work on a Copy", default=True,
+        description="Key a '<name>_cutout' copy and make it the active sheet, "
+                    "leaving the original untouched (safe / redo-clean). Off = "
+                    "edit the sheet in place",
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return sheet_image(context) is not None
+
+    def invoke(self, context, event):
+        src = sheet_image(context, self.image_name)
+        if src is None:
+            self.report({'WARNING'}, "Pick or load a trim-sheet image first")
+            return {'CANCELLED'}
+        self.image_name = src.name          # pin the source across redo
+        return context.window_manager.invoke_props_dialog(self)
+
+    def execute(self, context):
+        src = sheet_image(context, self.image_name)
+        if src is None:
+            self.report({'WARNING'}, "No trim-sheet image")
+            return {'CANCELLED'}
+        w, h = src.size
+        if not (w and h) or len(src.pixels) < w * h * 4:
+            self.report({'ERROR'}, "Image has no editable pixel data")
+            return {'CANCELLED'}
+        if src.channels != 4:
+            self.report({'ERROR'}, "Needs an RGBA image (4 channels)")
+            return {'CANCELLED'}
+
+        key = _corner_key_color(src) if self.sample_corner else tuple(self.key_color)
+        target = _get_or_make_cutout(src) if self.duplicate else src
+        # Straight (unassociated) alpha so the cut-out reads as clean transparency.
+        # Set before editing pixels: on a file-backed image the setter can reload
+        # from disk, which would otherwise discard the edit.
+        if target.alpha_mode != 'STRAIGHT':
+            try:
+                target.alpha_mode = 'STRAIGHT'
+            except (AttributeError, TypeError):
+                pass
+
+        count = _apply_chroma_key(target, key, self.tolerance, self.softness)
+        if count < 0:
+            self.report({'ERROR'}, "Could not read the image pixels")
+            return {'CANCELLED'}
+        target.update()
+        if self.duplicate:
+            context.scene.hardflow_trim_image = target
+        self.report({'INFO'}, "Removed background: %d px transparent on '%s'"
+                    % (count, target.name))
+        return {'FINISHED'}
 
 
 class HARDFLOW_OT_trim_region_add(Operator):

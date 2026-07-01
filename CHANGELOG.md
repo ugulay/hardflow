@@ -5,6 +5,19 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+### Added
+- **Trim-sheet background removal / chroma key
+  (`HARDFLOW_OT_trim_chroma_key`).** Make a chosen colour transparent on the
+  active trim sheet so a sheet of graphics shot on a green screen (or any flat
+  matte) separates cleanly. Pick the key colour with the picker's eyedropper or
+  auto-sample it from the sheet corners; a `Tolerance` controls how close a pixel
+  must be to be cut and `Edge Softness` feathers the alpha for anti-aliased
+  edges. Works on a `<name>_cutout` copy by default (original untouched,
+  redo-clean, carved regions carried over) or in place. Button in the Trim Sheet
+  Editor N-panel section. The pixel math is pure and unit-tested
+  (`core/atlas.color_distance` / `pixel_rgb` / `chroma_key`); the operator uses a
+  numpy fast path with a pure-list fallback.
+
 ## [1.16.0] — 2026-07-01
 
 Trim Sheet UV editor release: the trim-sheet workflow moves from an equal

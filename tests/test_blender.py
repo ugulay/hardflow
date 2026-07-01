@@ -1692,6 +1692,83 @@ def test_trim_editor_regions_and_place():
         hardflow.unregister()
 
 
+def test_trim_chroma_key_cuts_background_in_place():
+    # v1.17 chroma key: knock a green background out of a trim sheet in place.
+    _reset()
+    hardflow.register()
+    try:
+        img = bpy.data.images.new("Sheet", width=4, height=4, alpha=True)
+        px = [0.0, 1.0, 0.0, 1.0] * 16       # all green, opaque
+        px[0:4] = [1.0, 0.0, 0.0, 1.0]       # one red foreground pixel
+        img.pixels.foreach_set(px)
+        img.update()
+        bpy.context.scene.hardflow_trim_image = img
+        res = bpy.ops.object.hardflow_trim_chroma_key(
+            image_name=img.name, key_color=(0.0, 1.0, 0.0),
+            tolerance=0.1, softness=0.0, sample_corner=False, duplicate=False)
+        assert res == {'FINISHED'}, res
+        out = [0.0] * 64
+        img.pixels.foreach_get(out)
+        assert out[3] == 1.0                 # red foreground kept opaque
+        cut = sum(1 for i in range(16) if out[i * 4 + 3] == 0.0)
+        assert cut == 15, cut                # every green pixel is transparent
+    finally:
+        hardflow.unregister()
+
+
+def test_trim_chroma_key_copy_keeps_regions_and_source():
+    # The 'Work on a Copy' path: original untouched, a '<name>_cutout' image
+    # becomes the active sheet and carries the carved regions across.
+    _reset()
+    hardflow.register()
+    try:
+        img = bpy.data.images.new("Kit", width=4, height=4, alpha=True)
+        img.pixels.foreach_set([0.0, 1.0, 0.0, 1.0] * 16)   # all green
+        img.update()
+        reg = img.hardflow_trim.regions.add()
+        reg.name = "Panel"
+        reg.u0, reg.v0, reg.u1, reg.v1 = 0.1, 0.2, 0.6, 0.8
+        bpy.context.scene.hardflow_trim_image = img
+        res = bpy.ops.object.hardflow_trim_chroma_key(
+            image_name=img.name, key_color=(0.0, 1.0, 0.0),
+            tolerance=0.1, softness=0.0, sample_corner=False, duplicate=True)
+        assert res == {'FINISHED'}, res
+        cutout = bpy.data.images.get("Kit_cutout")
+        assert cutout is not None
+        assert bpy.context.scene.hardflow_trim_image is cutout
+        # source stays fully opaque; the copy is keyed transparent
+        src_out = [0.0] * 64
+        img.pixels.foreach_get(src_out)
+        assert all(src_out[i * 4 + 3] == 1.0 for i in range(16))
+        dst_out = [0.0] * 64
+        cutout.pixels.foreach_get(dst_out)
+        assert all(dst_out[i * 4 + 3] == 0.0 for i in range(16))
+        # regions travelled onto the copy
+        assert [r.name for r in cutout.hardflow_trim.regions] == ["Panel"]
+    finally:
+        hardflow.unregister()
+
+
+def test_trim_chroma_key_sample_corner():
+    # 'Sample From Corner' takes the key colour from the sheet corners.
+    _reset()
+    hardflow.register()
+    try:
+        img = bpy.data.images.new("Blue", width=4, height=4, alpha=True)
+        img.pixels.foreach_set([0.1, 0.2, 0.9, 1.0] * 16)   # flat blue background
+        img.update()
+        bpy.context.scene.hardflow_trim_image = img
+        res = bpy.ops.object.hardflow_trim_chroma_key(
+            image_name=img.name, tolerance=0.05, softness=0.0,
+            sample_corner=True, duplicate=False)
+        assert res == {'FINISHED'}, res
+        out = [0.0] * 64
+        img.pixels.foreach_get(out)
+        assert all(out[i * 4 + 3] == 0.0 for i in range(16))  # whole flat bg cut
+    finally:
+        hardflow.unregister()
+
+
 def test_conform_trim_decal():
     _reset()
     target = _add_cube("Target", size=2.0)

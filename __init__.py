@@ -57,6 +57,7 @@ _classes = (
     trim_editor.HARDFLOW_TrimSheet,
     trim_editor.HARDFLOW_OT_trim_editor,
     trim_editor.HARDFLOW_OT_load_trim_image,
+    trim_editor.HARDFLOW_OT_trim_chroma_key,
     trim_editor.HARDFLOW_OT_trim_region_add,
     trim_editor.HARDFLOW_OT_trim_region_remove,
     trim_editor.HARDFLOW_OT_trim_grid_regions,

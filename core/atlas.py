@@ -257,6 +257,73 @@ def blit_pixels(dst, dst_w, dst_h, src, src_w, src_h, x0, y0):
     return dst
 
 
+# --- chroma-key / background removal (v1.17) ---------------------------------
+# Knock a solid-colour background (a green screen, a flat matte) out of an image
+# by colour, so a sheet of decals shot on one background becomes transparent and
+# the individual graphics separate cleanly. Pure pixel arithmetic on Blender's
+# flat RGBA float layout (4 floats/pixel, row 0 at the bottom) -- the bpy side
+# (reading image.pixels, the operator, the numpy fast path) lives in
+# operators/trim_editor.py; this stays unit-testable on plain lists.
+
+def color_distance(a, b):
+    """Euclidean distance between two RGB colours (each an (r, g, b) sequence) in
+    linear [0, 1] space. 0 = identical; sqrt(3) ~= 1.732 is the maximum (black vs
+    white). The metric the chroma key compares each pixel against the key colour."""
+    dr = a[0] - b[0]
+    dg = a[1] - b[1]
+    db = a[2] - b[2]
+    return (dr * dr + dg * dg + db * db) ** 0.5
+
+
+def pixel_rgb(pixels, width, x, y):
+    """(r, g, b) of the pixel at column x, row y (row 0 = bottom) in a flat RGBA
+    float list. Returns (0, 0, 0) if the coordinate falls outside the buffer, so
+    corner-sampling a key colour never raises."""
+    i = (int(y) * int(width) + int(x)) * 4
+    if i < 0 or i + 2 >= len(pixels):
+        return (0.0, 0.0, 0.0)
+    return (pixels[i], pixels[i + 1], pixels[i + 2])
+
+
+def chroma_key(pixels, key_rgb, tolerance, softness=0.0):
+    """Make the background transparent by colour. For every pixel in the flat RGBA
+    list `pixels`, measure its RGB distance to `key_rgb`:
+
+      * distance <= `tolerance`               -> alpha driven to 0 (cut out)
+      * `tolerance` < distance < tolerance+`softness` (only if softness > 0)
+                                              -> alpha faded linearly 0..1 across
+                                                 the band (a feathered edge, so
+                                                 the cut is not a hard jaggy line)
+      * distance >= tolerance+softness         -> alpha left untouched (kept)
+
+    The feather only ever LOWERS alpha (min with the existing value), so a source
+    that already has partial transparency is never made more opaque. Mutates
+    `pixels` in place and returns the count of fully-cut (alpha 0) pixels -- what
+    the operator reports. `key_rgb` is (r, g, b) in the same linear 0..1 space as
+    image.pixels. Distances/colours are pure floats; no bpy."""
+    kr, kg, kb = key_rgb[0], key_rgb[1], key_rgb[2]
+    t = tolerance if tolerance > 0.0 else 0.0
+    soft = softness if softness > 0.0 else 0.0
+    edge = t + soft
+    n = len(pixels)
+    count = 0
+    i = 0
+    while i + 3 < n:
+        dr = pixels[i] - kr
+        dg = pixels[i + 1] - kg
+        db = pixels[i + 2] - kb
+        d = (dr * dr + dg * dg + db * db) ** 0.5
+        if d <= t:
+            pixels[i + 3] = 0.0
+            count += 1
+        elif soft > 0.0 and d < edge:
+            a = (d - t) / soft
+            if a < pixels[i + 3]:
+                pixels[i + 3] = a
+        i += 4
+    return count
+
+
 def rect_to_uv(x, y, w, h, atlas_w, atlas_h):
     """Convert a top-left pixel rect (image space, y down) into a UV rect
     (u0,v0,u1,v1) (Blender space, v up). The top edge of the image is v=1."""
