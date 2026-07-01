@@ -1357,6 +1357,63 @@ def edit_set_edge_weights(obj, bevel_weight=None, crease=None, only_selected=Tru
     return n
 
 
+def mark_sharp_edges(obj, angle_threshold, set_sharp=True, set_bevel_weight=True,
+                     bevel_weight=1.0, crease=None, shade_smooth=True):
+    """Object-Mode: (re)mark an object's hard edges for the Smart Sharpen /
+    Initialize HardSurface pass (HardOps parity). An edge is *hard* when its
+    dihedral face angle reaches `angle_threshold` (radians), or when it is a
+    boundary / non-manifold edge (not exactly two faces -- always hard). Every
+    edge is cleared first, then the hard ones are:
+
+      * marked **sharp** (``edge.smooth = False``) when `set_sharp`,
+      * given a **bevel weight** (``bevel_weight``) on the 4.x
+        ``bevel_weight_edge`` attribute when `set_bevel_weight`, so a
+        weight-limited Bevel modifier acts only on them,
+      * optionally **creased** (``crease``) for a creased Subdivision.
+
+    Clearing first makes it idempotent: re-running with a looser/tighter angle
+    re-derives the full hard-edge set instead of accumulating stale marks. With
+    `shade_smooth` every face is set smooth so the sharp edges + a Weighted Normal
+    read as crisp hard-surface. bmesh only, no bpy.ops. Returns the hard-edge
+    count. The whole call is safe to wrap in the operator's try/except."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bw = cr = None
+    if set_bevel_weight:
+        bw = bm.edges.layers.float.get('bevel_weight_edge')
+        if bw is None:
+            bw = bm.edges.layers.float.new('bevel_weight_edge')
+    if crease is not None:
+        cr = bm.edges.layers.float.get('crease_edge')
+        if cr is None:
+            cr = bm.edges.layers.float.new('crease_edge')
+    if shade_smooth:
+        for f in bm.faces:
+            f.smooth = True
+    n = 0
+    for e in bm.edges:
+        faces = e.link_faces
+        if len(faces) != 2:
+            hard = True                         # boundary / non-manifold = hard
+        else:
+            try:
+                hard = e.calc_face_angle() >= angle_threshold
+            except (ValueError, RuntimeError):
+                hard = False                    # degenerate face -> leave soft
+        if set_sharp:
+            e.smooth = not hard                 # smooth False == sharp
+        if bw is not None:
+            e[bw] = bevel_weight if hard else 0.0
+        if cr is not None:
+            e[cr] = crease if hard else 0.0
+        if hard:
+            n += 1
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return n
+
+
 def cleanup_mesh(obj, merge_dist=1e-4, dissolve_angle=0.0873, remove_loose=True):
     """Mesh cleanup after boolean/bevel: merge (remove doubles) + limited
     dissolve (merge coplanar faces) + delete loose geometry. Object Mode.

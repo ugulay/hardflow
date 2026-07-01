@@ -37,6 +37,7 @@ bevel = _load("bevel")
 preview_cache = _load("preview_cache")
 parallax = _load("parallax")
 hud = _load("hud")
+hardsurface = _load("hardsurface")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1148,6 +1149,45 @@ def test_alignment_guides_horizontal():
 
 def test_alignment_guides_none():
     assert hud.alignment_guides([(10, 10)], (500, 500), (800, 600)) == []
+
+
+# --- hardsurface: Smart Sharpen decision math (Module 3 / HardOps parity) -----
+
+def test_dihedral_angle_flat_right_and_reversed():
+    assert abs(hardsurface.dihedral_angle((0, 0, 1), (0, 0, 1))) < 1e-9   # flat
+    assert abs(hardsurface.dihedral_angle((1, 0, 0), (0, 1, 0))
+               - math.pi / 2) < 1e-9                                      # 90
+    assert abs(hardsurface.dihedral_angle((1, 0, 0), (-1, 0, 0))
+               - math.pi) < 1e-9                                          # fold
+    # non-unit inputs are normalized first
+    assert abs(hardsurface.dihedral_angle((0, 0, 5), (0, 0, 2))) < 1e-9
+    # degenerate normal -> treated as flat
+    assert hardsurface.dihedral_angle((0, 0, 0), (0, 0, 1)) == 0.0
+
+
+def test_should_sharpen_threshold():
+    t = math.radians(30)
+    assert hardsurface.should_sharpen(math.radians(45), t) is True
+    assert hardsurface.should_sharpen(math.radians(30), t) is True   # inclusive
+    assert hardsurface.should_sharpen(math.radians(10), t) is False
+
+
+def test_sharp_edges_filters_by_angle():
+    t = math.radians(30)
+    items = [
+        ("flat", (0, 0, 1), (0, 0, 1)),          # 0 deg -> soft
+        ("corner", (1, 0, 0), (0, 1, 0)),        # 90 deg -> hard
+        ("slight", (0, 0, 1), (0.1, 0.0, 1.0)),  # ~5.7 deg -> soft
+    ]
+    assert hardsurface.sharp_edges(items, t) == ["corner"]
+
+
+def test_adaptive_bevel_width():
+    assert abs(hardsurface.adaptive_bevel_width((2.0, 2.0, 2.0)) - 0.02) < 1e-9
+    # keyed to the SMALLEST side
+    assert abs(hardsurface.adaptive_bevel_width((10.0, 10.0, 0.5)) - 0.005) < 1e-9
+    # degenerate -> the floor
+    assert hardsurface.adaptive_bevel_width((0.0, 0.0, 0.0)) == 1e-4
 
 
 def _run_all():

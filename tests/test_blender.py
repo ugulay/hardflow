@@ -8,6 +8,7 @@
 # (build_prism, apply/add_boolean) and the non-modal bevel/mirror operators are
 # verified. For pure math: python tests/test_core.py. For the modal tools that
 # can't run headless (draw, Push/Pull, Offset, the menus): tests/manual_checklist.md.
+import math
 import os
 import sys
 
@@ -2425,6 +2426,43 @@ def test_draw_cut_apply_destructive_atomic_chain():
         # A carved-off duplicate survives the successful slice.
         new_objs = set(bpy.data.objects.keys()) - objs_before - {"SliceCut"}
         assert new_objs, "slice did not keep the carved piece"
+    finally:
+        hardflow.unregister()
+
+
+def test_mark_sharp_edges_marks_all_cube_edges():
+    _reset()
+    cube = _add_cube("Sharp", size=2.0)
+    n = geometry.mark_sharp_edges(cube, math.radians(30.0))
+    assert n == 12, n                         # every 90-degree cube edge is hard
+    me = cube.data
+    assert all(e.use_edge_sharp for e in me.edges), "edges not marked sharp"
+    assert all(p.use_smooth for p in me.polygons), "faces not shaded smooth"
+    # a very loose threshold leaves the flat cube faces' interior... cube has no
+    # sub-90 edges, so a 170-degree threshold marks none.
+    n2 = geometry.mark_sharp_edges(cube, math.radians(170.0))
+    assert n2 == 0, n2
+    assert not any(e.use_edge_sharp for e in cube.data.edges), "not cleared"
+
+
+def test_smart_sharpen_operator_idempotent():
+    _reset()
+    hardflow.register()
+    try:
+        cube = _add_cube("Init", size=2.0)
+        _activate(cube)
+        bpy.ops.object.hardflow_smart_sharpen()
+        bev = cube.modifiers.get("HF_Bevel")
+        wn = cube.modifiers.get("HF_WeightedNormal")
+        assert bev is not None and bev.type == 'BEVEL', "no bevel modifier"
+        assert wn is not None and wn.type == 'WEIGHTED_NORMAL', "no weighted normal"
+        assert bev.limit_method == 'WEIGHT', bev.limit_method
+        assert list(cube.modifiers)[-1] is wn, "weighted normal not at the bottom"
+        # Re-run: the managed modifiers update in place, never stacking copies.
+        bpy.ops.object.hardflow_smart_sharpen()
+        bevels = [m for m in cube.modifiers if m.type == 'BEVEL']
+        wns = [m for m in cube.modifiers if m.type == 'WEIGHTED_NORMAL']
+        assert len(bevels) == 1 and len(wns) == 1, (len(bevels), len(wns))
     finally:
         hardflow.unregister()
 
