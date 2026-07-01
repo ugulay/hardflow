@@ -28,8 +28,14 @@ from ..ui import draw as hud
 from . import base
 
 
-# Ghost-Grid construction planes cycled with the arrow keys.
-_PLANES = ('VIEW', 'X', 'Y', 'Z')
+# Ghost-Grid construction planes cycled with the arrow keys. SURFACE aligns to
+# the face under the first click (promoted from draw_cut._plane_basis); EDGES is
+# Edit-Mode-only (selected edges) and so does not apply to this Object-Mode shell.
+_PLANES = ('VIEW', 'SURFACE', 'X', 'Y', 'Z')
+
+# The tool verbs Tab cycles between within one mode session, and their HUD labels.
+_VERBS = ('KNIFE', 'EXTRUDE')
+_VERB_LABELS = {'KNIFE': 'Knife', 'EXTRUDE': 'Extrude'}
 
 
 class _HardflowModeModal:
@@ -38,18 +44,14 @@ class _HardflowModeModal:
     the plane cycle, the per-session CommandManager and the HUD; subclasses only
     fill the commit.
 
-    Subclass contract:
-        verb                       : short label for the HUD / reports.
-        _MIN_POINTS                : points required before commit (default 3).
-        _build(context)            : turn self.world_points into geometry and
-                                     return a report string; runs inside the
-                                     atomic commit (raise to cancel cleanly).
-        _init_verb(context)        : optional per-verb state (default no-op).
-        _handle_verb_key(ctx, ev)  : optional extra keys; return True if consumed.
-        _verb_hud()                : optional extra HUD text (default "").
+    Verbs live on the shell (dispatched by self._active_verb) so Tab can switch
+    the active verb mid-session the way draw_cut's Tab cycles the boolean mode --
+    Knife (score the footprint onto the active mesh) and Extrude (build a prism
+    solid from the footprint). Each Operator subclass only sets `_START_VERB`
+    (the verb it enters with) and its poll; the commit logic is shared here.
     """
 
-    verb = "Mode"
+    _START_VERB = 'KNIFE'
     _MIN_POINTS = 3
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -71,6 +73,12 @@ class _HardflowModeModal:
         self._cursor = None                     # live snapped cursor (world)
         self._snap_kind = None                  # 'VERT'/'MID'/'EDGE'/'GRID'/None
         self._plane = 'VIEW'                     # construction plane (arrow keys)
+        self._surface_basis = None              # cached at first click on SURFACE
+        self._surface_miss = False              # SURFACE ray missed geometry
+        self._last_co = (event.mouse_region_x, event.mouse_region_y)
+        self._active_verb = self._START_VERB    # Tab cycles Knife <-> Extrude
+        self.verb = _VERB_LABELS[self._active_verb]
+        self.depth = max(self._grid * 4.0, 0.1)  # Extrude verb depth (PgUp/PgDn)
         self._commands = command.CommandManager()
         self._mesh_cmds = []                    # MeshSnapshotCommands to free()
         self._basis = self._plane_basis(context)
@@ -78,7 +86,6 @@ class _HardflowModeModal:
         # Pre-collect snap geometry once; verts/edges don't move while drawing.
         self.geo = (snapping.collect_geo(context, prefs.snap_target)
                     if prefs.geo_snap else None)
-        self._init_verb(context)
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
@@ -92,18 +99,28 @@ class _HardflowModeModal:
     def modal(self, context, event):
         context.area.tag_redraw()
         co = (event.mouse_region_x, event.mouse_region_y)
+        self._last_co = co                      # SURFACE preview-track needs it
 
         if event.type == 'MOUSEMOVE':
             # THE hijack: the raw mouse position is handed straight to the core
             # snapping chain, not to Blender's tool. Re-derive the basis first so
-            # the VIEW plane tracks the current orbit.
+            # the VIEW / SURFACE planes track the current orbit / cursor.
             self._basis = self._plane_basis(context)
             self._cursor = self._snap_screen(context, co)
 
         elif event.value == 'PRESS' and self._handle_verb_key(context, event):
             pass                                # verb consumed the key (e.g. depth)
 
+        elif event.type == 'TAB' and event.value == 'PRESS':
+            self._cycle_verb()                  # switch Knife <-> Extrude in place
+
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            # First click on the SURFACE plane locks the construction basis to the
+            # face under the cursor, so the whole footprint stays on one plane.
+            if self._plane == 'SURFACE' and self._surface_basis is None:
+                self._surface_basis = self._surface_basis_at(context, co)
+                self._basis = self._plane_basis(context)
+                self._cursor = self._snap_screen(context, co)
             if self._cursor is not None:
                 self._commands.do(base.PlacePointCommand(
                     self.world_points, self._cursor.copy()))
@@ -117,6 +134,7 @@ class _HardflowModeModal:
         elif (event.type in {'LEFT_ARROW', 'RIGHT_ARROW'}
               and event.value == 'PRESS'):
             self._cycle_plane(1 if event.type == 'RIGHT_ARROW' else -1)
+            self._surface_basis = None          # re-track the surface on the new plane
             self._basis = self._plane_basis(context)
             self._cursor = self._snap_screen(context, co)
 
@@ -182,20 +200,57 @@ class _HardflowModeModal:
 
     def _plane_basis(self, context):
         """(origin, right, up, normal) for the current construction plane. VIEW
-        faces the camera through the origin; X / Y / Z are the world axis planes."""
+        faces the camera through the origin; SURFACE aligns to the face under the
+        cursor (cached at first click); X / Y / Z are the world axis planes."""
         origin = self._origin(context)
         if self._plane == 'VIEW':
-            rv3d = context.region_data
-            right, up = raycast.view_right_up(rv3d)
-            return origin, right, up, raycast.view_direction(rv3d)
+            self._surface_miss = False
+            return self._view_basis(context, origin)
+        if self._plane == 'SURFACE':
+            b = self._surface_basis
+            if b is None:                        # before the first click: preview-track
+                b = self._surface_basis_at(context, self._last_co)
+            self._surface_miss = b is None
+            return b if b is not None else self._view_basis(context, origin)
+        self._surface_miss = False
         normal = {'X': Vector((1.0, 0.0, 0.0)),
                   'Y': Vector((0.0, 1.0, 0.0)),
                   'Z': Vector((0.0, 0.0, 1.0))}[self._plane]
         right, up, n = raycast.basis_from_normal(normal)
         return origin, right, up, n
 
+    def _view_basis(self, context, origin):
+        rv3d = context.region_data
+        right, up = raycast.view_right_up(rv3d)
+        return origin, right, up, raycast.view_direction(rv3d)
+
+    def _surface_basis_at(self, context, screen_co):
+        """Construction basis aligned to the face under screen_co (promoted from
+        draw_cut._surface_basis_at): (origin, right, up, normal) from the surface
+        hit, aligned to the face edge nearest the hit, or None if the ray misses
+        geometry. The shell draws GPU only (no live preview object), so nothing is
+        ignored by the raycast."""
+        region, rv3d = context.region, context.region_data
+        hit = raycast.ray_cast_surface_ex(context, region, rv3d, screen_co, None)
+        if hit is None:
+            return None
+        location, normal, obj, index, matrix = hit
+        up_hint = raycast.face_edge_tangent(obj, index, matrix, normal,
+                                            near_point=location)
+        if up_hint is None:
+            _vr, up_hint = raycast.view_right_up(rv3d)
+        right, up, n = raycast.basis_from_normal(normal, up_hint=up_hint)
+        return location.copy(), right, up, n
+
     def _cycle_plane(self, step):
         self._plane = _PLANES[(_PLANES.index(self._plane) + step) % len(_PLANES)]
+
+    def _cycle_verb(self):
+        """Tab: switch the active verb (Knife <-> Extrude) without leaving the
+        session, keeping the points placed so far."""
+        i = _VERBS.index(self._active_verb)
+        self._active_verb = _VERBS[(i + 1) % len(_VERBS)]
+        self.verb = _VERB_LABELS[self._active_verb]
 
     # --- commit / teardown ------------------------------------------------
 
@@ -232,19 +287,61 @@ class _HardflowModeModal:
         if context.area is not None:
             context.area.tag_redraw()
 
-    # --- default subclass hooks ------------------------------------------
-
-    def _init_verb(self, context):
-        pass
+    # --- verb dispatch (Tab switches self._active_verb) ------------------
 
     def _handle_verb_key(self, context, event):
+        """Extrude owns PageUp/PageDown to set its depth; Knife has no extra key."""
+        if self._active_verb == 'EXTRUDE' and event.type in {'PAGE_UP',
+                                                              'PAGE_DOWN'}:
+            step = self._grid if event.type == 'PAGE_UP' else -self._grid
+            self.depth = max(self._grid, round(self.depth + step, 6))
+            return True
         return False
 
     def _verb_hud(self):
+        if self._active_verb == 'EXTRUDE':
+            return "   depth %.3f m (PgUp/PgDn)" % self.depth
         return ""
 
     def _build(self, context):
-        raise NotImplementedError
+        if self._active_verb == 'KNIFE':
+            return self._build_knife(context)
+        return self._build_extrude(context)
+
+    def _build_knife(self, context):
+        """Score the drawn footprint onto the active mesh as a MeshSnapshotCommand,
+        recorded in the in-modal journal so the knife is undoable mid-session too."""
+        obj = context.active_object
+        if obj is None or obj.type != 'MESH':
+            raise RuntimeError("Knife needs an active mesh (Tab to Extrude)")
+        mw_inv = obj.matrix_world.inverted_safe()
+        local = [mw_inv @ w for w in self.world_points]
+        view_dir = mw_inv.to_3x3() @ raycast.view_direction(context.region_data)
+
+        def _score(o):
+            geometry.knife_polygon(o, local, view_dir)
+
+        knife = base.MeshSnapshotCommand(obj, _score, label="Knife",
+                                         snapshot_name="hf_mode_knife")
+        self._mesh_cmds.append(knife)
+        self._commands.do(knife)         # snapshot 'before' + score, recorded
+        return "HardFlow Mode: knifed the drawn footprint"
+
+    def _build_extrude(self, context):
+        """Build a prism from the drawn footprint, extruded along the plane normal,
+        and drop it in as a new active object."""
+        origin, right, up, normal = self._basis
+        me = geometry.build_prism(self.world_points, normal, self.depth)
+        if me is None:
+            raise RuntimeError("degenerate footprint")
+        obj = bpy.data.objects.new("Hardflow_Extrude", me)
+        context.collection.objects.link(obj)
+        for o in context.selected_objects:
+            o.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        return ("HardFlow Mode: extruded a %d-gon solid (depth %.3f m)"
+                % (len(self.world_points), self.depth))
 
     # --- HUD --------------------------------------------------------------
 
@@ -284,28 +381,30 @@ class _HardflowModeModal:
                 hud.draw_shape(box, mark, closed=True)
 
         snap_txt = self._snap_kind or "free"
+        plane_txt = self._plane + ("(miss)" if self._surface_miss else "")
         hud.draw_hud(region, [
             ("HardFlow Mode %s  --  %d pt   plane %s   snap %s%s"
-             % (self.verb, len(self.world_points), self._plane,
+             % (self.verb, len(self.world_points), plane_txt,
                 'ON' if self.snap else 'OFF', self._verb_hud()),
              line[:3] + (1.0,)),
-            ("Click add   Backspace undo   ←/→ plane   "
+            ("Click add   Backspace undo   Tab verb   ←/→ plane   "
              "Z / Enter / dbl-click commit   X snap   Esc cancel   [%s]"
              % snap_txt, (0.72, 0.72, 0.72, 1.0)),
         ])
 
 
 class HARDFLOW_OT_mode_knife(_HardflowModeModal, Operator):
-    """HardFlow Mode Knife: draw a snapped polyline on the Ghost Grid and score it
-    onto the active mesh. The reference verb for the modal-hijack + Ghost-Grid snap
-    + Command-Pattern undo architecture."""
+    """HardFlow Mode, entered on the Knife verb: draw a snapped polyline on the
+    Ghost Grid and score it onto the active mesh. Tab switches to Extrude
+    mid-session. The reference verb for the modal-hijack + Ghost-Grid snap +
+    Command-Pattern undo architecture."""
 
     bl_idname = "mesh.hardflow_mode_knife"
     bl_label = "HardFlow Mode Knife"
     bl_description = ("Snapped polyline knife driven by the HardFlow core snapping "
-                      "+ command modules")
+                      "+ command modules (Tab -> Extrude)")
 
-    verb = "Knife"
+    _START_VERB = 'KNIFE'
 
     @classmethod
     def poll(cls, context):
@@ -313,62 +412,17 @@ class HARDFLOW_OT_mode_knife(_HardflowModeModal, Operator):
         return (obj is not None and obj.type == 'MESH'
                 and context.mode == 'OBJECT')
 
-    def _build(self, context):
-        """Score the drawn footprint onto the active mesh as a MeshSnapshotCommand,
-        recorded in the in-modal journal so the knife is undoable mid-session too."""
-        obj = context.active_object
-        mw_inv = obj.matrix_world.inverted_safe()
-        local = [mw_inv @ w for w in self.world_points]
-        view_dir = mw_inv.to_3x3() @ raycast.view_direction(context.region_data)
-
-        def _score(o):
-            geometry.knife_polygon(o, local, view_dir)
-
-        knife = base.MeshSnapshotCommand(obj, _score, label="Knife",
-                                         snapshot_name="hf_mode_knife")
-        self._mesh_cmds.append(knife)
-        self._commands.do(knife)         # snapshot 'before' + score, recorded
-        return "HardFlow Mode: knifed the drawn footprint"
-
 
 class HARDFLOW_OT_mode_extrude(_HardflowModeModal, Operator):
-    """HardFlow Mode Extrude: draw a snapped footprint on the Ghost Grid, then
-    extrude it into a solid along the plane normal. The 'draw a shape, make it a
-    thing' verb -- the SketchUp Push/Pull-from-nothing flow, on the shared shell.
-    PageUp / PageDown set the extrude depth."""
+    """HardFlow Mode, entered on the Extrude verb: draw a snapped footprint on the
+    Ghost Grid, then extrude it into a solid along the plane normal. The 'draw a
+    shape, make it a thing' verb -- the SketchUp Push/Pull-from-nothing flow, on
+    the shared shell. PageUp / PageDown set the extrude depth; Tab switches to
+    Knife mid-session."""
 
     bl_idname = "mesh.hardflow_mode_extrude"
     bl_label = "HardFlow Mode Extrude"
     bl_description = ("Draw a snapped footprint on the Ghost Grid and extrude it "
-                      "into a solid")
+                      "into a solid (Tab -> Knife)")
 
-    verb = "Extrude"
-
-    def _init_verb(self, context):
-        self.depth = max(self._grid * 4.0, 0.1)   # PageUp/PageDown adjust
-
-    def _handle_verb_key(self, context, event):
-        if event.type in {'PAGE_UP', 'PAGE_DOWN'}:
-            step = self._grid if event.type == 'PAGE_UP' else -self._grid
-            self.depth = max(self._grid, round(self.depth + step, 6))
-            return True
-        return False
-
-    def _verb_hud(self):
-        return "   depth %.3f m (PgUp/PgDn)" % self.depth
-
-    def _build(self, context):
-        """Build a prism from the drawn footprint, extruded along the plane normal,
-        and drop it in as a new active object."""
-        origin, right, up, normal = self._basis
-        me = geometry.build_prism(self.world_points, normal, self.depth)
-        if me is None:
-            raise RuntimeError("degenerate footprint")
-        obj = bpy.data.objects.new("Hardflow_Extrude", me)
-        context.collection.objects.link(obj)
-        for o in context.selected_objects:
-            o.select_set(False)
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
-        return ("HardFlow Mode: extruded a %d-gon solid (depth %.3f m)"
-                % (len(self.world_points), self.depth))
+    _START_VERB = 'EXTRUDE'

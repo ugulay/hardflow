@@ -19,9 +19,10 @@ from bpy.types import Operator
 from bpy.props import EnumProperty
 from mathutils import Vector
 
-from ..core import raycast, geometry, boolean, grid, snap, decal_math
+from ..core import raycast, geometry, boolean, grid, snap, decal_math, command
 from ..preferences import get_prefs
 from ..ui import draw as hud
+from . import base
 
 
 _SHAPES = [
@@ -1479,11 +1480,15 @@ class HARDFLOW_OT_draw(Operator):
             self.report({'WARNING'}, "Knife cut scored nothing")
 
     def _apply_destructive(self, context, targets, cutter, solver):
-        """Add+apply modifier, delete the cutter. Clean up via finally even on
-        failure. CUT/MAKE support multiple targets; SLICE works on the first.
-        Uses the robust boolean path (solver fallback + cutter normal repair +
-        diagnosis) and surfaces the outcome so a failed/degraded cut is never
-        silent."""
+        """Apply the cutter to the target(s) as an ATOMIC boolean chain: every cut
+        commits, or on the first solver failure the whole chain rolls back -- never
+        a half-cut target or a half-sliced pair (the crash-safety goal behind the
+        Command-Pattern layer). Each cut is a base.BooleanCutCommand (the robust
+        boolean path: solver fallback + cutter normal repair + diagnosis) run
+        inside one MacroCommand, and the outcome is surfaced so a failed/degraded
+        cut is never silent. Cleans up the cutter (and any spare slice duplicate)
+        via finally even on failure. CUT/MAKE/INTERSECT support multiple targets;
+        SLICE works on the first."""
         prefs = get_prefs(context)
         cleanup = prefs.cleanup_after_cut
         dissolve = prefs.cut_dissolve_ngons
@@ -1491,41 +1496,50 @@ class HARDFLOW_OT_draw(Operator):
               'INTERSECT': 'INTERSECT'}.get(self.mode)
         failures, fallbacks = [], []
 
-        def cut(tgt, bop):
-            ok, used, msg = boolean.robust_boolean(context, tgt, cutter, bop, solver)
-            if not ok:
-                failures.append(msg)
-            else:
-                # Only a drop to the less-accurate FAST solver is worth flagging.
-                # A Manifold/EXACT auto-pick is an equal-accuracy speed choice
-                # (Manifold-first on clean meshes), not a quality fallback, so it
-                # stays quiet -- matching robust_boolean's own message.
-                if used == 'FAST' and solver != 'FAST':
-                    fallbacks.append(used)
-                if cleanup:
-                    geometry.cleanup_mesh(tgt)
-                if dissolve:
-                    # Re-quad the n-gons the cut left (topology cleanup, opt-in).
-                    geometry.dissolve_boolean_ngons(tgt)
+        # Build the chain. SLICE = DIFFERENCE on the target + INTERSECT on a
+        # duplicate (kept as the carved-off piece); CUT/MAKE/INTERSECT = the same
+        # op on every target. Each command snapshots its own target under a
+        # distinct name so their rollbacks don't collide.
+        other = None
+        if self.mode == 'SLICE':
+            other = boolean.duplicate_object(context, targets[0])
+            cut_targets = [(targets[0], 'DIFFERENCE'), (other, 'INTERSECT')]
+        else:  # CUT / MAKE / INTERSECT
+            cut_targets = [(t, op) for t in targets]
+        cmds = [base.BooleanCutCommand(context, tgt, cutter, bop, solver,
+                                       snapshot_name="hf_cut_%d" % i)
+                for i, (tgt, bop) in enumerate(cut_targets)]
+        macro = command.MacroCommand(cmds, label="Boolean chain")
 
         try:
-            if self.mode == 'SLICE':
-                target = targets[0]
-                other = boolean.duplicate_object(context, target)
-                cut(target, 'DIFFERENCE')
-                cut(other, 'INTERSECT')
-                if failures:
-                    # A half-failed slice leaves an inconsistent spare duplicate;
-                    # drop it (and its copied mesh) rather than orphan it.
-                    me = other.data
-                    if other.name in bpy.data.objects:
-                        bpy.data.objects.remove(other, do_unlink=True)
-                    if me is not None and me.users == 0:
-                        bpy.data.meshes.remove(me)
-            else:  # CUT / MAKE
-                for t in targets:
-                    cut(t, op)
+            try:
+                macro.execute()      # atomic: a failing cut rolls the rest back
+            except Exception as ex:  # noqa: BLE001 -- report, never crash the modal
+                failures.append(str(ex))
+            else:
+                # Committed cleanly: post-process each cut target + note a drop to
+                # the less-accurate FAST solver (a Manifold/EXACT auto-pick is an
+                # equal-accuracy speed choice, so it stays quiet).
+                for c, (tgt, _bop) in zip(cmds, cut_targets):
+                    if c.solver_used == 'FAST' and solver != 'FAST':
+                        fallbacks.append('FAST')
+                    if cleanup:
+                        geometry.cleanup_mesh(tgt)
+                    if dissolve:
+                        # Re-quad the n-gons the cut left (topology cleanup, opt-in).
+                        geometry.dissolve_boolean_ngons(tgt)
+            # A rolled-back slice leaves an inconsistent spare duplicate (its
+            # target was restored); drop it (and its copied mesh) rather than
+            # orphan it.
+            if other is not None and failures:
+                me = other.data
+                if other.name in bpy.data.objects:
+                    bpy.data.objects.remove(other, do_unlink=True)
+                if me is not None and me.users == 0:
+                    bpy.data.meshes.remove(me)
         finally:
+            for c in cmds:
+                c.free()             # drop every snapshot datablock
             bpy.data.objects.remove(cutter, do_unlink=True)
         self._report_boolean(failures, fallbacks)
 

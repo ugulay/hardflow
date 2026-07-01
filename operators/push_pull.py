@@ -52,7 +52,7 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
         self.typed = ""
         self.locked = True
         geometry.flush_edit_mesh(self.obj)   # sync selection before snapshot
-        self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+        self._begin_edit(restore=geometry.restore_edit_mesh)
         self._capture_axis_inference(self.axis_co, self.axis_dir)
         return True
 
@@ -66,27 +66,23 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
         self.distance = 0.0
         self.typed = ""
         self.locked = True
-        self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+        self._begin_edit()
         self._capture_axis_inference(self.axis_co, self.axis_dir)
 
     # --- dragging / apply ------------------------------------------------
 
-    def _refresh_preview(self):
-        """Show the real extrude live: restore the snapshot, then re-extrude the
-        locked face(s) by the current distance straight into the mesh. Routes
+    def _mutate(self, obj):
+        """Re-extrude the locked face(s) by the current distance -- the edit only;
+        the session command restores the pre-extrude snapshot first. Routes
         through the edit-mesh in Edit Mode, the object mesh otherwise."""
-        if self._base is None:
+        if abs(self.distance) <= 1e-6:
             return
         if self.edit:
-            geometry.restore_edit_mesh(self.obj, self._base)
-            if abs(self.distance) > 1e-6:
-                geometry.edit_extrude_faces(self.obj, self._local_disp(),
-                                            keep_original=self.copy)
-            return
-        geometry.restore_mesh(self.obj, self._base)
-        if abs(self.distance) > 1e-6:
-            geometry.extrude_faces(self.obj, [self.face_index],
-                                   self._local_disp(), keep_original=self.copy)
+            geometry.edit_extrude_faces(obj, self._local_disp(),
+                                        keep_original=self.copy)
+        else:
+            geometry.extrude_faces(obj, [self.face_index], self._local_disp(),
+                                   keep_original=self.copy)
 
     def _local_disp(self):
         world_disp = self.axis_dir * self.distance

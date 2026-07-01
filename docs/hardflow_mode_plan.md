@@ -287,30 +287,44 @@ single Blender undo step.
 |---|---|---|---|
 | **0 (done)** | Command core + Knife prototype + tests | `core/command.py`, `operators/hardflow_mode.py`, `tests/test_core.py` | pure tests green; live smoke test pending |
 | **1 (done)** | Extract `_HardflowModeModal` shell (Knife moved onto it) | `operators/hardflow_mode.py` | headless + manual checklist |
-| **2 (done)** | Extrude verb + VIEW/X/Y/Z plane cycle on the shell | `operators/hardflow_mode.py` | manual checklist |
+| **2 (done)** | Extrude verb + VIEW/SURFACE/X/Y/Z plane cycle + `Tab` verb cycle + keymap/pie entry on the shell | `operators/hardflow_mode.py`, `keymaps.py`, `ui/pie.py` | headless (`test_mode_shell_verb_and_plane_cycle`) + manual checklist |
 | **3 (done, experimental)** | `support_loop_positions` (pure) + `smart_bevel_edges` / `dissolve_boolean_ngons` (bmesh) + `S` toggle | `core/bevel.py`, `core/geometry.py`, `operators/edge_tool.py` | pure tests + headless; live subdiv tuning pending |
-| **4 (facility landed)** | Boolean chain → `MacroCommand` (`base.BooleanCutCommand` / `boolean_chain`, atomic rollback) | `operators/base.py` (+ future `draw_cut` adoption) | headless (`test_boolean_chain_command_atomic`) |
+| **4 (done)** | Boolean chain → `MacroCommand` (`base.BooleanCutCommand` / `boolean_chain`, atomic rollback), adopted in `draw_cut._apply_destructive` + the `_FaceDragModal` live preview | `operators/base.py`, `operators/draw_cut.py`, `operators/face_tool.py` (+ push_pull/offset/edge_tool) | headless (`test_boolean_chain_command_atomic`, `test_draw_cut_apply_destructive_atomic_chain`, `test_facetool_*`) |
 
 Each phase is independently shippable and leaves the tree green.
 
 **Landed in the Super Modeling Mode change:** Phases 1–3 and the Phase-4 boolean
-facility are now committed and green (pure + headless + syntax). Still pending and
-deliberately deferred (each is a self-contained, low-risk follow-up):
+facility are now committed and green (pure + headless + syntax). The follow-ups
+below were subsequently landed and verified live against a standalone `bpy`
+build:
 
-- **CommandManager adoption in `push_pull`/`offset`/`edge_tool`** — the shared
-  `_FaceDragModal` still uses the ad-hoc `_base`/`_committed` snapshot bookkeeping.
-  The named `MeshSnapshotCommand` maps onto it 1:1 (see `command_refactor.md` §3
-  Q1); it is a rename, not a behaviour change, but touches four interdependent
-  modal files, so it wants a live pass before landing.
-- **`draw_cut` boolean chain → `base.boolean_chain`** — the `MacroCommand` facility
-  exists and is tested; wiring it into `_apply_destructive` (esp. the SLICE
-  dual-cut) buys explicit atomic rollback. `draw_cut` stays untouched until that
-  is validated against a deliberately-broken cutter live.
+- **CommandManager adoption in `push_pull`/`offset`/`edge_tool`** — *done.* The
+  shared `_FaceDragModal` runs its live preview through a per-session
+  `CommandManager` + `base.MeshSnapshotCommand`: `_begin_edit` snapshots + applies
+  the edit as one journal entry, the base `_refresh_preview` re-applies it each
+  drag frame via `command.reapply`, cancel routes through `undo_all`, and commit
+  `clear`s the journal so the net change is Blender's single undo step. Each tool
+  now supplies `_mutate` (the edit *without* the restore) instead of its own
+  `_refresh_preview` — the 1:1 rename from `command_refactor.md` §3 Q1. Headless
+  `test_facetool_command_adoption_structure`, `test_facetool_begin_edit_lifecycle`.
+- **`draw_cut` boolean chain → atomic `MacroCommand`** — *done.* `_apply_destructive`
+  applies the cutter(s) through a `MacroCommand` of `base.BooleanCutCommand`s, so a
+  multi-target CUT/MAKE or the SLICE dual-cut rolls back all-or-nothing on a
+  mid-chain solver failure (no half-cut target, no orphaned slice duplicate),
+  while preserving the cleanup / n-gon-dissolve / solver-fallback reporting.
+  Headless `test_draw_cut_apply_destructive_atomic_chain`.
+- **SURFACE plane + Tab verb cycle on the mode shell** — *done.* The shell cycles
+  VIEW/**SURFACE**/X/Y/Z (SURFACE promoted from `draw_cut._surface_basis_at`,
+  aligned to the face under the first click; EDGES stays Edit-Mode-only and so
+  does not apply to this Object-Mode shell), `Tab` switches the active verb
+  (Knife ↔ Extrude) in-session, and the mode is entered from a Ctrl+Shift+X
+  keymap + an Edit pie slot. Headless `test_mode_shell_verb_and_plane_cycle`.
+
+Still pending and deliberately deferred (self-contained, low-risk):
+
 - **Smart Bevel live tuning** — the support-loop placement is deterministic and
   count-tested, but the exact holding-loop position and non-quad-flank handling
   need a live cube→Subdivision pass (kept EXPERIMENTAL / `S`-gated until then).
-- **SURFACE / EDGES planes on the mode shell** — the shell cycles VIEW/X/Y/Z; the
-  richer plane set from `draw_cut._plane_basis` can be promoted to the shared base.
 
 ---
 

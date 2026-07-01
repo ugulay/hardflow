@@ -10,9 +10,10 @@
 import bpy
 from mathutils import Vector
 
-from ..core import raycast, geometry, grid, snap
+from ..core import raycast, geometry, grid, snap, command
 from ..preferences import get_prefs
 from ..ui import draw as hud
+from . import base
 
 
 # Shared numeric-entry key map (top row + numpad).
@@ -35,12 +36,15 @@ class _FaceDragModal:
     Subclass contract -- methods:
         _init_tool(context, event)   : init tool-specific state (the drag value).
         _lock_face(context, co)      : build the drag basis from self.face_index
-                                       + snapshot the mesh (Object Mode pick).
-        _lock_edit(context, event)   : same from the selected faces (Edit Mode);
+                                       then call self._begin_edit() (Object pick).
+        _lock_edit(context, event)   : same from the selected faces (Edit Mode),
+                                       call self._begin_edit(restore=...);
                                        return False when nothing is selected.
         _update_drag(context, co)    : set the drag value from the cursor.
         _set_value(v)                : set the drag value from a typed float.
-        _refresh_preview()           : restore snapshot + re-apply the value.
+        _mutate(obj)                 : apply the current value to obj (the edit
+                                       WITHOUT the restore -- the command owns the
+                                       restore). Base _refresh_preview re-runs it.
         _repeat_last()               : set the value to the remembered last one.
         _remember_last()             : store the committed value for repeat.
         _hud_lines(context, prefs)   : the HUD text lines.
@@ -73,7 +77,13 @@ class _FaceDragModal:
         self.typed = ""           # numeric entry buffer
         self._infer = []          # axis-drag inference candidates (shared)
         self._infer_hit = False   # drag currently snapped to geometry
-        self._base = None         # mesh snapshot for the live preview
+        # Per-session undo journal + the live mesh edit it records. The command
+        # owns the snapshot/restore/commit/rollback (the named form of the old
+        # ad-hoc _base/_committed flow); _base mirrors the command's snapshot so
+        # inference capture reads the same pre-edit mesh.
+        self._commands = command.CommandManager()
+        self._edit = None         # the live MeshSnapshotCommand (set at lock)
+        self._base = None         # the command's captured pre-edit snapshot
         self._committed = False
         self._init_tool(context, event)
 
@@ -208,33 +218,59 @@ class _FaceDragModal:
             hud.draw_shape(pts, tuple(prefs.line_color), closed=True)
         hud.draw_hud(context.region, self._hud_lines(context, prefs))
 
+    # --- shared live edit (Command Pattern) ------------------------------
+
+    def _begin_edit(self, restore=None):
+        """Open the locked object's live mesh edit as a MeshSnapshotCommand and
+        record it in the per-session journal. Its first apply runs `_mutate` at
+        the current (usually zero) value, so it is a no-op preview until the drag
+        moves. Object Mode restores with geometry.restore_mesh; an Edit-Mode tool
+        passes restore=geometry.restore_edit_mesh. The captured snapshot is
+        exposed as self._base so inference capture reads the same pre-edit mesh."""
+        self._edit = base.MeshSnapshotCommand(
+            self.obj, self._mutate, snapshot_name=self._snapshot_name,
+            restore=restore)
+        self._commands.do(self._edit)
+        self._base = self._edit.snapshot
+        return self._edit
+
+    def _refresh_preview(self):
+        """Live-preview frame: restore the pre-edit snapshot and re-apply the
+        tool's current value through the session command. Subclasses supply the
+        edit via `_mutate`; the command owns the (mode-aware) restore."""
+        if self._edit is None:
+            return
+        self._edit.reapply(self._mutate)
+
     # --- shared apply / teardown -----------------------------------------
 
     def _commit(self, context):
         # The live preview already wrote the change into the mesh; make sure it
-        # reflects the final value, remember it for R, then keep it.
+        # reflects the final value, remember it for R, then hand the net change
+        # to Blender's single undo step (clear the in-modal journal).
         try:
             self._refresh_preview()
         except Exception as ex:
             self.report({'ERROR'}, f"Hardflow: {ex}")
         self._remember_last()
         self._committed = True
+        self._commands.clear()
         self._cleanup(context)
         return {'FINISHED'}
 
     def _cleanup(self, context):
-        # Cancelled mid-preview -> roll the mesh back to the snapshot. Wrap the
-        # restore best-effort: the GPU draw handler MUST be removed below even if
-        # a restore raises, otherwise it keeps firing against a dead operator.
+        # Cancelled mid-preview -> roll the mesh back through the journal
+        # (undo_all restores every recorded snapshot via the command's injected,
+        # mode-aware restore). Wrap it best-effort: the GPU draw handler MUST be
+        # removed below even if a restore raises, else it keeps firing against a
+        # dead operator.
         try:
-            if self._base is not None:
-                if not self._committed:
-                    if self.edit:
-                        geometry.restore_edit_mesh(self.obj, self._base)
-                    else:
-                        geometry.restore_mesh(self.obj, self._base)
-                geometry.free_mesh(self._base)
-                self._base = None
+            if self._edit is not None and not self._committed:
+                self._commands.undo_all()
+            if self._edit is not None:
+                self._edit.free()
+                self._edit = None
+            self._base = None
         finally:
             try:
                 bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
@@ -280,6 +316,11 @@ class _FaceDragModal:
         return grid.snap_scalar(value, prefs.grid_world, True)
 
     # --- default hooks (subclasses override) -----------------------------
+
+    def _mutate(self, obj):
+        """Apply the tool's current value to `obj` -- the edit WITHOUT the restore
+        (the session command restores first, then calls this). Subclasses fill it;
+        the base is a no-op so a value of zero previews the unchanged mesh."""
 
     def _handle_key(self, context, event):
         return False
