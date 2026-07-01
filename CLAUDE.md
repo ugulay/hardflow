@@ -9,7 +9,8 @@ Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
 Blender 4.2+. The goal: cover the whole hard-surface modeling loop —
 draw-to-cut booleans, precise snapping, decals, kitbash assets, and direct
 modeling — in one free add-on. **Every roadmap feature is now
-implemented** (through v1.13) — the core
+implemented** (through v1.14 — the v1.14 line is the **Super Modeling Mode**
+described below) — the core
 boolean/snap/cutter workflows; the full decal
 subsystem (placement, PBR material, bake, image library, trim sheets, atlasing,
 plus v1.7 create/match/retrim/conform + editable library); the asset/kitbash

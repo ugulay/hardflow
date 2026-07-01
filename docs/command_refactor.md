@@ -10,9 +10,20 @@ tested** (pure + headless). The `_FaceDragModal` adoption (§3 Q1) and the
 `draw_cut` boolean-chain step (§4 Step 1) are **now landed and verified** against a
 standalone `bpy` build — the shared preview runs through a per-session
 `CommandManager` + `MeshSnapshotCommand`, and `draw_cut._apply_destructive` applies
-its cutter(s) as an atomic `MacroCommand`. Steps 2–3 of the `draw_cut` proposal
-(placement points → `PlacePointCommand`, live cutter preview → `MeshSnapshotCommand`)
-remain optional follow-ups; the monolith is otherwise intact.
+its cutter(s) as an atomic `MacroCommand`.
+
+**Audit (v1.14, 2026-07):** the three-layer command architecture is complete and
+consistent across `hardflow_mode`, `face_tool` (Push/Pull, Offset, Edge Bevel, Loop
+Cut) and `draw_cut`'s destructive path. Two follow-ups remain, both in `draw_cut`
+and both **non-blocking** (the monolith is otherwise intact):
+
+1. **Placement points** are still plain `self.points`/`self.world_points`
+   `append`/`pop`, not `PlacePointCommand` — `draw_cut` has no session
+   `CommandManager` of its own (Step 2 below).
+2. **The live boolean preview** is *not* a `MeshSnapshotCommand` — and it should
+   not become one (see the corrected Step 3 below): it is a non-destructive
+   temp-modifier lifecycle, so its named form is a lightweight
+   `LivePreviewCommand`, not the mesh-mutating snapshot command.
 
 ---
 
@@ -272,10 +283,24 @@ where Blender gives you no intra-session undo at all.
 route through a `CommandManager`, so undo-during-draw is uniform with the mesh
 edits instead of a second hand-rolled history.
 
-**Step 3 — the live cutter preview becomes a `MeshSnapshotCommand`.**
-The `HF_LivePreview` modifier bookkeeping (`_sync_live_boolean` /
-`_clear_live_boolean`) is the same snapshot-shaped lifecycle; fold it onto the
-command once Steps 1–2 are proven.
+**Step 3 — the live cutter preview becomes a `LivePreviewCommand`
+(corrected).** The original proposal said "fold `_sync_live_boolean` /
+`_clear_live_boolean` onto a `MeshSnapshotCommand`, it is the same
+snapshot-shaped lifecycle." The v1.14 audit found that wrong: the live boolean
+preview **never mutates the target mesh**. It hangs a temporary `HF_LivePreview`
+Boolean *modifier* on each target pointing at the live cutter cage and lets
+Blender's viewport evaluate the result (hence the `_LIVE_BOOL_MAX_VERTS` cap and
+the `FAST` solver). Porting it to `MeshSnapshotCommand` would force a real
+per-frame boolean *bake* on every `MOUSEMOVE` — a regression, not a cleanup.
+
+The right named form is a lightweight `LivePreviewCommand(HardFlowCommand)` that
+owns the temp-modifier lifecycle instead of a mesh snapshot: `execute()`/`refresh()`
+attach + retarget the `HF_LivePreview` modifier on the wanted targets;
+`undo()`/`free()` strip every one back off (folding in today's scene-wide safety
+sweep). That collapses the scattered `_bool_targets` bookkeeping under one named,
+journal-recorded owner **without** changing behaviour or cost — the preview stays
+non-destructive and just as cheap. Fold it in together with Step 2's
+`CommandManager`, once that journal exists on `draw_cut`.
 
 After all three, `draw_cut` and `hardflow_mode` share the same command
 vocabulary, and a future extraction of `_HardflowModeModal` (Phase 1 of the main
