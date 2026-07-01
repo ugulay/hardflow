@@ -578,13 +578,14 @@ tools instead. All pure math is unit-tested; the bpy paths add headless coverage
       5.1.2 (axis aligns to the clicked edge within ~0.02deg); headless
       `test_face_edge_tangent_near_point`.
 
-## v1.14 — Super Modeling Mode (in progress)
+## v1.14 — Super Modeling Mode
 Evolve the toolkit toward SketchUp fluidity + a pro hard-surface pipeline on three
 foundation layers, each fitting the one-directional (ui/ops → core) architecture.
-Landed items are syntax + pure + headless verified (70 pure + 105 headless, run
-live against a standalone `bpy` build); the modal GUI is tracked in
-`tests/manual_checklist.md` §16/§20. Design + status:
-`docs/hardflow_mode_plan.md`, `docs/command_refactor.md`.
+All three layers are now landed; only Smart Bevel's exact support-loop placement
+stays EXPERIMENTAL pending a live subdivision-tuning pass. Landed items are syntax
++ pure + headless verified (70 pure + 105 headless, run live against a standalone
+`bpy` build); the modal GUI is tracked in `tests/manual_checklist.md` §16/§20.
+Design + status: `docs/hardflow_mode_plan.md`, `docs/command_refactor.md`.
 
 **Shadowing Engine** — shadow native tools instead of wrapping them (a modal
 operator can't intercept another modal's events):

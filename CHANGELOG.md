@@ -11,19 +11,41 @@ logic: minor versions add features, patch versions fix bugs.
   rule and stay pure/headless-testable.
   - **Shadowing Engine.** `operators/hardflow_mode.py` grows a shared
     `_HardflowModeModal` shell — the modal-hijack loop + Ghost-Grid snap chain
-    (`core/raycast`+`core/snapping`+`core/grid`) + VIEW/X/Y/Z plane cycle +
-    per-session Command journal + HUD — that the draw *verbs* subclass, mirroring
-    `face_tool._FaceDragModal` / `pipe._CurveDraw`. The knife prototype moves onto
-    it and a new **Extrude** verb joins it (`HARDFLOW_OT_mode_extrude`: draw a
-    snapped footprint, PageUp/PageDown depth, `build_prism` → new solid). The tool
-    owns its own modal loop and calls bmesh directly — it never invokes Blender's
-    native modal operators. Both verbs are in the header-menu Edit submenu.
+    (`core/raycast`+`core/snapping`+`core/grid`) + VIEW/**SURFACE**/X/Y/Z plane
+    cycle + per-session Command journal + HUD — that the draw *verbs* subclass,
+    mirroring `face_tool._FaceDragModal` / `pipe._CurveDraw`. The knife prototype
+    moves onto it and a new **Extrude** verb joins it (`HARDFLOW_OT_mode_extrude`:
+    draw a snapped footprint, PageUp/PageDown depth, `build_prism` → new solid).
+    The tool owns its own modal loop and calls bmesh directly — it never invokes
+    Blender's native modal operators. The **SURFACE** plane (promoted from
+    `draw_cut._surface_basis_at`) locks to the face under the first click; **`Tab`**
+    switches the active verb (Knife ↔ Extrude) in-session, keeping the points
+    placed so far. Entered from a **Ctrl+Shift+X** keymap (rebindable) + an **Edit
+    pie** slot, and both verbs are in the header-menu Edit submenu. Headless
+    `test_mode_shell_verb_and_plane_cycle`.
   - **Per-modal atomic macro.** `operators/base.py` adds `BooleanCutCommand` (one
     `robust_boolean` as an atomic command that raises on solver failure) and
     `boolean_chain` (a `MacroCommand` of cuts) so a cutter chain commits or rolls
     back all-or-nothing — the fix for "undo crashes in long boolean chains." A
     modal session's edits stay in the Command journal and commit as *one* Blender
     undo step. Headless `test_boolean_chain_command_atomic` (success + rollback).
+    - **Adopted in the shipping tools.** The shared `operators/face_tool._FaceDragModal`
+      (Push/Pull, Offset, Edge Bevel, Loop Cut) now runs its live preview through a
+      per-session `CommandManager` + `MeshSnapshotCommand`: `_begin_edit` snapshots
+      + applies, the base `_refresh_preview` re-applies each drag frame via
+      `command.reapply`, cancel routes through `undo_all`, commit `clear`s the
+      journal → one Blender undo step; each tool supplies `_mutate` (the edit
+      *without* the restore) instead of its own `_refresh_preview` (a behaviour-
+      preserving rename of the old `_base`/`_committed` flow). Added a public
+      `MeshSnapshotCommand.snapshot` accessor for inference capture.
+      `draw_cut._apply_destructive` now applies the cutter(s) through an atomic
+      `MacroCommand` of `BooleanCutCommand`s, so a multi-target Cut/Make or a Slice
+      rolls back cleanly on a mid-chain solver failure (no half-cut target, no
+      orphaned slice duplicate) while keeping the cleanup / n-gon-dissolve / solver-
+      fallback reporting. Headless `test_facetool_command_adoption_structure`,
+      `test_facetool_begin_edit_lifecycle`,
+      `test_draw_cut_apply_destructive_atomic_chain`,
+      `test_mesh_snapshot_command_snapshot_property`.
   - **Smart Topology (Smart Bevel & Support).** New pure `core/bevel.py`
     (`support_loop_positions` — where holding loops sit for a `width`/`tightness`
     bevel) + `geometry.smart_bevel_edges` (bevel + support/holding loops via
