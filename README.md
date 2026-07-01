@@ -74,9 +74,17 @@ price tag.
   inward by a measured distance (grid-snapped, numeric entry); `E` continues into
   **extruding the inner face** for an instant recess or raised panel; `R` repeats.
 - **Edge tools (Object Mode)** — **Edge Bevel** (pick an edge or its whole loop,
-  drag a width, `[ ]` segments) and **Loop Cut** (pick an edge, insert an edge
-  loop) — edge work without entering Edit Mode. All the direct-modeling tools also
-  pick **through generative modifiers** (subdivision, etc.).
+  drag a width, `[ ]` segments; `S` toggles **Smart Bevel** — support/holding
+  loops + n-gon cleanup so the bevel survives Subdivision, `-`/`=` tightness) and
+  **Loop Cut** (pick an edge, insert an edge loop) — edge work without entering
+  Edit Mode. All the direct-modeling tools also pick **through generative
+  modifiers** (subdivision, etc.).
+- **HardFlow Mode** — a streamlined "shadowing" draw mode that owns its own modal
+  loop (it never invokes Blender's native tools): draw a snapped polyline on the
+  Ghost Grid, then **Knife** it onto a mesh or **Extrude** it into a new solid.
+  `←/→` cycle the construction plane (VIEW / X / Y / Z), Backspace steps a point
+  back, and the whole session commits as a **single atomic undo step** (a per-modal
+  Command-Pattern journal); Esc rolls the entire session back.
 - **Construction grid** — drop a wire reference grid at the 3D cursor on the
   XY / XZ / YZ plane to model against (a construction plane); spacing
   follows the same world grid as the snap tools.
@@ -107,6 +115,12 @@ price tag.
 
 Every roadmap feature through **v1.13**, grouped by the paid tool whose workflow
 it brings to Blender for free. The right column points at the implementing module.
+
+> **Super Modeling Mode (in progress, Unreleased)** — a SketchUp-fluidity /
+> pro-pipeline evolution on three new layers: the **Shadowing Engine** (HardFlow
+> Mode verbs), a **per-modal atomic macro** (Command-Pattern undo), and **Smart
+> Topology** (Smart Bevel + boolean n-gon cleanup). See the *Super Modeling Mode*
+> subsection at the end of the matrix.
 
 ### Boolean & drawing
 
@@ -203,7 +217,7 @@ it brings to Blender for free. The right column points at the implementing modul
 |---------|--------------|-------|
 | Push/Pull | Raycast a face, drag along its normal to extrude; grid-snap + numeric + **vertex/edge inference**; `C` copy/stack, `R` repeat (v1.11) | `operators/push_pull.py` |
 | Offset | Raycast a face, drag to inset its border; `E` chains into extruding the inner face — instant recess / raised panel; `R` repeat (v1.11) | `operators/offset.py`, `core/offset.py` |
-| Edge Bevel (v1.11) | Object-Mode: pick an edge (or its whole loop, `L`), drag a width, `[ ]` segments — bevel without Edit Mode | `operators/edge_tool.py`, `core/geometry.py bevel_object_edges` |
+| Edge Bevel (v1.11) | Object-Mode: pick an edge (or its whole loop, `L`), drag a width, `[ ]` segments — bevel without Edit Mode; `S` **Smart Bevel** adds support loops + n-gon cleanup (`-`/`=` tightness) | `operators/edge_tool.py`, `core/geometry.py bevel_object_edges/smart_bevel_edges` |
 | Loop Cut (v1.11) | Object-Mode: pick an edge, insert an edge loop by subdividing its ring; `[ ]` sets how many | `operators/edge_tool.py`, `core/geometry.py edge_ring/loop_cut` |
 | Pick through modifiers (v1.11) | The face/edge tools map an evaluated-mesh hit (subdivision / array / mirror) back to a base face | `core/geometry.py nearest_face_to_point` |
 | Shared modal base (v1.11) | One mixin owns the hover / lock / drag / preview / numeric / inference / HUD shell for every face-drag tool | `operators/face_tool.py _FaceDragModal` |
@@ -240,11 +254,28 @@ it brings to Blender for free. The right column points at the implementing modul
 | Feature | What it does | Where |
 |---------|--------------|-------|
 | Live placement preview | Decal/asset tools show the real object under the cursor pre-click | `operators/decals.py`, `operators/assets.py` |
-| Pie menu | Categorized main pie + Build/Boolean/Modify/Curves sub-pies (Alt+Q) | `ui/pie.py` |
+| Pie menu | Categorized main pie + Boolean/Build/Edit/Curves sub-pies (Alt+Q) | `ui/pie.py` |
 | Header dropdown | 3D-View header menu covering every tool incl. Decals/Assets | `ui/menu.py` |
 | N-panel | Tools, snap settings, cutter options, modifier stack, cutter list, display rows | `ui/panel.py` |
 | HUD measurement | Drawn shape size in meters (Box W×H, Circle r/d, Poly segments) | `ui/draw.py` |
 | Customizable keymap | Rebind shortcuts from the standard Blender keymap editor | `keymaps.py` |
+
+### Super Modeling Mode (in progress)
+
+*A SketchUp-fluidity / pro hard-surface-pipeline evolution. Three foundation
+layers are landed (syntax + pure + headless verified; modal GUI in the manual
+checklist); deeper adoption is deferred pending live-Blender validation — see
+`docs/hardflow_mode_plan.md`.*
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Shadowing Engine | HardFlow Mode owns its own modal loop and routes the raw mouse through the core snap chain to bmesh — it never invokes Blender's native modal tools | `operators/hardflow_mode.py _HardflowModeModal` |
+| HardFlow Mode: Knife | Draw a snapped polyline on the Ghost Grid, score it onto the active mesh | `operators/hardflow_mode.py HARDFLOW_OT_mode_knife` |
+| HardFlow Mode: Extrude | Draw a footprint, PgUp/PgDn depth, build a new prism solid along the plane normal | `operators/hardflow_mode.py HARDFLOW_OT_mode_extrude`, `core/geometry.py build_prism` |
+| Per-modal atomic macro | A tool session's edits live in a Command journal and commit as **one** Blender undo step; `Backspace` steps back, `Esc` rolls the session back | `core/command.py`, `operators/base.py MeshSnapshotCommand` |
+| Atomic boolean chain | N cutters applied as an all-or-nothing MacroCommand — a mid-chain failure rolls the whole chain back (no half-baked cutters) | `operators/base.py BooleanCutCommand/boolean_chain` |
+| Smart Bevel & support loops | Bevel + support/holding loops so the edge survives Subdivision (`S` on Edge Bevel, `-`/`=` tightness) — EXPERIMENTAL | `core/bevel.py support_loop_positions`, `core/geometry.py smart_bevel_edges` |
+| Boolean n-gon cleanup | Opt-in: re-quad the n-gons a boolean cut / Apply Cutters leaves (N-panel ▸ Cutter Options ▸ Topology) | `core/geometry.py dissolve_boolean_ngons`, `preferences.py cut_dissolve_ngons` |
 
 ## Installation
 
@@ -303,6 +334,18 @@ Offset, the draw tool, and snapping also work in **Edit Mode** (v1.3).
 > dice / clean modifier tools and the step / taper / knurl greeble; use the
 > Object-Mode Edge Bevel / Loop Cut and Blender's own modifiers instead.
 
+**HardFlow Mode:** header menu ▸ Edit ▸ **"HardFlow Mode: Knife"** / **"…:
+Extrude"** (or F3). Click to place snapped points; `←/→` cycle the construction
+plane, Backspace steps back, `Z` / Enter / double-click commit, Esc cancels. In
+Extrude, **PgUp / PgDn** set the depth. The whole session is one undo step.
+
+**Smart Bevel & topology (Super Modeling Mode):** in **Edge Bevel** press `S` to
+add support/holding loops so the bevel survives Subdivision (`-` / `=` adjust how
+tightly they hug the bevel). Enable **N-panel ▸ Cutter Options ▸ Topology ▸
+Re-quad Cut N-gons** to auto-clean the n-gons a boolean cut / Apply Cutters leaves,
+and **Smart Edge Bevel** to start Edge Bevel in Smart mode. (Both default off;
+Smart Bevel is EXPERIMENTAL.)
+
 **Assets:** N-panel "Assets" → "Asset from .blend" (or the "Asset Library" grid)
 starts the placement tool: wheel = scale, `[ ]` = roll, left click = place, Esc =
 cancel. Toggle "Asset as Cutter", "Conform", and "Transfer Shading" there.
@@ -325,14 +368,18 @@ hardflow/
 │   ├── snap.py             # vertex/edge geometry snap (pure 2D)
 │   ├── snapping.py         # unified 3D snapping for every draw tool (bpy-data)
 │   ├── offset.py           # polygon inset/offset math, Offset tool (pure 2D)
-│   ├── geometry.py         # bmesh build (primitives/prisms/pipe/loft) + Edit-Mode bridge
+│   ├── bevel.py            # Smart Bevel support-loop placement math (pure)
+│   ├── geometry.py         # bmesh build (primitives/prisms/pipe/loft) + smart bevel + n-gon clean + Edit-Mode bridge
 │   ├── boolean.py          # destructive + non-destructive boolean + fallbacks
+│   ├── command.py          # pure Command-Pattern journal (per-modal atomic undo)
 │   ├── transform.py        # cable-sag / fit / adaptive sizing math (pure)
 │   ├── decal*.py / atlas.py# decal orientation, image library, trim/atlas math
 │   ├── asset_lib.py        # .blend kit-library scan (pure)
 │   └── asset.py            # append / orient / bind INSERTs + asset extras
 ├── operators/              # user actions
 │   ├── draw_cut.py         # main modal draw (box/circle/poly/ngon/slot/star/arc; live boolean)
+│   ├── hardflow_mode.py    # HardFlow Mode shell (Shadowing Engine) — Knife + Extrude verbs
+│   ├── base.py             # operator-layer Command-Pattern (MeshSnapshotCommand / BooleanCutCommand)
 │   ├── hardops.py          # edge-weight / display / material / recalc-normals helpers
 │   ├── boolean_ops.py      # boolean from selected objects
 │   ├── cutters.py          # non-destructive cutter management (apply/select/remove)
@@ -346,7 +393,7 @@ hardflow/
 │   └── assets.py           # INSERT placement + library + mark + material + export
 ├── ui/                     # GPU drawing, HUD, menus
 │   ├── draw.py             # gpu + blf helpers
-│   ├── pie.py              # categorized pie (main + Build/Boolean/Curves)
+│   ├── pie.py              # categorized pie (main + Boolean/Build/Edit/Curves)
 │   ├── menu.py             # 3D-View header dropdown covering every tool
 │   ├── panel.py            # N-panel: tools, settings, cutter options, modifier stack, cutters
 │   ├── decal_panel.py / decal_library.py   # decal sections
