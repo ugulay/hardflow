@@ -161,6 +161,8 @@ class HARDFLOW_MT_menu_decals(Menu):
                         text="Place Image...", icon='IMAGE_DATA')
         layout.operator("object.hardflow_load_trim_sheet",
                         text="Load Trim Sheet...", icon='UV_DATA')
+        layout.operator("object.hardflow_load_trim_image",
+                        text="Trim Sheet Editor...", icon='UV_DATA')
         layout.separator()
         layout.operator("object.hardflow_create_decal",
                         text="Create from High-poly", icon='RENDER_STILL')

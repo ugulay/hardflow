@@ -681,6 +681,41 @@ the new decision logic is pure, testable core code. Verified with 76 pure tests
       the mouse is effectively still. Cap is now the tunable
       `live_preview_max_verts` preference.
 
+## v1.16 — Trim Sheet UV editor
+The trim-sheet workflow only offered an EQUAL `cols × rows` grid: you could say
+"4×4 sheet, cell 7" but not "a wide panel here, two narrow strips under it". This
+adds free, UV-style cutting — carve a sheet into arbitrary, unequal named
+rectangles and place a decal from any of them. All rect math is pure in
+`core/atlas.py` (unit-tested); the modal/GPU shell is thin. Verified with 84 pure
+tests + the headless suite (`test_trim_editor_regions_and_place`); the modal draw
+is in `tests/manual_checklist.md`.
+- [x] **Free-rectangle region math** — `core/atlas.py` gains `normalize_rect`,
+      `rect_area`, `rect_contains`, `rect_at_point` (top-most hit-test),
+      `snap_value`/`snap_rect`, `rect_handle_points`/`nearest_handle` (8-handle
+      corner/edge pick), `resize_rect`, `move_rect` (unit-clamped translate) and
+      `guillotine_split` (cut a rect in two at a custom fraction). Stdlib only,
+      fully unit-tested.
+- [x] **Region data on the Image** — `HARDFLOW_TrimRegion`/`HARDFLOW_TrimSheet`
+      PropertyGroups stored on `bpy.types.Image.hardflow_trim` (regions save with
+      the .blend and travel with the sheet); `Scene.hardflow_trim_image` points at
+      the active sheet for the panel + placement ops (`operators/trim_editor.py`).
+- [x] **Interactive viewport editor** — `HARDFLOW_OT_trim_editor` draws the sheet
+      as a screen-space canvas (`ui/draw.draw_image`) with the regions overlaid;
+      LMB-drag = new region, drag a handle = resize, click = select/move,
+      `C`/`Shift+C` = guillotine split at the cursor, `X` = delete, `A` = add,
+      `Tab` = cycle, `G`/`[ ]`/wheel = snap density, Enter/Esc =
+      confirm/cancel (snapshot restore).
+- [x] **Placement from a custom region** — `HARDFLOW_OT_place_decal` gains
+      `region_index`: whole-image / equal-grid-cell / custom-region sub-rects all
+      flow through one `_uv_rect`/`_wh` path, Up/Down cycles regions live in the
+      place modal. `HARDFLOW_OT_place_trim_region` launches it from the panel;
+      `HARDFLOW_OT_retrim_region` rewrites a placed decal's UVs to a region
+      (`core/decal.set_decal_uv_rect`).
+- [x] **N-panel + menu** — "Trim Sheet Editor" section under Decals
+      (`ui/trim_panel.HARDFLOW_PT_trim`): pick/load the sheet, open the editor,
+      seed regions from a grid, and manage the region list; a "Trim Sheet
+      Editor..." entry in the header Decals menu.
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock

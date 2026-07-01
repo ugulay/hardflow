@@ -648,6 +648,78 @@ def test_remap_uv_composes_into_slot():
     assert atlas.remap_uv(0.5, 0.5, slot) == (0.75, 0.25)  # center -> slot center
 
 
+# --- atlas: free-rectangle trim editor ---------------------------------------
+
+def test_normalize_rect_orders_and_clamps():
+    # drawn right-to-left / top-to-bottom comes back canonical
+    assert atlas.normalize_rect((0.8, 0.9, 0.2, 0.3)) == (0.2, 0.3, 0.8, 0.9)
+    # out-of-range edges clamp into the unit square
+    assert atlas.normalize_rect((-0.5, 0.5, 1.5, 0.2)) == (0.0, 0.2, 1.0, 0.5)
+
+
+def test_rect_contains_and_area():
+    r = (0.2, 0.2, 0.6, 0.4)
+    assert atlas.rect_contains(r, 0.3, 0.3) is True
+    assert atlas.rect_contains(r, 0.2, 0.4) is True         # border counts
+    assert atlas.rect_contains(r, 0.7, 0.3) is False
+    assert math.isclose(atlas.rect_area(r), 0.4 * 0.2)
+
+
+def test_rect_at_point_topmost_wins():
+    rects = [(0.0, 0.0, 1.0, 1.0), (0.3, 0.3, 0.7, 0.7)]
+    # overlap -> the later (top) rect wins
+    assert atlas.rect_at_point(rects, 0.5, 0.5) == 1
+    # only the big one covers this point
+    assert atlas.rect_at_point(rects, 0.1, 0.1) == 0
+    assert atlas.rect_at_point(rects, 1.5, 0.5) == -1     # outside everything
+
+
+def test_snap_value_and_rect():
+    assert atlas.snap_value(0.34, 0.25) == 0.25
+    assert atlas.snap_value(0.13, 0.25) == 0.25 or atlas.snap_value(0.13, 0.25) == 0.0
+    assert atlas.snap_value(0.42, 0.0) == 0.42            # step 0 = no snap
+    assert atlas.snap_value(1.4, 0.25) == 1.0             # clamps to [0,1]
+    r = atlas.snap_rect((0.11, 0.11, 0.61, 0.61), 0.25)
+    assert r == (0.0, 0.0, 0.5, 0.5) or r == (0.0, 0.0, 0.75, 0.75)
+
+
+def test_nearest_handle_picks_corner_edge_move():
+    r = (0.2, 0.2, 0.8, 0.8)
+    assert atlas.nearest_handle(r, 0.2, 0.2, 0.05) == 'BL'   # on a corner
+    assert atlas.nearest_handle(r, 0.8, 0.5, 0.05) == 'R'    # on the right edge mid
+    assert atlas.nearest_handle(r, 0.5, 0.5, 0.05) == 'MOVE'  # interior
+    assert atlas.nearest_handle(r, 1.5, 1.5, 0.05) is None    # far outside
+
+
+def test_resize_rect_by_handle_and_normalizes():
+    r = (0.2, 0.2, 0.8, 0.8)
+    assert atlas.resize_rect(r, 'BR', 0.9, 0.1) == (0.2, 0.1, 0.9, 0.8)
+    assert atlas.resize_rect(r, 'L', 0.4, 0.5) == (0.4, 0.2, 0.8, 0.8)
+    # drag the left edge past the right -> flips cleanly, stays canonical
+    assert atlas.resize_rect(r, 'L', 0.95, 0.5) == (0.8, 0.2, 0.95, 0.8)
+    assert atlas.resize_rect(r, 'MOVE', 0.0, 0.0) == r        # MOVE is a no-op
+
+
+def test_move_rect_clamps_inside_unit():
+    r = (0.2, 0.2, 0.5, 0.4)
+    assert all(math.isclose(a, b) for a, b in
+               zip(atlas.move_rect(r, 0.1, 0.1), (0.3, 0.3, 0.6, 0.5)))
+    # pushed off the right edge -> shifted back, size preserved
+    moved = atlas.move_rect(r, 0.9, 0.0)
+    assert all(math.isclose(a, b) for a, b in zip(moved, (0.7, 0.2, 1.0, 0.4)))
+    assert math.isclose(atlas.rect_area(moved), atlas.rect_area(r))
+
+
+def test_guillotine_split_u_and_v():
+    r = (0.0, 0.0, 1.0, 1.0)
+    a, b = atlas.guillotine_split(r, 'U', 0.25)
+    assert a == (0.0, 0.0, 0.25, 1.0) and b == (0.25, 0.0, 1.0, 1.0)
+    a, b = atlas.guillotine_split(r, 'V', 0.5)
+    assert a == (0.0, 0.0, 1.0, 0.5) and b == (0.0, 0.5, 1.0, 1.0)
+    # the two pieces exactly reconstitute the original area
+    assert math.isclose(atlas.rect_area(a) + atlas.rect_area(b), atlas.rect_area(r))
+
+
 def _rgba(px, w, x, y):
     i = (y * w + x) * 4
     return px[i:i + 4]

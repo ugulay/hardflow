@@ -622,6 +622,35 @@ target **unchanged** — never half-cut, never an orphaned slice duplicate.
 - [ ] Holding the mouse **still** mid-draw does not re-stutter (the boolean isn't
       re-evaluated every frame); moving it resumes the live update immediately.
 
+## §21 — Trim Sheet UV editor (v1.16)
+
+Setup: N-panel ▸ Hardflow ▸ Decals ▸ **Trim Sheet Editor**. Click **Load Sheet…**
+and pick any image (or set an already-loaded one via the datablock picker).
+
+- [ ] **Open Editor** shows the sheet as a centered canvas over the viewport with
+      a dark backdrop; one whole-sheet region ("R0") exists to start.
+- [ ] **LMB drag on empty canvas** rubber-bands a **new** rectangle; releasing
+      keeps it (a click with no drag adds nothing). It becomes the active region
+      (accent outline + yellow handles + its name label).
+- [ ] **Drag a corner / edge handle** of the active region resizes it; dragging an
+      edge past its opposite **flips cleanly** (no inversion).
+- [ ] **Click inside** another region selects it; **drag inside** moves it, and it
+      **stops at the sheet border** (never leaves [0,1], size preserved).
+- [ ] **`C`** splits the active region into left/right at the cursor; **`Shift+C`**
+      into top/bottom. The two pieces exactly tile the original.
+- [ ] **`X` / Del** deletes the active region; **`A`** adds a centered one;
+      **`Tab`** cycles which region is active.
+- [ ] **`G`** toggles snap; **`[` / `]` / wheel** change the density (grid lines
+      appear); new/resized edges land on the lattice. HUD shows the active
+      region's **pixel size** (`W × H px`).
+- [ ] **Enter** applies (HUD reports the region count); **Esc** cancels and the
+      regions **revert** to how they were on entry.
+- [ ] Back in the panel, each region row: **place** (⟶ decal place tool, Up/Down
+      cycles regions live), **apply-to-decal** (re-trims the selected decal's UVs),
+      rename, and remove all work. **From Grid** fills an equal grid to then tweak.
+- [ ] A decal placed from a **custom (unequal) region** carries that region's
+      aspect ratio and shows only that slice of the sheet.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

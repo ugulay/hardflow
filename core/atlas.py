@@ -79,6 +79,151 @@ def pack_shelves(sizes, max_width):
     return placements, atlas_w, atlas_h
 
 
+# --- Free-rectangle trim editor (v1.16) --------------------------------------
+# The grid helpers above slice the sheet into EQUAL cells. The editor lets the
+# user carve arbitrary, unequal rectangles ("regions") anywhere on the sheet --
+# UV-style cutting. These helpers are the pure math behind that: hit-testing,
+# handle picking, resize/move/split, all in UV space ([0,1]^2, v up). The bpy
+# side (the modal editor, the stored region list) lives in operators/trim_editor.
+
+def _clamp01(x):
+    return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
+
+
+def normalize_rect(rect):
+    """Order and clamp a rect so u0<=u1, v0<=v1 and every edge sits in [0,1].
+    A rect drawn right-to-left or bottom-to-top comes back canonical."""
+    u0, v0, u1, v1 = rect
+    if u1 < u0:
+        u0, u1 = u1, u0
+    if v1 < v0:
+        v0, v1 = v1, v0
+    return (_clamp01(u0), _clamp01(v0), _clamp01(u1), _clamp01(v1))
+
+
+def rect_area(rect):
+    u0, v0, u1, v1 = rect
+    return abs(u1 - u0) * abs(v1 - v0)
+
+
+def rect_contains(rect, u, v):
+    """True when (u, v) is inside (or on the border of) a normalized rect."""
+    u0, v0, u1, v1 = rect
+    return u0 <= u <= u1 and v0 <= v <= v1
+
+
+def rect_at_point(rects, u, v):
+    """Index of the top-most region under a UV point, or -1 when none. Searches
+    last-to-first so the most recently drawn (top) region wins overlaps -- the
+    click-to-select rule for the editor."""
+    for i in range(len(rects) - 1, -1, -1):
+        if rect_contains(rects[i], u, v):
+            return i
+    return -1
+
+
+def snap_value(x, step):
+    """Snap a scalar to the nearest multiple of `step` (0/negative = no snap),
+    clamped to [0,1]."""
+    if step <= 0.0:
+        return _clamp01(x)
+    return _clamp01(round(x / step) * step)
+
+
+def snap_rect(rect, step):
+    """Snap all four edges of a rect to the `step` lattice, keeping it canonical."""
+    u0, v0, u1, v1 = rect
+    return normalize_rect((snap_value(u0, step), snap_value(v0, step),
+                           snap_value(u1, step), snap_value(v1, step)))
+
+
+# Handle codes: 4 corners + 4 edge mid-points. 'MOVE' is the interior (drag the
+# whole rect). These name which part of a region a drag grabs.
+_CORNERS = ('BL', 'BR', 'TL', 'TR')
+_EDGES = ('L', 'R', 'B', 'T')
+
+
+def rect_handle_points(rect):
+    """The eight editor handles of a rect as a name -> (u, v) dict: four corners
+    (BL/BR/TL/TR) and four edge mid-points (L/R/B/T)."""
+    u0, v0, u1, v1 = rect
+    mu, mv = (u0 + u1) * 0.5, (v0 + v1) * 0.5
+    return {
+        'BL': (u0, v0), 'BR': (u1, v0), 'TL': (u0, v1), 'TR': (u1, v1),
+        'L': (u0, mv), 'R': (u1, mv), 'B': (mu, v0), 'T': (mu, v1),
+    }
+
+
+def nearest_handle(rect, u, v, tol):
+    """Which handle a cursor grabs: the nearest corner/edge handle within `tol`
+    (UV distance), else 'MOVE' when the cursor is inside the rect, else None.
+    Corners and edges compete by plain nearest-distance, so the handle the cursor
+    is closest to wins."""
+    best, best_d = None, tol
+    for name, (hu, hv) in rect_handle_points(rect).items():
+        d = ((hu - u) ** 2 + (hv - v) ** 2) ** 0.5
+        if d <= best_d:
+            best, best_d = name, d
+    if best is not None:
+        return best
+    return 'MOVE' if rect_contains(rect, u, v) else None
+
+
+def resize_rect(rect, handle, u, v):
+    """New rect after dragging one edge/corner handle to (u, v). 'MOVE' is a
+    no-op here (translation is move_rect's job); an unknown handle is ignored.
+    The result is re-normalized, so dragging an edge past its opposite flips
+    cleanly instead of inverting."""
+    u0, v0, u1, v1 = rect
+    if handle in ('BL', 'TL', 'L'):
+        u0 = u
+    if handle in ('BR', 'TR', 'R'):
+        u1 = u
+    if handle in ('BL', 'BR', 'B'):
+        v0 = v
+    if handle in ('TL', 'TR', 'T'):
+        v1 = v
+    return normalize_rect((u0, v0, u1, v1))
+
+
+def move_rect(rect, du, dv):
+    """Translate a rect by (du, dv), keeping its size and clamping so it stays
+    fully inside the unit square (the offset is shortened at the border rather
+    than the rect being squashed)."""
+    u0, v0, u1, v1 = rect
+    u0 += du
+    u1 += du
+    v0 += dv
+    v1 += dv
+    if u0 < 0.0:
+        u1 -= u0
+        u0 = 0.0
+    if u1 > 1.0:
+        u0 -= (u1 - 1.0)
+        u1 = 1.0
+    if v0 < 0.0:
+        v1 -= v0
+        v0 = 0.0
+    if v1 > 1.0:
+        v0 -= (v1 - 1.0)
+        v1 = 1.0
+    return normalize_rect((u0, v0, u1, v1))
+
+
+def guillotine_split(rect, axis, t):
+    """Cut a rect in two at fraction `t` (0..1) along an axis: 'U' splits into
+    (left, right) at u = u0 + t*width, 'V' into (bottom, top) at v = v0 +
+    t*height. `t` is clamped away from the edges so neither piece is degenerate.
+    Returns (rect_a, rect_b)."""
+    u0, v0, u1, v1 = normalize_rect(rect)
+    t = 0.001 if t < 0.001 else 0.999 if t > 0.999 else t
+    if axis == 'V':
+        vm = v0 + t * (v1 - v0)
+        return ((u0, v0, u1, vm), (u0, vm, u1, v1))
+    um = u0 + t * (u1 - u0)
+    return ((u0, v0, um, v1), (um, v0, u1, v1))
+
+
 def remap_uv(u, v, slot):
     """Compose a [0,1] UV with a slot rect (u0,v0,u1,v1): map the unit square into
     the slot. Used to retarget a decal's existing UVs (whole image or trim cell)

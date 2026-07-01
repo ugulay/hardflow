@@ -67,6 +67,11 @@ class HARDFLOW_OT_place_decal(Operator):
         description="Which grid cell of the trim sheet to place "
                     "(cycle with Up/Down arrows)",
     )
+    region_index: IntProperty(
+        name="Trim Region", default=-1,
+        description="Index into the image's custom trim regions "
+                    "(hardflow_trim); -1 = not using a stored region",
+    )
 
     @classmethod
     def poll(cls, context):
@@ -118,11 +123,17 @@ class HARDFLOW_OT_place_decal(Operator):
         elif event.type == 'RIGHT_BRACKET' and event.value == 'PRESS':
             self.roll += math.radians(15)
 
-        elif event.type == 'UP_ARROW' and event.value == 'PRESS' and self._is_trim():
-            self.trim_index += 1
+        elif event.type == 'UP_ARROW' and event.value == 'PRESS':
+            if self._is_region():
+                self.region_index += 1
+            elif self._is_trim():
+                self.trim_index += 1
 
-        elif event.type == 'DOWN_ARROW' and event.value == 'PRESS' and self._is_trim():
-            self.trim_index -= 1
+        elif event.type == 'DOWN_ARROW' and event.value == 'PRESS':
+            if self._is_region():
+                self.region_index -= 1
+            elif self._is_trim():
+                self.trim_index -= 1
 
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             if self._hit is None:
@@ -149,9 +160,25 @@ class HARDFLOW_OT_place_decal(Operator):
         return (self._image is not None
                 and self.trim_cols > 0 and self.trim_rows > 0)
 
+    def _regions(self):
+        """The image's custom trim regions collection, or None."""
+        if self._image is None or self.region_index < 0:
+            return None
+        trim = getattr(self._image, "hardflow_trim", None)
+        regs = trim.regions if trim is not None else None
+        return regs if (regs and len(regs)) else None
+
+    def _is_region(self):
+        """True when placing a custom (editor-carved) trim region."""
+        return self._regions() is not None
+
     def _uv_rect(self):
-        """UV sub-rect of the image to map onto the quad: a trim-sheet cell when
-        trimming, otherwise the whole image."""
+        """UV sub-rect of the image to map onto the quad: a custom editor region
+        first, then an equal trim-sheet cell, otherwise the whole image."""
+        regs = self._regions()
+        if regs is not None:
+            r = regs[self.region_index % len(regs)]
+            return atlas.normalize_rect((r.u0, r.v0, r.u1, r.v1))
         if self._is_trim():
             return atlas.cell_rect(self.trim_cols, self.trim_rows, self.trim_index)
         return (0.0, 0.0, 1.0, 1.0)
@@ -162,10 +189,10 @@ class HARDFLOW_OT_place_decal(Operator):
         type decal is square."""
         img = self._image
         if img is not None and img.size[0] and img.size[1]:
-            if self._is_trim():
-                pw, ph = atlas.rect_pixels(self._uv_rect(), img.size[0], img.size[1])
-                return decal_image.aspect_size(pw, ph, self.size)
-            return decal_image.aspect_size(img.size[0], img.size[1], self.size)
+            # The sub-rect (whole image, trim cell, or custom region) sets the
+            # aspect; rect_pixels of (0,0,1,1) is just the full image size.
+            pw, ph = atlas.rect_pixels(self._uv_rect(), img.size[0], img.size[1])
+            return decal_image.aspect_size(pw, ph, self.size)
         return (self.size, self.size)
 
     def _draw_px(self, context):
@@ -176,7 +203,13 @@ class HARDFLOW_OT_place_decal(Operator):
         lines = ["Decal (%s) — click place · wheel scale · [ ] roll · Esc cancel"
                  % label,
                  "Size: %.3f m" % self.size]
-        if self._is_trim():
+        regs = self._regions()
+        if regs is not None:
+            n = len(regs)
+            r = regs[self.region_index % n]
+            lines.append("Trim region '%s' %d/%d (Up/Down)"
+                         % (r.name, self.region_index % n + 1, n))
+        elif self._is_trim():
             cells = self.trim_cols * self.trim_rows
             lines.append("Trim cell %d/%d (Up/Down) — %dx%d sheet"
                          % (self.trim_index % cells + 1, cells,
@@ -240,7 +273,7 @@ class HARDFLOW_OT_place_decal(Operator):
             return
         location, normal, obj = self._hit
         key = (obj.name if obj is not None else None,
-               round(self.size, 6), self.trim_index)
+               round(self.size, 6), self.trim_index, self.region_index)
         if self._preview is None or key != self._preview_key:
             self._delete_preview()
             try:

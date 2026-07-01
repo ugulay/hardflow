@@ -1,12 +1,15 @@
 # Hardflow - open-source hard-surface boolean modeling tool.
 # Registration orchestration: gathers submodules, registers classes and shortcuts.
 import bpy
+from bpy.props import PointerProperty
 
 from . import preferences, keymaps, gizmos
 from .operators import (draw_cut, cutters, pipe, decals,
                         boolean_ops, assets, push_pull, offset,
-                        construction, hardops, edge_tool, hardflow_mode)
-from .ui import pie, menu, panel, decal_panel, decal_library, asset_panel
+                        construction, hardops, edge_tool, hardflow_mode,
+                        trim_editor)
+from .ui import (pie, menu, panel, decal_panel, decal_library, asset_panel,
+                 trim_panel)
 
 # Registration order doesn't matter, but keep it tidy:
 _classes = (
@@ -49,6 +52,15 @@ _classes = (
     decals.HARDFLOW_OT_create_decal,
     decals.HARDFLOW_OT_library_rename,
     decals.HARDFLOW_OT_library_delete,
+    trim_editor.HARDFLOW_TrimRegion,
+    trim_editor.HARDFLOW_TrimSheet,
+    trim_editor.HARDFLOW_OT_trim_editor,
+    trim_editor.HARDFLOW_OT_load_trim_image,
+    trim_editor.HARDFLOW_OT_trim_region_add,
+    trim_editor.HARDFLOW_OT_trim_region_remove,
+    trim_editor.HARDFLOW_OT_trim_grid_regions,
+    trim_editor.HARDFLOW_OT_place_trim_region,
+    trim_editor.HARDFLOW_OT_retrim_region,
     assets.HARDFLOW_OT_place_asset,
     assets.HARDFLOW_OT_load_asset,
     assets.HARDFLOW_OT_asset_library_place,
@@ -76,6 +88,7 @@ _classes = (
     panel.HARDFLOW_PT_cutters,
     decal_panel.HARDFLOW_PT_decals,
     decal_library.HARDFLOW_PT_decal_library,
+    trim_panel.HARDFLOW_PT_trim,
     asset_panel.HARDFLOW_PT_assets,
     asset_panel.HARDFLOW_PT_asset_library,
 )
@@ -83,6 +96,12 @@ _classes = (
 def register():
     for cls in _classes:
         bpy.utils.register_class(cls)
+    # Trim-sheet region data lives on the Image datablock (travels with the
+    # sheet, saves with the .blend); the scene points at the active sheet. The
+    # TrimSheet/TrimRegion groups are registered above, so the pointers resolve.
+    bpy.types.Image.hardflow_trim = PointerProperty(
+        type=trim_editor.HARDFLOW_TrimSheet)
+    bpy.types.Scene.hardflow_trim_image = PointerProperty(type=bpy.types.Image)
     decal_library.register()
     menu.register()        # header dropdown (after the menu classes exist)
     keymaps.register_keymaps()
@@ -100,6 +119,10 @@ def unregister():
     menu.unregister()
     decal_library.unregister()
     gizmos.unregister()
+    if hasattr(bpy.types.Scene, "hardflow_trim_image"):
+        del bpy.types.Scene.hardflow_trim_image
+    if hasattr(bpy.types.Image, "hardflow_trim"):
+        del bpy.types.Image.hardflow_trim
     for cls in reversed(_classes):
         bpy.utils.unregister_class(cls)
 

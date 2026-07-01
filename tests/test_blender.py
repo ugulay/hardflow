@@ -1635,6 +1635,59 @@ def test_decal_uv_rect_and_match():
     assert abs(grp.inputs['Roughness'].default_value - 0.2) < 1e-6
 
 
+def test_trim_editor_regions_and_place():
+    # v1.16 trim-sheet UV editor: region storage on the Image datablock, the
+    # region-management ops, and the region -> decal UV path end to end.
+    _reset()
+    hardflow.register()
+    try:
+        from hardflow.operators import trim_editor
+        img = bpy.data.images.new("HF_TrimSheet", width=256, height=128,
+                                  alpha=True)
+        # the PointerProperty is installed by register(); a fresh sheet is empty
+        trim = img.hardflow_trim
+        assert len(trim.regions) == 0
+
+        bpy.context.scene.hardflow_trim_image = img
+        assert trim_editor.sheet_image(bpy.context) is img
+
+        # "Regions from Grid" fills an equal 3x2 grid matching slice_grid
+        bpy.ops.object.hardflow_trim_grid_regions(cols=3, rows=2, replace=True)
+        assert len(trim.regions) == 6
+        r0, cell0 = trim.regions[0], atlas.slice_grid(3, 2)[0]
+        got = (r0.u0, r0.v0, r0.u1, r0.v1)
+        assert all(abs(a - b) < 1e-6 for a, b in zip(got, cell0)), got
+
+        # add / remove region ops
+        bpy.ops.object.hardflow_trim_region_add()
+        assert len(trim.regions) == 7
+        bpy.ops.object.hardflow_trim_region_remove(index=6)
+        assert len(trim.regions) == 6
+
+        # carve one custom, UNEQUAL region and re-trim a decal onto it
+        trim.regions.clear()
+        reg = trim.regions.add()
+        reg.name = "Panel"
+        reg.u0, reg.v0, reg.u1, reg.v1 = 0.1, 0.2, 0.6, 0.8
+        trim.active = 0
+
+        target = _add_cube("Target", size=2.0)
+        d = decal.make_decal(bpy.context, target, Vector((0, 0, 1)),
+                             Vector((0, 0, 1)), Vector((1, 0, 0)),
+                             decal_type='INFO')
+        for o in list(bpy.context.selected_objects):
+            o.select_set(False)
+        d.select_set(True)
+        bpy.context.view_layer.objects.active = d
+        assert bpy.ops.object.hardflow_retrim_region(index=0) == {'FINISHED'}
+        us = [u.uv[0] for u in d.data.uv_layers.active.data]
+        vs = [u.uv[1] for u in d.data.uv_layers.active.data]
+        assert abs(min(us) - 0.1) < 1e-5 and abs(max(us) - 0.6) < 1e-5
+        assert abs(min(vs) - 0.2) < 1e-5 and abs(max(vs) - 0.8) < 1e-5
+    finally:
+        hardflow.unregister()
+
+
 def test_conform_trim_decal():
     _reset()
     target = _add_cube("Target", size=2.0)

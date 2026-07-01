@@ -10,6 +10,7 @@ from gpu_extras.batch import batch_for_shader
 # import of the whole add-on (e.g. tests/test_blender.py). Drawing only happens
 # in a real viewport, where the GPU module is always available.
 _shader = None
+_image_shader = None
 
 
 def _get_shader():
@@ -17,6 +18,31 @@ def _get_shader():
     if _shader is None:
         _shader = gpu.shader.from_builtin('UNIFORM_COLOR')
     return _shader
+
+
+def _get_image_shader():
+    global _image_shader
+    if _image_shader is None:
+        _image_shader = gpu.shader.from_builtin('IMAGE')
+    return _image_shader
+
+
+def draw_image(texture, x, y, w, h):
+    """Draw a GPU texture as a screen-space quad at (x, y) with size (w, h) --
+    the trim-sheet canvas behind the region overlay. `texture` is a GPUTexture
+    (build it once with gpu.texture.from_image(image), not per-frame). Two TRIS
+    (TRI_FAN is deprecated); the IMAGE builtin takes 2D `pos` + `texCoord`."""
+    pos = [(x, y), (x + w, y), (x + w, y + h),
+           (x, y), (x + w, y + h), (x, y + h)]
+    uv = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0),
+          (0.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+    gpu.state.blend_set('ALPHA')
+    shader = _get_image_shader()
+    batch = batch_for_shader(shader, 'TRIS', {"pos": pos, "texCoord": uv})
+    shader.bind()
+    shader.uniform_sampler("image", texture)
+    batch.draw(shader)
+    gpu.state.blend_set('NONE')
 
 # Snap-marker colors shared by every draw tool (kind -> RGBA) so the cursor hint
 # means the same thing everywhere: yellow vertex, green midpoint, blue edge,
@@ -114,6 +140,12 @@ def _draw_rect(x, y, w, h, color):
     gpu.state.blend_set('NONE')
 
 
+def draw_rect_fill(x, y, w, h, color):
+    """Public filled rectangle -- a colored panel/backdrop (e.g. behind the trim
+    editor canvas). Thin wrapper over the HUD's internal fill."""
+    _draw_rect(x, y, w, h, color)
+
+
 def draw_rect_outline(x, y, w, h, color, width=1.0):
     """A 1px (or `width`) border rectangle -- the HUD panel frame + guide boxes.
     Uses a LINE_STRIP loop (LINE_LOOP is deprecated)."""
@@ -198,6 +230,16 @@ _HUD_TEXT = (0.92, 0.92, 0.92, 1.0)
 _HUD_BG = (0.03, 0.03, 0.05, 0.72)
 _HUD_BORDER = (1.0, 1.0, 1.0, 0.14)
 _HUD_ACCENT = (0.15, 0.8, 1.0, 1.0)
+
+
+def draw_text(x, y, text, color=_HUD_TEXT, size=13):
+    """A single blf label at screen (x, y) -- used for per-region names in the
+    trim editor. Kept tiny so callers don't touch blf directly."""
+    font_id = 0
+    blf.size(font_id, size)
+    blf.color(font_id, *(tuple(color) + (1.0,))[:4])
+    blf.position(font_id, x, y, 0)
+    blf.draw(font_id, text)
 
 
 def draw_hud(region, lines, color=_HUD_TEXT, title=None, accent=None):
