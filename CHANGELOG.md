@@ -5,6 +5,44 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+## [1.16.0] — 2026-07-01
+
+Trim Sheet UV editor release: the trim-sheet workflow moves from an equal
+`cols × rows` grid to free, UV-style cutting — carve a sheet into arbitrary,
+unequal named rectangles and place a decal from any of them. All rectangle math
+is pure and unit-tested; the modal/GPU shell is thin. Pure suite grows to
+84 tests (`python tests/test_core.py`); a new headless test covers the region
+storage, the management ops, and the region → decal UV path.
+
+### Added
+- **Free-rectangle trim math (`core/atlas.py`).** New stdlib-only, unit-tested
+  helpers: `normalize_rect`, `rect_area`, `rect_contains`, `rect_at_point`
+  (top-most hit-test), `snap_value` / `snap_rect`, `rect_handle_points` /
+  `nearest_handle` (8-handle corner/edge pick), `resize_rect`, `move_rect`
+  (unit-clamped translate) and `guillotine_split` (cut a rect in two at a custom
+  fraction).
+- **Region data model (`operators/trim_editor.py`).** `HARDFLOW_TrimRegion` /
+  `HARDFLOW_TrimSheet` PropertyGroups stored on the Image datablock
+  (`bpy.types.Image.hardflow_trim`), so region sets save with the `.blend` and
+  travel with the sheet; `Scene.hardflow_trim_image` points at the active sheet.
+- **Interactive editor (`HARDFLOW_OT_trim_editor`).** Draws the sheet as a
+  screen-space canvas with the regions overlaid: LMB-drag = new region, drag a
+  handle = resize, click = select/move, `C` / `Shift+C` = guillotine split at
+  the cursor, `X` = delete, `A` = add, `Tab` = cycle, `G` / `[ ]` / wheel =
+  snap density, Enter/Esc = confirm / cancel (snapshot restore). New GPU helpers
+  `draw_image`, `draw_text` and `draw_rect_fill` in `ui/draw.py`.
+- **Region-management + placement ops.** `HARDFLOW_OT_load_trim_image`,
+  `trim_region_add` / `trim_region_remove`, `trim_grid_regions` (seed from an
+  equal grid), `place_trim_region` (place a region as a decal) and
+  `retrim_region` (rewrite a placed decal's UVs to a region). An N-panel
+  "Trim Sheet Editor" section under Decals (`ui/trim_panel.py`) + a header-menu
+  entry.
+
+### Changed
+- **`HARDFLOW_OT_place_decal` takes a `region_index`.** A whole-image, an equal
+  trim-sheet cell, or a custom editor region now all flow through one
+  `_uv_rect` / `_wh` path; Up/Down cycles regions live in the place modal.
+
 ## [1.15.0] — 2026-07-01
 
 Polish & Performance release: Smart Bevel is topology-safe on irregular

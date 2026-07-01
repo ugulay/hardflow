@@ -13,12 +13,12 @@ price tag.
 [![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-EA7600?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Extension](https://img.shields.io/badge/Blender-Extension-orange?logo=blender&logoColor=white)](https://extensions.blender.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.15.0-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.16.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 </div>
 
-> **Status — under active development.** **Every roadmap feature through v1.15 is
+> **Status — under active development.** **Every roadmap feature through v1.16 is
 > implemented** — the boolean cut loop (Cut / Slice / Make / Join / Intersect /
 > Knife) with Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes,
 > world-scale + vertex/edge snapping, the non-destructive flow, the full decal
@@ -40,8 +40,11 @@ price tag.
 > pass (topology-safe Smart Bevel on irregular post-boolean meshes, a framed
 > "premium" HUD with translucent viewport guide lines, and a high-poly live
 > boolean preview that culls non-intersecting targets + gates idle re-evaluation
-> via the new pure `core/preview_cache`). The pure-logic core is unit-tested
-> (`76/76`, no Blender required) and bpy paths add headless coverage (run live
+> via the new pure `core/preview_cache`), and the **v1.16 Trim Sheet UV editor**
+> (carve a trim sheet into free, unequal named UV rectangles — draw / resize by
+> handle / move / guillotine split — stored on the Image datablock; a decal then
+> borrows any region). The pure-logic core is unit-tested
+> (`84/84`, no Blender required) and bpy paths add headless coverage (run live
 > against a standalone `bpy` build + verified in Blender 5.1.2); the modal
 > tools' interactive feel is checked via
 > [tests/manual_checklist.md](tests/manual_checklist.md). See
@@ -201,6 +204,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Bake into mesh | Bake Normal / Combined detail into the target's texture | `core/decal.py bake_image` |
 | Image library | Folder of PNG/JPG/TGA placed from an icon grid | `core/decal_image.py`, `ui/decal_library.py` |
 | Trim sheets | Slice a sheet into a grid; place / cycle individual cells | `core/atlas.py slice_grid` |
+| Trim sheet UV editor (v1.16) | Carve a sheet into free, unequal named UV rectangles (draw / resize / move / split) stored on the image; place any region as a decal | `operators/trim_editor.py`, `core/atlas.py`, `ui/trim_panel.py` |
 | Atlasing | Pack every image decal into one atlas + one shared material | `core/atlas.py pack_shelves` |
 | Create decal (v1.7) | Bake normal/height/alpha out of high-poly source into the library | `operators/decals.py`, `core/decal.py` |
 | Material match (v1.7) | Match a decal's blend to the target's active material | `core/decal.py match_decal_to_material` |
