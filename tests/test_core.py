@@ -35,6 +35,7 @@ asset_lib = _load("asset_lib")
 command = _load("command")
 bevel = _load("bevel")
 preview_cache = _load("preview_cache")
+parallax = _load("parallax")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1017,6 +1018,81 @@ def test_preview_gate_stateful():
     assert gate.should_update((1.6, 0.0)) is False    # small nudge from the new pos
     gate.reset()
     assert gate.should_update((1.6, 0.0)) is True     # reset -> fire again
+
+
+# --- parallax: Parallax Occlusion Mapping math (Module 1 / POM) --------------
+
+def test_parallax_luminance_rec709():
+    assert abs(parallax.luminance((1.0, 1.0, 1.0)) - 1.0) < 1e-9
+    assert parallax.luminance((0.0, 0.0, 0.0)) == 0.0
+    assert abs(parallax.luminance((1.0, 0.0, 0.0)) - 0.2126) < 1e-9
+    assert abs(parallax.luminance((0.0, 1.0, 0.0)) - 0.7152) < 1e-9
+
+
+def test_tangent_space_view_identity_and_rotated():
+    # identity basis -> the view passes through unchanged
+    v = parallax.tangent_space_view((1.0, 2.0, 3.0),
+                                    (1.0, 0.0, 0.0), (0.0, 1.0, 0.0),
+                                    (0.0, 0.0, 1.0))
+    assert v == (1.0, 2.0, 3.0)
+    # a swapped basis re-labels the axes: T=+Y, B=+Z, N=+X
+    v = parallax.tangent_space_view((5.0, 7.0, 9.0),
+                                    (0.0, 1.0, 0.0), (0.0, 0.0, 1.0),
+                                    (1.0, 0.0, 0.0))
+    assert v == (7.0, 9.0, 5.0)
+
+
+def test_dynamic_layer_count_scales_with_grazing():
+    # head-on (view along the normal) -> cheapest (min layers)
+    assert parallax.dynamic_layer_count((0.0, 0.0, 1.0), 8, 32) == 8
+    # fully grazing (no normal component) -> most layers
+    assert parallax.dynamic_layer_count((1.0, 0.0, 0.0), 8, 32) == 32
+    # a mid angle lands between, and never escapes the clamp
+    n = parallax.dynamic_layer_count((0.6, 0.0, 0.8), 8, 32)
+    assert 8 <= n <= 32
+
+
+def test_parallax_flat_field_no_shift():
+    # a flat height field (depth 0 everywhere) must not move the UV at all
+    uv = parallax.parallax_occlusion_uv(lambda _uv: 0.0, (0.5, 0.5),
+                                        (0.6, 0.0, 0.8), 0.1, 8)
+    assert abs(uv[0] - 0.5) < 1e-9 and abs(uv[1] - 0.5) < 1e-9
+
+
+def test_parallax_constant_depth_closed_form():
+    # For a constant-depth field d, full POM must resolve to the exact closed
+    # form uv0 - d * P, where P = scale * normalized(view).xy (offset limiting).
+    view = (0.6, 0.0, 0.8)          # already unit length (0.36 + 0.64 = 1)
+    scale, d0 = 0.1, 0.5
+    px = scale * 0.6                # P.x ; P.y = 0
+    uv = parallax.parallax_occlusion_uv(lambda _uv: d0, (0.5, 0.5),
+                                        view, scale, 8)
+    assert abs(uv[0] - (0.5 - d0 * px)) < 1e-6
+    assert abs(uv[1] - 0.5) < 1e-6
+
+
+def test_parallax_ramp_crosses_between_layers():
+    # A depth field that ramps with u should intersect the ray somewhere strictly
+    # inside the swept span, i.e. the corrected u moves opposite the view.x.
+    view = (0.8, 0.0, 0.6)
+    scale = 0.2
+
+    def ramp(uv):
+        # deeper toward -u, so the ray (marching toward -u) finds a crossing
+        return min(1.0, max(0.0, 0.5 + (0.5 - uv[0])))
+
+    uv = parallax.parallax_occlusion_uv(ramp, (0.5, 0.5), view, scale, 16)
+    # view.x > 0 -> UV shifts to smaller u; and it stays within the max sweep P.x
+    assert uv[0] < 0.5
+    assert uv[0] >= 0.5 - scale * 0.8 - 1e-6
+
+
+def test_parallax_delta_uv_offset_limited():
+    # deltaUV = scale * unit(view).xy / n ; head-on view -> no lateral step
+    dux, duy = parallax.parallax_delta_uv((0.0, 0.0, 1.0), 0.1, 8)
+    assert abs(dux) < 1e-9 and abs(duy) < 1e-9
+    dux, duy = parallax.parallax_delta_uv((0.6, 0.0, 0.8), 0.1, 8)
+    assert abs(dux - (0.1 * 0.6 / 8)) < 1e-9 and abs(duy) < 1e-9
 
 
 def _run_all():

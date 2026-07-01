@@ -653,5 +653,29 @@ and pick any image (or set an already-loaded one via the datablock picker).
 
 ---
 
+## Decal depth — Parallax Occlusion Mapping + Normal Transfer (Module 1)
+
+Enable **Preferences → Parallax Occlusion** (and set a **Parallax Depth**, e.g.
+0.08) before placing.
+
+- [ ] Place an **image decal** with a bit of tonal contrast (a panel/grunge PNG)
+      on a flat face. Orbit to a **grazing angle**: the dark areas should
+      **recess** and slide behind their lip (view-dependent), not stay a flat
+      print. Head-on there is little/no shift (correct).
+- [ ] Raise **Parallax Depth** → the apparent recess deepens; raise **Parallax
+      Layers** → the grazing-angle silhouette gets smoother (more nodes).
+- [ ] The decal's node tree contains an **`HF_Parallax_<image>_<N>`** group feeding
+      the base-color image's **Vector** input; deleting/disabling it falls back to
+      a flat decal (no crash).
+- [ ] With a **bad/one-pixel image** or on an odd Blender build, placement still
+      succeeds as a flat decal and the console logs `parallax wiring skipped`
+      (graceful degrade).
+- [ ] Enable **Decal Normal Transfer**, place a decal across a **curved / bevelled
+      edge**: it should shade as part of the surface (an `HF_NormalTransfer` Data
+      Transfer modifier sits after `HF_Shrinkwrap`), not catch flat sticker
+      lighting. On a build without the modifier it logs `normal transfer skipped`.
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.
