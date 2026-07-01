@@ -5,6 +5,8 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-07-01
+
 ### Added
 - **Super Modeling Mode — three foundation layers toward the SketchUp-fluidity /
   pro hard-surface pipeline.** All respect the one-directional (ui/ops → core)
