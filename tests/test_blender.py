@@ -268,6 +268,9 @@ def test_live_preview_world_aabb_culling():
     cutter = _add_cube("Cage", size=1.0, location=(0, 0, 0))
     near = _add_cube("Near", size=1.0, location=(0.5, 0, 0))     # overlaps the cage
     far = _add_cube("Far", size=1.0, location=(50, 0, 0))        # nowhere near
+    # Flush the depsgraph so matrix_world reflects the just-set locations --
+    # without it every object's world AABB collapses onto the origin.
+    bpy.context.view_layer.update()
 
     cbox = HARDFLOW_OT_draw._world_aabb(cutter)
     assert cbox is not None
@@ -2457,7 +2460,10 @@ def test_smart_sharpen_operator_idempotent():
         assert bev is not None and bev.type == 'BEVEL', "no bevel modifier"
         assert wn is not None and wn.type == 'WEIGHTED_NORMAL', "no weighted normal"
         assert bev.limit_method == 'WEIGHT', bev.limit_method
-        assert list(cube.modifiers)[-1] is wn, "weighted normal not at the bottom"
+        # Compare by name: bpy hands out a fresh wrapper per access, so `is`
+        # can be False even when it is the same underlying modifier.
+        assert list(cube.modifiers)[-1].name == wn.name, \
+            "weighted normal not at the bottom"
         # Re-run: the managed modifiers update in place, never stacking copies.
         bpy.ops.object.hardflow_smart_sharpen()
         bevels = [m for m in cube.modifiers if m.type == 'BEVEL']
