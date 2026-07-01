@@ -319,6 +319,31 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "(core.geometry.dissolve_boolean_ngons)",
         default=False,
     )
+    auto_trim_after_cut: EnumProperty(
+        name="Cut-to-Trim",
+        description="After a boolean CUT, auto-route a pipe/panel-line along the "
+                    "drawn cut boundary (draped onto the surface) so the cut is "
+                    "instantly detailed -- the Hard-Surface -> Decal bridge",
+        items=[
+            ('OFF', "Off", "No automatic trim after a cut"),
+            ('PIPE', "Pipe", "Round pipe/cable along the cut boundary"),
+            ('PANEL', "Panel Line", "Thin recessed panel-line along the cut "
+             "boundary (small round bead)"),
+        ],
+        default='OFF',
+    )
+    auto_trim_radius: FloatProperty(
+        name="Trim Radius (m)",
+        description="Cross-section radius of the auto-placed cut-boundary pipe / "
+                    "panel line",
+        default=0.01, min=0.0001, soft_max=0.5,
+    )
+    auto_trim_lift: FloatProperty(
+        name="Trim Lift (m)",
+        description="Lift the auto trim above the surface (0 = rest on it; "
+                    "negative recesses it into a panel groove)",
+        default=0.0, soft_min=-0.2, soft_max=0.2,
+    )
     fix_shading_after_cut: BoolProperty(
         name="Fix Shading After Cut",
         description="Snapshot the target's clean normals before a destructive "
@@ -460,6 +485,9 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "cut_dissolve_ngons")
         col.prop(self, "fix_shading_after_cut")
         col.prop(self, "sort_modifiers_after_cut")
+        col.prop(self, "auto_trim_after_cut")
+        col.prop(self, "auto_trim_radius")
+        col.prop(self, "auto_trim_lift")
         col.prop(self, "live_boolean_preview")
         col.prop(self, "live_preview_max_verts")
         col.prop(self, "draw_inset")

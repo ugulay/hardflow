@@ -291,6 +291,12 @@ class HARDFLOW_PT_cutter_options(Panel):
         col.prop(prefs, "fix_shading_after_cut")
         col.prop(prefs, "sort_modifiers_after_cut")
         col.prop(prefs, "smart_bevel_default")
+        col.separator()
+        col.label(text="Cut-to-Trim (Decal bridge)")
+        col.prop(prefs, "auto_trim_after_cut", text="")
+        if prefs.auto_trim_after_cut != 'OFF':
+            col.prop(prefs, "auto_trim_radius")
+            col.prop(prefs, "auto_trim_lift")
 
 
 class HARDFLOW_PT_modifiers(Panel):

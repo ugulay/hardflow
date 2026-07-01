@@ -1349,6 +1349,20 @@ def test_modifier_is_sorted_and_noop_moves():
     assert modifiers.reorder_moves(names, names) == []
 
 
+# --- transform: cut-boundary ring cleanup -----------------------------------
+
+def test_dedup_ring_drops_consecutive_and_closing_dupes():
+    ring = [(0, 0, 0), (0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 0, 0)]
+    # the repeated start and the closing duplicate collapse -> a clean triangle
+    assert transform.dedup_ring(ring) == [(0, 0, 0), (1, 0, 0), (1, 1, 0)]
+
+
+def test_dedup_ring_keeps_distinct_and_short_rings():
+    ring = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    assert transform.dedup_ring(ring) == ring          # already clean, unchanged
+    assert transform.dedup_ring([(0, 0, 0)]) == [(0, 0, 0)]  # too short: as-is
+
+
 def _run_all():
     """Standalone run: find test_* functions, run them, print a summary."""
     fns = sorted((n, f) for n, f in globals().items()

@@ -26,6 +26,29 @@ def adaptive_dimension(max_dimension, fraction=0.02, min_value=0.001,
     return max(min_value, min(max_value, max_dimension * fraction))
 
 
+def dedup_ring(points, tol=1e-5):
+    """Drop near-duplicate CONSECUTIVE points from a boundary ring (list of
+    (x, y, z)), including a trailing point coincident with the first -- the
+    Cut-to-Trim footprint loop, which a curve then bevels into a panel line.
+    Keeps input order; returns a new list. A ring that collapses below 2 distinct
+    points comes back as-is (nothing to clean). Pure arithmetic (3D tuples)."""
+    if len(points) < 2:
+        return list(points)
+
+    def close(a, b):
+        return all(abs(a[i] - b[i]) <= tol for i in range(len(a)))
+
+    out = [tuple(points[0])]
+    for p in points[1:]:
+        if not close(out[-1], p):
+            out.append(tuple(p))
+    # Drop a final point that loops back onto the first (the ring is implicitly
+    # closed by the caller / the cyclic spline).
+    if len(out) > 2 and close(out[-1], out[0]):
+        out.pop()
+    return out
+
+
 def dice_coordinates(lo, hi, count):
     """Interior cut positions that slice the span [lo, hi] into `count` equal
     pieces. Returns the `count - 1` evenly spaced interior coordinates (empty for

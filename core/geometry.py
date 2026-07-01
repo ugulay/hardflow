@@ -456,9 +456,12 @@ def build_tube(radius=0.5, inner_radius=0.3, depth=1.0, segments=32,
     return mesh
 
 
-def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
+def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe",
+               closed=False):
     """Build a round-section pipe curve from a list of 3D points. At least 2
-    points. Returns curve data; the caller links it to an object."""
+    points. `closed` makes the spline cyclic (a pipe/panel-line looping back to
+    its start -- the Cut-to-Trim boundary ring). Returns curve data; the caller
+    links it to an object."""
     if len(points) < 2:
         return None
     curve = bpy.data.curves.new(name, 'CURVE')
@@ -467,9 +470,10 @@ def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe"):
     spline.points.add(len(points) - 1)   # one point already exists
     for i, p in enumerate(points):
         spline.points[i].co = (p[0], p[1], p[2], 1.0)
+    spline.use_cyclic_u = closed
     curve.bevel_depth = radius
     curve.bevel_resolution = bevel_res
-    curve.use_fill_caps = True
+    curve.use_fill_caps = not closed     # a closed ring needs no end caps
     return curve
 
 

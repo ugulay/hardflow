@@ -1289,6 +1289,62 @@ class HARDFLOW_OT_draw(Operator):
             self._apply_destructive(context, targets, cutter, solver)
         if self.bevel_cut:
             self._bevel_on_cut(targets)
+        # Cut-to-Trim bridge: route a pipe / panel line along the drawn boundary,
+        # draped onto the (now cut) surface -- the Hard-Surface -> Decal link.
+        self._auto_trim(context, sets, targets)
+
+    # --- Cut-to-Trim bridge (Hard-Surface -> Decal) ---------------------
+
+    def _trim_collection(self, context):
+        """Get/create the collection that gathers the auto cut-boundary trims."""
+        coll = bpy.data.collections.get("Hardflow Trim")
+        if coll is None:
+            coll = bpy.data.collections.new("Hardflow Trim")
+            context.scene.collection.children.link(coll)
+        return coll
+
+    def _auto_trim(self, context, sets, targets):
+        """Route a pipe / panel line along the drawn cut boundary (draped onto the
+        active target so it hugs the recess) -- so a boolean cut is instantly
+        detailed with a panel line / cable, like scoring with a knife and having
+        the seam appear. The drawn footprint IS the boundary, so it always matches
+        the cut. Non-destructive: separate curve objects in a 'Hardflow Trim'
+        collection, parented to the target. Wrapped so a failure never aborts the
+        cut that already succeeded."""
+        from ..core import snapping, transform
+        prefs = get_prefs(context)
+        mode = prefs.auto_trim_after_cut
+        if mode == 'OFF' or not sets or not targets:
+            return
+        radius = prefs.auto_trim_radius
+        lift = prefs.auto_trim_lift
+        if mode == 'PANEL' and lift == 0.0:
+            lift = -radius            # a panel line sits slightly recessed
+        target = targets[0]
+        try:
+            coll = self._trim_collection(context)
+            made = 0
+            for corners, _vd in sets:
+                ring = transform.dedup_ring([(c.x, c.y, c.z) for c in corners])
+                if len(ring) < 3:
+                    continue
+                draped = snapping.drape_path(context, ring, segments=4,
+                                             lift=lift, target='ACTIVE')
+                pts = [(v.x, v.y, v.z) for v in draped]
+                curve = geometry.build_pipe(pts, radius=radius, name="HF_Trim",
+                                            closed=True)
+                if curve is None:
+                    continue
+                obj = bpy.data.objects.new("HF_Trim", curve)
+                coll.objects.link(obj)
+                obj.parent = target
+                obj.matrix_parent_inverse = target.matrix_world.inverted_safe()
+                made += 1
+            if made:
+                self.report({'INFO'},
+                            "Cut-to-Trim: %d boundary line(s) added" % made)
+        except Exception as ex:  # noqa: BLE001 -- the cut already committed
+            self.report({'WARNING'}, "Cut-to-Trim skipped: %s" % ex)
 
     # --- stamp / repeat last shape (v1.4, repeat / stamp) ---------------
 
