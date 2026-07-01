@@ -41,6 +41,8 @@ _classes = (
     cutters.HARDFLOW_OT_apply_cutters,
     cutters.HARDFLOW_OT_select_cutter,
     cutters.HARDFLOW_OT_remove_cutter,
+    cutters.HARDFLOW_OT_extract_cutter,
+    cutters.HARDFLOW_OT_cutter_scroll,
     decals.HARDFLOW_OT_place_decal,
     decals.HARDFLOW_OT_select_decal,
     decals.HARDFLOW_OT_remove_decal,

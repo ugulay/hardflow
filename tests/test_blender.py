@@ -2707,6 +2707,21 @@ def test_capture_normal_source_and_transfer():
     assert src2 is src
 
 
+def test_extract_faces_makes_cutter_volume():
+    _reset()
+    cube = _add_cube("C", size=2.0)          # 6 quad faces
+    # two faces, solidified into a closed volume -> more than 2 polys
+    solid = geometry.extract_faces(cube.data, [0, 1], thickness=0.1, name="X")
+    assert solid is not None and len(solid.polygons) > 2
+    # a single flat patch: exactly one quad, four verts, no solidify
+    flat = geometry.extract_faces(cube.data, [0], thickness=0.0, name="Y")
+    assert flat is not None
+    assert len(flat.polygons) == 1 and len(flat.vertices) == 4
+    # empty / out-of-range selections extract nothing
+    assert geometry.extract_faces(cube.data, [], name="Z") is None
+    assert geometry.extract_faces(cube.data, [999], name="Z2") is None
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

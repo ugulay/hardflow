@@ -141,6 +141,9 @@ class HARDFLOW_PT_tools(Panel):
                      icon='NODE_MATERIAL')
         row.operator("object.hardflow_sort_modifiers", text="Sort Stack",
                      icon='SORTSIZE')
+        # Extract selected faces into a reusable cutter (Edit Mode).
+        col.operator("mesh.hardflow_extract_cutter", text="Extract Cutter",
+                     icon='MOD_BOOLEAN')
 
         # 4. Curves -- pipes, cables, swept profiles.
         col = layout.column(align=True)
@@ -343,6 +346,8 @@ class HARDFLOW_PT_cutters(Panel):
         if context.active_object is not None:
             layout.operator("object.hardflow_apply_cutters",
                             text="Apply Cutters (Bake)", icon='CHECKMARK')
+            layout.operator("object.hardflow_cutter_scroll",
+                            text="Cutter Scroll", icon='LOOP_FORWARDS')
 
         coll = bpy.data.collections.get(boolean.CUTTER_COLLECTION)
         if coll is None or not coll.objects:

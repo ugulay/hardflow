@@ -268,6 +268,55 @@ def bevel_cutter(mesh, width, segments=2, profile=0.5):
     return mesh
 
 
+def extract_faces(mesh, face_indices, thickness=0.0, name="HF_Extracted"):
+    """Build a NEW mesh datablock from `face_indices` of `mesh` (its own local
+    space), re-indexing the referenced vertices -- the 'Extract Cutter' patch.
+    With `thickness` > 0 the patch is solidified into a closed volume + its
+    normals recalculated, so it is a usable boolean cutter; thickness 0 leaves a
+    flat face patch (still handy as a FACE / decal source). Returns the new mesh,
+    or None when no valid faces were given. Object Mode, pure bmesh."""
+    want = sorted({i for i in face_indices if i >= 0})
+    if not want:
+        return None
+    src = bmesh.new()
+    src.from_mesh(mesh)
+    src.faces.ensure_lookup_table()
+    nfaces = len(src.faces)
+    dst = bmesh.new()
+    vmap = {}
+    made = 0
+    for fi in want:
+        if fi >= nfaces:
+            continue
+        f = src.faces[fi]
+        verts = []
+        for v in f.verts:
+            nv = vmap.get(v.index)
+            if nv is None:
+                nv = dst.verts.new(v.co)
+                vmap[v.index] = nv
+            verts.append(nv)
+        try:
+            dst.faces.new(verts)
+            made += 1
+        except ValueError:
+            pass                       # a duplicate face from overlapping input
+    if made == 0:
+        src.free()
+        dst.free()
+        return None
+    if thickness > 0.0:
+        dst.faces.ensure_lookup_table()
+        bmesh.ops.solidify(dst, geom=list(dst.faces), thickness=thickness)
+        bmesh.ops.recalc_face_normals(dst, faces=dst.faces)
+    out = bpy.data.meshes.new(name)
+    dst.to_mesh(out)
+    dst.free()
+    src.free()
+    out.update()
+    return out
+
+
 def build_face(corners, name="hf_face"):
     """Build a single n-gon face from a list of corners on a plane (not a
     boolean; create face). At least 3 points."""
