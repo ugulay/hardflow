@@ -5,6 +5,43 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+### Added
+- **Super Modeling Mode — three foundation layers toward the SketchUp-fluidity /
+  pro hard-surface pipeline.** All respect the one-directional (ui/ops → core)
+  rule and stay pure/headless-testable.
+  - **Shadowing Engine.** `operators/hardflow_mode.py` grows a shared
+    `_HardflowModeModal` shell — the modal-hijack loop + Ghost-Grid snap chain
+    (`core/raycast`+`core/snapping`+`core/grid`) + VIEW/X/Y/Z plane cycle +
+    per-session Command journal + HUD — that the draw *verbs* subclass, mirroring
+    `face_tool._FaceDragModal` / `pipe._CurveDraw`. The knife prototype moves onto
+    it and a new **Extrude** verb joins it (`HARDFLOW_OT_mode_extrude`: draw a
+    snapped footprint, PageUp/PageDown depth, `build_prism` → new solid). The tool
+    owns its own modal loop and calls bmesh directly — it never invokes Blender's
+    native modal operators. Both verbs are in the header-menu Edit submenu.
+  - **Per-modal atomic macro.** `operators/base.py` adds `BooleanCutCommand` (one
+    `robust_boolean` as an atomic command that raises on solver failure) and
+    `boolean_chain` (a `MacroCommand` of cuts) so a cutter chain commits or rolls
+    back all-or-nothing — the fix for "undo crashes in long boolean chains." A
+    modal session's edits stay in the Command journal and commit as *one* Blender
+    undo step. Headless `test_boolean_chain_command_atomic` (success + rollback).
+  - **Smart Topology (Smart Bevel & Support).** New pure `core/bevel.py`
+    (`support_loop_positions` — where holding loops sit for a `width`/`tightness`
+    bevel) + `geometry.smart_bevel_edges` (bevel + support/holding loops via
+    `_flank_support_loop`, topology-preserving) + `geometry.dissolve_boolean_ngons`
+    (triangulate + re-quad the n-gons a boolean/bevel leaves). Object-Mode Edge
+    Bevel gains an **`S` Smart** toggle with `-`/`=` tightness (EXPERIMENTAL — exact
+    holding-loop placement wants a live cube→Subdivision tuning pass, tracked in
+    the manual checklist). Pure tests for the placement math + headless
+    `test_smart_bevel_edges` / `test_dissolve_boolean_ngons`.
+    - **Wired into the boolean pipeline (opt-in).** A new **Re-quad Cut N-gons**
+      preference (`cut_dissolve_ngons`, default off) runs `dissolve_boolean_ngons`
+      after a destructive draw Cut/Make/Intersect *and* after **Apply Cutters**, so
+      the "auto-clean the n-gons a boolean leaves" flow is one toggle. A
+      **Smart Edge Bevel** preference (`smart_bevel_default`) makes Edge Bevel start
+      in Smart mode. Both live in N-panel ▸ Cutter Options ▸ Topology. Headless
+      `test_boolean_cut_ngon_cleanup_pipeline` (real cut → n-gons → clean) +
+      `test_topology_prefs_registered`.
+
 ### Fixed
 - **Decals didn't conform to curved / multi-face surfaces** — `build_decal_mesh`
   made a single flat quad, so the SHRINKWRAP had only 4 corner verts to project:

@@ -33,6 +33,7 @@ atlas = _load("atlas")
 transform = _load("transform")
 asset_lib = _load("asset_lib")
 command = _load("command")
+bevel = _load("bevel")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -821,6 +822,49 @@ def test_macro_command_rolls_back_on_failing_child():
         raised = True
     # all-or-nothing: the two applied children were rolled back, none linger
     assert raised and log == [] and not macro.done
+
+
+# --- bevel: Smart Bevel support-loop placement (pure) -----------------------
+
+def test_holding_loop_factor_tightness_monotonic():
+    loose = bevel.holding_loop_factor(0.0)
+    mid = bevel.holding_loop_factor(0.5)
+    tight = bevel.holding_loop_factor(1.0)
+    assert loose > mid > tight            # tighter -> loop hugs the bevel closer
+    assert abs(loose - 0.60) < 1e-9 and abs(tight - 0.05) < 1e-9
+    assert abs(mid - 0.325) < 1e-9        # default hard-surface holding loop
+    # tightness is clamped, not extrapolated
+    assert bevel.holding_loop_factor(-2.0) == loose
+    assert bevel.holding_loop_factor(5.0) == tight
+
+
+def test_support_loop_positions_basic_and_guards():
+    assert bevel.support_loop_positions(0.0) == []          # no bevel, no support
+    assert bevel.support_loop_positions(0.1, count=0) == []
+    assert bevel.support_loop_positions(0.1, tightness=0.5) == [0.0325]
+    # tighter -> smaller offset; looser -> larger
+    assert bevel.support_loop_positions(0.1, 1.0)[0] < \
+        bevel.support_loop_positions(0.1, 0.0)[0]
+    assert bevel.support_loop_positions(0.1, 1.0) == [0.005]
+    # offsets scale linearly with width
+    assert bevel.support_loop_positions(0.2, 0.5) == [0.065]
+
+
+def test_support_loop_positions_multiple_fan_outward():
+    two = bevel.support_loop_positions(0.1, tightness=0.5, count=2)
+    assert len(two) == 2 and two == [0.0325, 0.065]
+    assert two[1] > two[0]                # the second loop sits further out
+
+
+def test_support_loop_fractions_clamps_and_dedupes():
+    # a 0.1 flank: 0.0325 m -> 0.325 fraction of the flank
+    assert bevel.support_loop_fractions(0.1, 0.1, tightness=0.5) == [0.325]
+    # offset past the far edge is clamped just inside it (no zero-area sliver)
+    assert bevel.support_loop_fractions(1.0, 0.1, tightness=0.0) == [0.98]
+    # two loops that both clamp collapse to one (dedupe)
+    assert bevel.support_loop_fractions(1.0, 0.1, tightness=0.0, count=2) == [0.98]
+    # degenerate flank -> nothing to place
+    assert bevel.support_loop_fractions(0.1, 0.0) == []
 
 
 def _run_all():

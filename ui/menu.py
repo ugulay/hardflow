@@ -65,6 +65,10 @@ _EDIT_ITEMS = (
     None,
     ("mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL', {}),
     ("mesh.hardflow_loop_cut", "Loop Cut", 'MOD_MULTIRES', {}),
+    None,
+    ("mesh.hardflow_mode_knife", "HardFlow Mode: Knife", 'MOD_LINEART', {}),
+    ("mesh.hardflow_mode_extrude", "HardFlow Mode: Extrude",
+     'MOD_SIMPLEDEFORM', {}),
 )
 
 _DISPLAY_ITEMS = (

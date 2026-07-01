@@ -4,7 +4,8 @@ import bpy
 from bpy.types import Operator
 from bpy.props import BoolProperty, StringProperty
 
-from ..core import boolean
+from ..core import boolean, geometry
+from ..preferences import get_prefs
 
 
 def _still_used(cutter, ignore=None):
@@ -55,6 +56,10 @@ class HARDFLOW_OT_apply_cutters(Operator):
                 not_first += 1
             if not self._apply_with_fallback(context, obj, mod):
                 failed += 1
+
+        # Opt-in topology cleanup: re-quad the n-gons the baked booleans left.
+        if get_prefs(context).cut_dissolve_ngons and obj.type == 'MESH':
+            geometry.dissolve_boolean_ngons(obj)
 
         removed = 0
         if self.delete_cutters:

@@ -286,12 +286,31 @@ single Blender undo step.
 | Phase | Scope | Files | Verified by |
 |---|---|---|---|
 | **0 (done)** | Command core + Knife prototype + tests | `core/command.py`, `operators/hardflow_mode.py`, `tests/test_core.py` | pure tests green; live smoke test pending |
-| **1** | Extract `_HardflowModeModal` shell; adopt CommandManager in `edge_tool`/`push_pull`/`offset` cancel paths | `operators/hardflow_mode.py`, `operators/face_tool.py` | headless + manual checklist |
-| **2** | Extrude verb + plane cycle (VIEW/SURFACE/EDGES/X/Y/Z) shared with `draw_cut` | `operators/hardflow_mode.py`, shared `_plane_basis` | manual checklist |
-| **3** | `support_loop_positions` (pure) + `smart_bevel_edges` (bmesh) + `S` toggle | `core/bevel.py` or `core/transform.py`, `core/geometry.py`, `operators/edge_tool.py` | pure tests + live subdiv pass |
-| **4** | Boolean chain → `MacroCommand` (atomic rollback) | `operators/draw_cut.py`, `core/boolean.py` | headless + manual |
+| **1 (done)** | Extract `_HardflowModeModal` shell (Knife moved onto it) | `operators/hardflow_mode.py` | headless + manual checklist |
+| **2 (done)** | Extrude verb + VIEW/X/Y/Z plane cycle on the shell | `operators/hardflow_mode.py` | manual checklist |
+| **3 (done, experimental)** | `support_loop_positions` (pure) + `smart_bevel_edges` / `dissolve_boolean_ngons` (bmesh) + `S` toggle | `core/bevel.py`, `core/geometry.py`, `operators/edge_tool.py` | pure tests + headless; live subdiv tuning pending |
+| **4 (facility landed)** | Boolean chain → `MacroCommand` (`base.BooleanCutCommand` / `boolean_chain`, atomic rollback) | `operators/base.py` (+ future `draw_cut` adoption) | headless (`test_boolean_chain_command_atomic`) |
 
 Each phase is independently shippable and leaves the tree green.
+
+**Landed in the Super Modeling Mode change:** Phases 1–3 and the Phase-4 boolean
+facility are now committed and green (pure + headless + syntax). Still pending and
+deliberately deferred (each is a self-contained, low-risk follow-up):
+
+- **CommandManager adoption in `push_pull`/`offset`/`edge_tool`** — the shared
+  `_FaceDragModal` still uses the ad-hoc `_base`/`_committed` snapshot bookkeeping.
+  The named `MeshSnapshotCommand` maps onto it 1:1 (see `command_refactor.md` §3
+  Q1); it is a rename, not a behaviour change, but touches four interdependent
+  modal files, so it wants a live pass before landing.
+- **`draw_cut` boolean chain → `base.boolean_chain`** — the `MacroCommand` facility
+  exists and is tested; wiring it into `_apply_destructive` (esp. the SLICE
+  dual-cut) buys explicit atomic rollback. `draw_cut` stays untouched until that
+  is validated against a deliberately-broken cutter live.
+- **Smart Bevel live tuning** — the support-loop placement is deterministic and
+  count-tested, but the exact holding-loop position and non-quad-flank handling
+  need a live cube→Subdivision pass (kept EXPERIMENTAL / `S`-gated until then).
+- **SURFACE / EDGES planes on the mode shell** — the shell cycles VIEW/X/Y/Z; the
+  richer plane set from `draw_cut._plane_basis` can be promoted to the shared base.
 
 ---
 

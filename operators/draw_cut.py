@@ -1484,7 +1484,9 @@ class HARDFLOW_OT_draw(Operator):
         Uses the robust boolean path (solver fallback + cutter normal repair +
         diagnosis) and surfaces the outcome so a failed/degraded cut is never
         silent."""
-        cleanup = get_prefs(context).cleanup_after_cut
+        prefs = get_prefs(context)
+        cleanup = prefs.cleanup_after_cut
+        dissolve = prefs.cut_dissolve_ngons
         op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION',
               'INTERSECT': 'INTERSECT'}.get(self.mode)
         failures, fallbacks = [], []
@@ -1502,6 +1504,9 @@ class HARDFLOW_OT_draw(Operator):
                     fallbacks.append(used)
                 if cleanup:
                     geometry.cleanup_mesh(tgt)
+                if dissolve:
+                    # Re-quad the n-gons the cut left (topology cleanup, opt-in).
+                    geometry.dissolve_boolean_ngons(tgt)
 
         try:
             if self.mode == 'SLICE':
