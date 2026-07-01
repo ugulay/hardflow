@@ -13,12 +13,12 @@ price tag.
 [![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-EA7600?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Extension](https://img.shields.io/badge/Blender-Extension-orange?logo=blender&logoColor=white)](https://extensions.blender.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.14.1-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.15.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 </div>
 
-> **Status — under active development.** **Every roadmap feature through v1.14 is
+> **Status — under active development.** **Every roadmap feature through v1.15 is
 > implemented** — the boolean cut loop (Cut / Slice / Make / Join / Intersect /
 > Knife) with Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes,
 > world-scale + vertex/edge snapping, the non-destructive flow, the full decal
@@ -36,9 +36,13 @@ price tag.
 > Mode** (HardFlow Mode shadowing shell — Knife + Extrude verbs with a SURFACE
 > plane + `Tab` verb cycle, a per-modal Command-Pattern undo now driving the
 > direct-modeling tools' live preview + an all-or-nothing boolean cut chain, and
-> Smart Bevel + boolean n-gon cleanup). The pure-logic core is unit-tested
-> (`70/70`, no Blender required) and bpy paths add headless coverage (`105/105`,
-> run live against a standalone `bpy` build + verified in Blender 5.1.2); the modal
+> Smart Bevel + boolean n-gon cleanup), and the **v1.15 Polish & Performance**
+> pass (topology-safe Smart Bevel on irregular post-boolean meshes, a framed
+> "premium" HUD with translucent viewport guide lines, and a high-poly live
+> boolean preview that culls non-intersecting targets + gates idle re-evaluation
+> via the new pure `core/preview_cache`). The pure-logic core is unit-tested
+> (`76/76`, no Blender required) and bpy paths add headless coverage (run live
+> against a standalone `bpy` build + verified in Blender 5.1.2); the modal
 > tools' interactive feel is checked via
 > [tests/manual_checklist.md](tests/manual_checklist.md). See
 > [ROADMAP.md](ROADMAP.md) for the full roadmap and [CHANGELOG.md](CHANGELOG.md)

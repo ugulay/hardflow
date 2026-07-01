@@ -5,6 +5,55 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+## [1.15.0] — 2026-07-01
+
+Polish & Performance release: Smart Bevel is topology-safe on irregular
+post-boolean meshes, every modal tool gets a framed "premium" HUD with live
+guide lines, and the live boolean preview stays responsive on high-poly targets.
+Pure math verified by 76 headless-free tests (`python tests/test_core.py`); the
+new bpy paths mirror the existing headless suite (`tests/test_blender.py`).
+
+### Added
+- **`core/preview_cache.py`** — a new pure (stdlib-only) module for the
+  live-preview performance guard: a distance gate (`moved_enough` / `PreviewGate`)
+  and axis-aligned bounding-box math (`aabb`, `expand_aabb`, `boxes_overlap`,
+  `point_in_box`). No bpy, fully unit-tested, so the "when to recompute / which
+  targets to touch" decisions live in the testable core layer.
+- **Framed HUD + viewport guides (`ui/draw.py`).** `draw_hud` now renders a
+  bordered panel with an optional accent header (`title` / `accent`), so every
+  modal tool reads as a consistent, premium overlay. New GPU helpers:
+  `draw_rect_outline`, `draw_guide_line`, `draw_dashed_line`, `draw_snap_ring`,
+  `draw_mirror_plane`, and `fade_color` (translucent / fade-in overlays).
+- **HardFlow Mode guide lines + ring snap marker.** The shell now draws dashed,
+  translucent in-plane axis guides through the snapped cursor (colored per
+  X/Y/Z plane, accent for VIEW/SURFACE) and a ring snap marker, over the new
+  framed HUD titled with the active verb + live depth.
+- Preference **Live Preview Vertex Cap** (`live_preview_max_verts`, default
+  8000) — the per-target vertex ceiling for the live boolean RESULT is now
+  user-tunable instead of a hardcoded constant.
+
+### Changed
+- **Smart Bevel is topology-safe (Görev 1).** `core.geometry.smart_bevel_edges`
+  now places holding / support loops on **non-quad flanks** too (n-gon boolean
+  off-cuts, not just clean quads), and a new safety barrier
+  (`core.bevel.flank_can_support`) **skips** any flank too small to hold a loop
+  instead of forcing one in and collapsing the face. Each split fraction is
+  clamped by `core.bevel.safe_support_fraction`. The summary dict gains a
+  `skipped` count, surfaced live in the Edge Bevel HUD (`+N loops, M clamped`)
+  so tuning tightness gives instant feedback. Headless
+  `test_smart_bevel_edges` extended (tiny-cube barrier case) + pure
+  `test_safe_support_fraction_clamps_both_ends` /
+  `test_flank_can_support_safety_barrier`.
+- **High-poly live boolean preview (Görev 3).** `draw_cut._sync_live_boolean`
+  now attaches the temporary preview modifier only to targets whose world
+  bounding box actually overlaps the cutter cage's
+  (`core.preview_cache.boxes_overlap`), and a distance gate
+  (`core.preview_cache.PreviewGate`) skips re-pointing the modifiers on sub-grid
+  cursor jitter — so a heavy mesh the cut isn't near is never previewed and the
+  boolean isn't re-evaluated on idle frames. Headless
+  `test_live_preview_world_aabb_culling` + pure `test_*` for the whole
+  `preview_cache` module.
+
 ## [1.14.1] — 2026-07-01
 
 Internal architecture release: the per-modal command layer is now adopted end to

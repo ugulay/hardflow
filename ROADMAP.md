@@ -637,6 +637,50 @@ long boolean chains":
       into the destructive Cut and Apply Cutters (headless
       `test_boolean_cut_ngon_cleanup_pipeline`).
 
+## v1.15 — Polish & Performance
+A quality pass over the three areas that most separated the toolkit from
+commercial rivals: Smart Bevel robustness, viewport polish, and high-poly
+responsiveness. All items keep the one-directional (ui/ops → core) architecture —
+the new decision logic is pure, testable core code. Verified with 76 pure tests
+(`python tests/test_core.py`) + the mirrored headless suite (`tests/test_blender.py`).
+
+**Smart Bevel & topology stability** (`core/bevel.py`, `core/geometry.py`,
+`operators/edge_tool.py`):
+- [x] **Non-quad support loops** — `geometry._flank_support_loop` now drops a
+      holding loop on n-gon flanks (the irregular off-cuts a boolean leaves), not
+      just clean quads; the split points still cleave off a support loop parallel
+      to the bevel shoulder.
+- [x] **Clamping safety barrier** — `core.bevel.flank_can_support` skips any flank
+      too small to hold a loop (a thin sliver, a near-degenerate n-gon) instead of
+      forcing one in and collapsing the face; `core.bevel.safe_support_fraction`
+      clamps every edge split off both ends. `smart_bevel_edges` reports a `skipped`
+      count, surfaced live in the Edge Bevel HUD (`+N loops, M clamped`), so tuning
+      `tightness` / width gives instant micro-adjustment feedback.
+
+**UI/UX visual richness & advanced HUD** (`ui/draw.py`,
+`operators/hardflow_mode.py`):
+- [x] **Framed premium HUD** — `draw_hud` gains a bordered panel + optional accent
+      header (`title`/`accent`); every modal tool now reads as a consistent overlay
+      showing its mode + live values. Edge Bevel / Loop Cut / HardFlow Mode titled.
+- [x] **Translucent viewport guides** — new GPU helpers `draw_guide_line`,
+      `draw_dashed_line`, `draw_snap_ring`, `draw_mirror_plane`, `draw_rect_outline`,
+      `fade_color`. HardFlow Mode draws dashed in-plane axis guides (colored per
+      X/Y/Z plane) through the snapped cursor + a ring snap marker.
+
+**High-poly performance & preview caching** (`core/preview_cache.py`,
+`operators/draw_cut.py`):
+- [x] **New pure `core/preview_cache`** — distance gate (`moved_enough` /
+      `PreviewGate`) + AABB math (`aabb`/`expand_aabb`/`boxes_overlap`/
+      `point_in_box`), stdlib-only and fully unit-tested.
+- [x] **Bounding-box target culling** — the live boolean preview attaches its temp
+      modifier only to targets whose world box actually overlaps the cutter cage,
+      so a far-away heavy mesh is never previewed (the practical "local
+      intersecting region" win).
+- [x] **Idle-frame gate** — a distance gate skips re-pointing the preview modifiers
+      on sub-grid cursor jitter, so the boolean isn't re-evaluated every frame while
+      the mouse is effectively still. Cap is now the tunable
+      `live_preview_max_verts` preference.
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock

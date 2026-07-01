@@ -308,8 +308,10 @@ journal (placements never touch mesh data, so cancel needs `clear`, not
 snapshot-shaped lifecycle." The v1.14 audit found that wrong: the live boolean
 preview **never mutates the target mesh**. It hangs a temporary `HF_LivePreview`
 Boolean *modifier* on each target pointing at the live cutter cage and lets
-Blender's viewport evaluate the result (hence the `_LIVE_BOOL_MAX_VERTS` cap and
-the `FAST` solver). Porting it to `MeshSnapshotCommand` would force a real
+Blender's viewport evaluate the result (hence the `live_preview_max_verts` cap —
+a preference since v1.15, previously the `_LIVE_BOOL_MAX_VERTS` constant — plus
+the v1.15 `core/preview_cache` bounding-box target culling + idle-frame distance
+gate, and the `FAST` solver). Porting it to `MeshSnapshotCommand` would force a real
 per-frame boolean *bake* on every `MOUSEMOVE` — a regression, not a cleanup.
 
 The right named form is a lightweight `LivePreviewCommand(HardFlowCommand)` that

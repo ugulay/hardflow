@@ -592,6 +592,36 @@ edit. For the boolean chain: a multi-object **Cut** across several selected mesh
 or a **Slice**, must commit every piece or (on a forced solver failure) leave every
 target **unchanged** — never half-cut, never an orphaned slice duplicate.
 
+## 22. v1.15 Polish & Performance
+
+**Smart Bevel topology safety** (Object Mode ▸ Edge Bevel, `S` = Smart on):
+- [ ] Bevel a **clean cube** edge with Smart on — the HUD shows `SMART t=…
+      (+N loops)` and support/holding loops appear on the flanking faces. Add a
+      **Subdivision** modifier: the bevel stays crisp.
+- [ ] Boolean-cut a shape into a face first (leaving **n-gons**), then Smart-bevel
+      one of the resulting irregular edges — loops still land on the n-gon flanks
+      and the mesh does **not** collapse.
+- [ ] Bevel a **very small / thin** feature with a wide width — the HUD shows
+      `M clamped` and the too-small flanks are **skipped** (no face collapse,
+      no NaN geometry). `-` / `=` re-tunes tightness live.
+
+**Premium HUD + viewport guides:**
+- [ ] Every modal tool's HUD now has a **bordered panel + accent header** (tool
+      title). Edge Bevel / Loop Cut show their title; HardFlow Mode shows
+      `HardFlow Mode · Knife/Extrude`.
+- [ ] In **HardFlow Mode**, dashed **axis guide lines** run through the snapped
+      cursor along the plane's two in-plane axes (colored per X/Y/Z plane, accent
+      for VIEW/SURFACE), and the snap marker is a **ring** colored by snap kind.
+
+**High-poly live boolean preview** (`J` on):
+- [ ] With a **heavy** target (raise its poly count) and `live_preview_max_verts`
+      left at its default, the wire cage still draws but the live RESULT is skipped
+      — the viewport stays responsive. Lower/raise the preference to change the cap.
+- [ ] With **two** targets where the cutter cage only overlaps one, only the
+      **overlapping** target shows the live cut result; the far one is untouched.
+- [ ] Holding the mouse **still** mid-draw does not re-stutter (the boolean isn't
+      re-evaluated every frame); moving it resumes the live update immediately.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

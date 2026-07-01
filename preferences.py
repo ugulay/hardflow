@@ -298,6 +298,14 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "with J while drawing; skipped on heavy targets for speed",
         default=False,
     )
+    live_preview_max_verts: IntProperty(
+        name="Live Preview Vertex Cap",
+        description="Skip the live boolean RESULT (show only the wire cutter cage) "
+                    "on targets heavier than this vertex count, so a high-poly "
+                    "mesh stays responsive while drawing. Targets the cutter's "
+                    "bounding box doesn't even reach are skipped regardless",
+        default=8000, min=0, soft_max=200000,
+    )
     draw_inset: FloatProperty(
         name="Cutter Inset (m)",
         description="Default amount the drawn loop is offset in (-) / out (+) "
@@ -403,6 +411,7 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "cleanup_after_cut")
         col.prop(self, "cut_dissolve_ngons")
         col.prop(self, "live_boolean_preview")
+        col.prop(self, "live_preview_max_verts")
         col.prop(self, "draw_inset")
         col.prop(self, "draw_bevel_cut")
         col.prop(self, "draw_cutter_bevel")

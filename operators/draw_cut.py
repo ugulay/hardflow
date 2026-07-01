@@ -19,7 +19,8 @@ from bpy.types import Operator
 from bpy.props import EnumProperty
 from mathutils import Vector
 
-from ..core import raycast, geometry, boolean, grid, snap, decal_math, command
+from ..core import (raycast, geometry, boolean, grid, snap, decal_math, command,
+                    preview_cache)
 from ..preferences import get_prefs
 from ..ui import draw as hud
 from . import base
@@ -110,6 +111,11 @@ class HARDFLOW_OT_draw(Operator):
         self.cutter_bevel = prefs.draw_cutter_bevel  # chamfer the cutter; C toggles
         self.live_bool = prefs.live_boolean_preview  # live boolean result; J toggles
         self._live_cmd = None     # base.LivePreviewCommand owning the temp mod(s)
+        # Distance gate for the live boolean re-sync: skip re-pointing the temp
+        # modifier(s) until the cutter cage has moved a little, so a high-poly
+        # target isn't re-evaluated on sub-pixel jitter (core/preview_cache).
+        self._live_gate = preview_cache.PreviewGate(prefs.grid_world * 0.1)
+        self._live_targets = None  # last target set the gate accepted (id set)
         self.grid_size = prefs.grid_world  # live grid spacing (Ctrl+Wheel adjusts)
         self.depth = 0.0          # explicit cutter depth (0 = auto pierce); PgUp/Dn
         self.points = []          # confirmed screen points (current view)
@@ -1090,15 +1096,22 @@ class HARDFLOW_OT_draw(Operator):
 
     # --- live boolean preview (the actual cut result, drawn before commit) ----
 
-    # Above this target vertex count the live boolean is skipped (only the wire
-    # cutter cage is shown), so a heavy mesh stays responsive while drawing.
-    _LIVE_BOOL_MAX_VERTS = 8000
+    @staticmethod
+    def _world_aabb(obj):
+        """World-space axis-aligned bounding box of `obj` (its local bound_box
+        corners transformed by matrix_world), as (min, max) for the pure
+        core.preview_cache overlap test. None for an object with no bounds."""
+        mw = obj.matrix_world
+        corners = [mw @ Vector(c) for c in obj.bound_box]
+        return preview_cache.aabb([(c.x, c.y, c.z) for c in corners])
 
     def _clear_live_boolean(self, context):
         """Strip the live-preview boolean modifier(s) via the LivePreviewCommand.
         Idempotent; called before the real cut on commit and on cancel."""
         if self._live_cmd is not None:
             self._live_cmd.clear(context)
+        self._live_targets = None
+        self._live_gate.reset()
 
     def _sync_live_boolean(self, context):
         """Show the actual boolean RESULT on the target(s) while drawing, through
@@ -1107,18 +1120,51 @@ class HARDFLOW_OT_draw(Operator):
         subtraction/union as the shape changes. Active only for the boolean modes
         (Cut/Make/Intersect) with a valid cutter, the live preview on, and the
         target light enough; stripped otherwise. The temp modifier is always
-        removed before the real cut (see `_commit`)."""
+        removed before the real cut (see `_commit`).
+
+        High-poly guard (core/preview_cache): a target is previewed only when it
+        is under the vertex cap AND its world bounding box actually overlaps the
+        cutter cage's -- so a heavy mesh the cut isn't near never carries the temp
+        modifier. A distance gate then skips re-pointing the modifiers on sub-grid
+        cursor jitter, so the boolean isn't re-evaluated every frame while idle."""
         op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION',
               'INTERSECT': 'INTERSECT'}.get(self.mode)
         if not (self.live_bool and op is not None and self._preview is not None):
             self._clear_live_boolean(context)
             return
-        targets = [t for t in self._targets(context)
-                   if t is not None and t.type == 'MESH'
-                   and len(t.data.vertices) <= self._LIVE_BOOL_MAX_VERTS]
+        cap = get_prefs(context).live_preview_max_verts
+        # Pad the cutter box a touch so a target just grazing the cut still counts.
+        cutter_box = preview_cache.expand_aabb(
+            self._world_aabb(self._preview), self.grid_size * 0.5)
+        targets = [
+            t for t in self._targets(context)
+            if t is not None and t.type == 'MESH'
+            and len(t.data.vertices) <= cap
+            and preview_cache.boxes_overlap(cutter_box, self._world_aabb(t))]
+
         if self._live_cmd is None:
             self._live_cmd = base.LivePreviewCommand(self._preview, op)
             self._live_cmd.execute()
+        # Always re-sync when the target set, the operation, or the cutter object
+        # changed (a modifier must be added / stripped / retargeted); otherwise
+        # let the distance gate throttle redundant re-points on tiny cursor moves.
+        # (The preview object keeps its identity across frames -- only its mesh
+        # data is swapped -- so Blender re-evaluates the boolean when the cage
+        # changes even on a gated frame.)
+        # Identify the target set by name (stable across frames -- bpy wrapper
+        # identity / id() is not), so the gate can actually recognise "same set".
+        target_ids = frozenset(t.name for t in targets)
+        changed = (target_ids != self._live_targets
+                   or op != self._live_cmd.operation
+                   or self._live_cmd.cutter is not self._preview)
+        center = None
+        if cutter_box is not None:
+            lo, hi = cutter_box
+            center = tuple((lo[i] + hi[i]) * 0.5 for i in range(3))
+        if not changed and center is not None \
+                and not self._live_gate.should_update(center):
+            return
+        self._live_targets = target_ids
         # The wire cutter cage is rebuilt each frame, so re-point every sync.
         self._live_cmd.cutter = self._preview
         self._live_cmd.operation = op

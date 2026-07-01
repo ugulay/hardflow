@@ -23,7 +23,7 @@ if _PARENT not in sys.path:
 _PKG = os.path.basename(_REPO)            # usually "hardflow"
 hardflow = __import__(_PKG)
 from hardflow.core import (geometry, boolean, decal, decal_image, atlas,  # noqa: E402
-                           asset, grid, raycast, snapping)
+                           asset, grid, raycast, snapping, preview_cache)
 
 
 def _reset():
@@ -255,6 +255,28 @@ def test_live_boolean_preview_and_cutter_options():
         assert target.modifiers.get("HF_LivePreview") is None
     finally:
         hardflow.unregister()
+
+
+def test_live_preview_world_aabb_culling():
+    # The high-poly live-preview guard: draw_cut._world_aabb builds a target's
+    # world bounding box, and core.preview_cache.boxes_overlap decides whether the
+    # cutter cage actually reaches it -- so a far-away heavy mesh is never previewed.
+    _reset()
+    from hardflow.operators.draw_cut import HARDFLOW_OT_draw
+
+    cutter = _add_cube("Cage", size=1.0, location=(0, 0, 0))
+    near = _add_cube("Near", size=1.0, location=(0.5, 0, 0))     # overlaps the cage
+    far = _add_cube("Far", size=1.0, location=(50, 0, 0))        # nowhere near
+
+    cbox = HARDFLOW_OT_draw._world_aabb(cutter)
+    assert cbox is not None
+    # a cube of size 1 spans [-0.5, 0.5] about its origin
+    assert abs(cbox[0][0] - (-0.5)) < 1e-6 and abs(cbox[1][0] - 0.5) < 1e-6
+
+    padded = preview_cache.expand_aabb(cbox, 0.25)
+    assert preview_cache.boxes_overlap(padded, HARDFLOW_OT_draw._world_aabb(near))
+    assert not preview_cache.boxes_overlap(padded,
+                                           HARDFLOW_OT_draw._world_aabb(far))
 
 
 def test_face_edge_tangent_near_point():
@@ -860,17 +882,30 @@ def test_smart_bevel_edges():
                                          support=True, tightness=0.5)
     assert summary['beveled'] == 1, summary
     assert isinstance(summary['supports'], int) and summary['supports'] >= 0
+    assert isinstance(summary['skipped'], int) and summary['skipped'] >= 0
     assert isinstance(summary['ngons'], int) and summary['ngons'] >= 0
+    # a roomy 2 m cube face easily clears the safety barrier -> loops were added
+    assert summary['supports'] >= 1, summary
     assert len(cube.data.vertices) > before, "smart bevel added no geometry"
     # support loops only ever add geometry over the plain chamfer, never remove it
     assert len(cube.data.vertices) >= plain_v, (len(cube.data.vertices), plain_v)
     assert len(cube.data.polygons) > 0, "smart bevel emptied the mesh"
 
+    # Safety barrier: a wide bevel on a small cube leaves flanks too small to hold
+    # a loop. The new gate must never force one in and collapse the mesh -- every
+    # shoulder is either supported or skipped, and the mesh survives with faces.
+    tiny = _add_cube("SmartBevelTiny", size=0.5)
+    ts = geometry.smart_bevel_edges(tiny, [top_key(tiny)], 0.4, segments=2,
+                                    support=True, tightness=0.5)
+    assert ts['beveled'] == 1, ts
+    assert ts['supports'] >= 0 and ts['skipped'] >= 0, ts
+    assert len(tiny.data.polygons) > 0, "safety barrier let the mesh collapse"
+
     # width 0 is a no-op that still returns the zeroed summary
     flat = _add_cube("SmartBevelZero", size=2.0)
     fv = len(flat.data.vertices)
     z = geometry.smart_bevel_edges(flat, [top_key(flat)], 0.0)
-    assert z == {'beveled': 0, 'supports': 0, 'ngons': 0}
+    assert z == {'beveled': 0, 'supports': 0, 'skipped': 0, 'ngons': 0}
     assert len(flat.data.vertices) == fv          # untouched
     # a bad edge key bevels nothing
     assert geometry.smart_bevel_edges(cube, [(0, 9000)], 0.2)['beveled'] == 0

@@ -53,6 +53,53 @@ def support_loop_positions(width, tightness=0.5, count=1):
     return [round(base * (i + 1), 6) for i in range(int(count))]
 
 
+def safe_support_fraction(offset, flank_length, min_gap=0.02):
+    """Clamp one absolute support-loop `offset` (meters, out from the bevel
+    shoulder) to a safe split fraction in (0, 1) of a flanking edge of length
+    `flank_length`. Keeps at least `min_gap` clearance from *both* ends so the
+    edge split never makes a zero-area sliver or lands on/past the far vertex --
+    the per-edge clamping barrier `geometry.smart_bevel_edges` needs to survive
+    irregular, non-quad flanks a boolean cut leaves.
+
+    Returns a float in [min_gap, 1 - min_gap], or None when there is nothing to
+    place (a degenerate flank or a non-positive offset). Pure float, no bpy.
+
+        >>> safe_support_fraction(0.0325, 0.1)   # 0.325 of the flank
+        0.325
+        >>> safe_support_fraction(0.5, 0.1)      # past the far end -> clamped
+        0.98
+        >>> safe_support_fraction(0.001, 0.1)    # tiny -> clamped off the near end
+        0.02
+    """
+    if flank_length <= 0.0 or offset <= 0.0:
+        return None
+    lo = _clamp01(min_gap)
+    hi = 1.0 - lo
+    if hi <= lo:
+        return None
+    f = offset / flank_length
+    return round(min(hi, max(lo, f)), 6)
+
+
+def flank_can_support(flank_length, width, min_ratio=1.5):
+    """Safety barrier for the Smart Bevel support loop: True only when a flank is
+    comfortably larger than the bevel it must hold. A holding loop dropped into a
+    flank that is barely wider than the bevel collapses the face -- exactly the
+    thin, irregular off-cuts a boolean leaves behind. Gating on
+    `flank_length >= min_ratio * width` (both positive) is the non-quad-safe
+    check that lets `smart_bevel_edges` skip those flanks instead of breaking
+    them.
+
+        >>> flank_can_support(2.0, 0.2)     # a cube face vs a small bevel
+        True
+        >>> flank_can_support(0.25, 0.2)    # a thin sliver -> skip the loop
+        False
+    """
+    if width <= 0.0 or flank_length <= 0.0 or min_ratio <= 0.0:
+        return False
+    return flank_length >= min_ratio * width
+
+
 def support_loop_fractions(width, flank_length, tightness=0.5, count=1):
     """The same holding-loop offsets expressed as fractions in (0, 1) of a
     flanking face of length `flank_length` -- the form a face-local edge split

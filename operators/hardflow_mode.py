@@ -332,10 +332,35 @@ class _HardflowModeModal:
 
     # --- HUD --------------------------------------------------------------
 
+    # Axis colors for the world-axis construction planes; VIEW / SURFACE fall
+    # back to the accent so the guide still reads as "the plane you draw on".
+    _AXIS_GUIDE = {'X': (1.0, 0.35, 0.35, 0.5),
+                   'Y': (0.45, 1.0, 0.45, 0.5),
+                   'Z': (0.45, 0.6, 1.0, 0.5)}
+
+    def _draw_plane_guides(self, context):
+        """Dashed, translucent guide lines along the construction plane's two
+        in-plane axes, through the snapped cursor -- the 'locked to this plane /
+        this direction' feedback. Screen-projected from the world basis, so they
+        track the orbit and the active plane."""
+        if self._basis is None or self._cursor is None:
+            return
+        region, rv3d = context.region, context.region_data
+        _origin, right, up, _normal = self._basis
+        span = max(self._grid * 6.0, 0.5)
+        col = self._AXIS_GUIDE.get(
+            self._plane, tuple(get_prefs(context).line_color)[:3] + (0.45,))
+        for axis in (right, up):
+            a = raycast.world_to_screen(region, rv3d, self._cursor - axis * span)
+            b = raycast.world_to_screen(region, rv3d, self._cursor + axis * span)
+            if a is not None and b is not None:
+                hud.draw_dashed_line(a, b, col)
+
     def _draw_px(self, context):
         prefs = get_prefs(context)
         region, rv3d = context.region, context.region_data
         line = tuple(prefs.line_color)
+        accent = line[:3] + (1.0,)
 
         # Placed points + the rubber-band segment to the live cursor.
         screen = []
@@ -352,32 +377,34 @@ class _HardflowModeModal:
             closed = len(self.world_points) >= 3 and self._cursor is None
             hud.draw_shape(preview, line, closed=closed)
 
-        # Snap marker at the live cursor, colored by what it locked onto.
+        # Live cursor: translucent in-plane axis guides + a ring snap marker
+        # colored by what it locked onto (premium feedback over the plain box).
         if self._cursor is not None:
             c = raycast.world_to_screen(region, rv3d, self._cursor)
             if c is not None:
+                self._draw_plane_guides(context)
                 mark = {
                     'VERT': (1.0, 0.9, 0.2, 1.0),   # yellow = vertex
                     'MID': (0.2, 1.0, 0.4, 1.0),    # green  = midpoint
                     'EDGE': (0.3, 0.6, 1.0, 1.0),   # blue   = on-edge
-                    'GRID': (1.0, 1.0, 1.0, 0.7),   # white  = grid
-                }.get(self._snap_kind, line)
-                r = 6.0
-                box = [(c[0] - r, c[1] - r), (c[0] + r, c[1] - r),
-                       (c[0] + r, c[1] + r), (c[0] - r, c[1] + r)]
-                hud.draw_shape(box, mark, closed=True)
+                    'GRID': (1.0, 1.0, 1.0, 0.85),  # white  = grid
+                }.get(self._snap_kind, accent)
+                hud.draw_snap_ring(c, 7.0, mark, width=1.75)
+                hud.draw_points([c], hud.fade_color(mark, 0.9), size=4.0)
 
         snap_txt = self._snap_kind or "free"
         plane_txt = self._plane + ("(miss)" if self._surface_miss else "")
+        depth = self._verb_hud().strip()
+        info = ("%d pt   plane %s   snap %s%s"
+                % (len(self.world_points), plane_txt,
+                   'ON' if self.snap else 'OFF',
+                   ("   " + depth) if depth else ""))
         hud.draw_hud(region, [
-            ("HardFlow Mode %s  --  %d pt   plane %s   snap %s%s"
-             % (self.verb, len(self.world_points), plane_txt,
-                'ON' if self.snap else 'OFF', self._verb_hud()),
-             line[:3] + (1.0,)),
+            (info, accent),
             ("Click add   Backspace undo   Tab verb   ←/→ plane   "
              "Z / Enter / dbl-click commit   X snap   Esc cancel   [%s]"
              % snap_txt, (0.72, 0.72, 0.72, 1.0)),
-        ])
+        ], title="HardFlow Mode · %s" % self.verb, accent=accent)
 
 
 class HARDFLOW_OT_mode_knife(_HardflowModeModal, Operator):

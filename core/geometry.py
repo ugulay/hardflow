@@ -1129,14 +1129,21 @@ def dissolve_boolean_ngons(obj, only_ngons=True, rejoin_quads=True):
     return n
 
 
-def _flank_support_loop(bm, face, shoulder_edge, offset):
-    """Insert one holding / support loop into quad `face`, parallel to
-    `shoulder_edge` (the edge it shares with a new bevel face) and sitting
-    `offset` meters out from it. Splits the two side edges at the matching
-    fraction and connects the new verts -- a face-local loop cut, so it is
-    deterministic and needs no ring walk. Returns True when a loop was added,
-    False for a non-quad flank or a degenerate split."""
-    if len(face.verts) != 4:
+def _flank_support_loop(bm, face, shoulder_edge, offset, min_gap=0.02):
+    """Insert one holding / support loop into `face`, parallel to `shoulder_edge`
+    (the edge it shares with a new bevel face) and sitting `offset` meters out
+    from it. Splits the two side edges incident to the shoulder at the clamped
+    fraction and connects the new verts -- a face-local loop cut, deterministic
+    and needing no ring walk.
+
+    Works on any flank with 4+ sides: a quad's two side edges are opposite, an
+    n-gon's are the two edges flanking the shoulder, and connecting the split
+    points cleaves off a supporting loop either way (the non-quad boolean off-cut
+    case). A triangle flank (< 4 verts) can't hold a parallel loop -> skipped.
+    Each split fraction is clamped by `core.bevel.safe_support_fraction`, so a
+    short side edge never yields a zero-area sliver. Returns True when a loop was
+    added, False for a degenerate flank or a failed split."""
+    if len(face.verts) < 4:                 # a tri flank can't hold a parallel loop
         return False
     sv = set(shoulder_edge.verts)
     sides = [e for e in face.edges
@@ -1149,10 +1156,9 @@ def _flank_support_loop(bm, face, shoulder_edge, offset):
         if not shared:
             return False
         anchor = next(iter(shared))         # this side edge's end on the shoulder
-        length = e.calc_length()
-        if length < 1e-9:
+        frac = _bevel.safe_support_fraction(offset, e.calc_length(), min_gap)
+        if frac is None:                    # degenerate side edge
             return False
-        frac = min(0.98, max(0.02, offset / length))
         try:
             _, nv = bmesh.utils.edge_split(e, anchor, frac)
         except (ValueError, RuntimeError):
@@ -1179,12 +1185,18 @@ def smart_bevel_edges(obj, edge_keys, width, segments=2, profile=0.5,
       3. when `clean_ngons`, triangulate + re-quad any n-gons the bevel produced.
 
     bmesh only, no bpy.ops. Returns a summary dict:
-        {'beveled': edges_beveled, 'supports': loops_added, 'ngons': ngons_cleaned}
+        {'beveled': edges_beveled, 'supports': loops_added,
+         'skipped': flanks_skipped_by_the_safety_barrier, 'ngons': ngons_cleaned}
 
-    EXPERIMENTAL: the support-loop step is deterministic and headless-tested by
-    count, but the exact holding-loop position wants a live cube -> Subdivision
-    pass to tune (tracked in tests/manual_checklist.md). Width <= 0 is a no-op."""
-    summary = {'beveled': 0, 'supports': 0, 'ngons': 0}
+    The support step is topology-safe: a flank too small to hold a loop (a thin
+    boolean off-cut, a non-quad sliver) is skipped by the
+    `core.bevel.flank_can_support` barrier and counted in `skipped`, so an
+    irregular post-boolean mesh never collapses -- it just gets fewer loops.
+
+    EXPERIMENTAL: the exact holding-loop position wants a live cube ->
+    Subdivision pass to tune (tracked in tests/manual_checklist.md). Width <= 0
+    is a no-op."""
+    summary = {'beveled': 0, 'supports': 0, 'skipped': 0, 'ngons': 0}
     if width <= 0.0:
         return summary
     bm = bmesh.new()
@@ -1226,8 +1238,20 @@ def smart_bevel_edges(obj, edge_keys, width, segments=2, profile=0.5,
                 if e in done_edges or not e.is_valid or not flank.is_valid:
                     continue
                 done_edges.add(e)
+                # Safety barrier: skip a flank too small to hold a loop (thin
+                # boolean off-cut / non-quad sliver) -- forcing one in collapses
+                # the face. Gate on the shortest side edge the loop would ride.
+                sv = set(e.verts)
+                side_lens = [se.calc_length() for se in flank.edges
+                             if se is not e and len(set(se.verts) & sv) == 1]
+                if not side_lens or not _bevel.flank_can_support(
+                        min(side_lens), width):
+                    summary['skipped'] += 1
+                    continue
                 if _flank_support_loop(bm, flank, e, offset):
                     summary['supports'] += 1
+                else:
+                    summary['skipped'] += 1
 
     if clean_ngons:
         ngons = [f for f in bm.faces if len(f.verts) > 4]

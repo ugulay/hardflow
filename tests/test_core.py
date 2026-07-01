@@ -34,6 +34,7 @@ transform = _load("transform")
 asset_lib = _load("asset_lib")
 command = _load("command")
 bevel = _load("bevel")
+preview_cache = _load("preview_cache")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -865,6 +866,85 @@ def test_support_loop_fractions_clamps_and_dedupes():
     assert bevel.support_loop_fractions(1.0, 0.1, tightness=0.0, count=2) == [0.98]
     # degenerate flank -> nothing to place
     assert bevel.support_loop_fractions(0.1, 0.0) == []
+
+
+# --- bevel: Smart Bevel clamping + safety barrier (pure) --------------------
+
+def test_safe_support_fraction_clamps_both_ends():
+    # a mid offset maps straight to its fraction of the flank
+    assert bevel.safe_support_fraction(0.0325, 0.1) == 0.325
+    # past the far end -> clamped just inside it (no zero-area sliver)
+    assert bevel.safe_support_fraction(0.5, 0.1) == 0.98
+    # a tiny offset -> clamped off the near end
+    assert bevel.safe_support_fraction(0.0001, 0.1) == 0.02
+    # custom gap widens the safe band symmetrically
+    assert bevel.safe_support_fraction(0.5, 0.1, min_gap=0.1) == 0.9
+    # nothing to place: non-positive offset or degenerate flank
+    assert bevel.safe_support_fraction(0.0, 0.1) is None
+    assert bevel.safe_support_fraction(0.03, 0.0) is None
+
+
+def test_flank_can_support_safety_barrier():
+    # a roomy flank vs a small bevel -> a loop is safe
+    assert bevel.flank_can_support(2.0, 0.2) is True
+    # comfortably past the ratio boundary counts as safe (>=)
+    assert bevel.flank_can_support(0.31, 0.2, min_ratio=1.5) is True
+    # a thin boolean off-cut vs the same bevel -> skip the loop
+    assert bevel.flank_can_support(0.25, 0.2) is False
+    # a stricter ratio rejects a flank the default would allow
+    assert bevel.flank_can_support(0.5, 0.2, min_ratio=3.0) is False
+    # degenerate / non-positive inputs never support a loop
+    assert bevel.flank_can_support(0.0, 0.2) is False
+    assert bevel.flank_can_support(1.0, 0.0) is False
+
+
+# --- preview_cache: live-preview distance gate + AABB culling (pure) --------
+
+def test_moved_enough_distance_gate():
+    # no prior position -> always recompute
+    assert preview_cache.moved_enough(None, (0.0, 0.0), 5.0) is True
+    # sub-threshold move -> hold (dist ~1.41 < 5)
+    assert preview_cache.moved_enough((0.0, 0.0), (1.0, 1.0), 5.0) is False
+    # over-threshold move -> recompute (dist ~5.66 >= 5)
+    assert preview_cache.moved_enough((0.0, 0.0), (4.0, 4.0), 5.0) is True
+    # a non-positive threshold disables the gate
+    assert preview_cache.moved_enough((0.0, 0.0), (0.0, 0.0), 0.0) is True
+    # works in 3D too
+    assert preview_cache.moved_enough((0, 0, 0), (0, 0, 3), 2.0) is True
+
+
+def test_aabb_expand_and_overlap():
+    box = preview_cache.aabb([(0, 0, 0), (1, 2, -1), (0.5, 1, 3)])
+    assert box == ((0, 0, -1), (1, 2, 3))
+    assert preview_cache.aabb([]) is None
+    # expand grows outward on every axis; a negative margin shrinks (clamped)
+    lo, hi = preview_cache.expand_aabb(((0, 0), (2, 2)), 0.5)
+    assert lo == (-0.5, -0.5) and hi == (2.5, 2.5)
+    lo2, hi2 = preview_cache.expand_aabb(((0, 0), (1, 1)), -2.0)  # over-shrink
+    assert lo2 == (0.5, 0.5) and hi2 == (0.5, 0.5)               # midpoint collapse
+    # overlap: touching counts, disjoint does not, None overlaps nothing
+    assert preview_cache.boxes_overlap(((0, 0), (1, 1)), ((0.5, 0.5), (2, 2)))
+    assert preview_cache.boxes_overlap(((0, 0), (1, 1)), ((1, 1), (2, 2)))  # touch
+    assert not preview_cache.boxes_overlap(((0, 0), (1, 1)), ((2, 2), (3, 3)))
+    assert not preview_cache.boxes_overlap(None, ((0, 0), (1, 1)))
+
+
+def test_point_in_box():
+    box = ((0, 0, 0), (2, 2, 2))
+    assert preview_cache.point_in_box((1, 1, 1), box) is True
+    assert preview_cache.point_in_box((2, 0, 0), box) is True      # on the face
+    assert preview_cache.point_in_box((3, 1, 1), box) is False
+    assert preview_cache.point_in_box((1, 1, 1), None) is False
+
+
+def test_preview_gate_stateful():
+    gate = preview_cache.PreviewGate(threshold=1.0)
+    assert gate.should_update((0.0, 0.0)) is True     # first call always fires
+    assert gate.should_update((0.5, 0.0)) is False    # sub-threshold: hold
+    assert gate.should_update((1.5, 0.0)) is True     # moved past threshold
+    assert gate.should_update((1.6, 0.0)) is False    # small nudge from the new pos
+    gate.reset()
+    assert gate.should_update((1.6, 0.0)) is True     # reset -> fire again
 
 
 def _run_all():

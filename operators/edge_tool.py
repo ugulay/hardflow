@@ -66,7 +66,9 @@ class _EdgePickModal(_FaceDragModal):
                 col = ((1.0, 0.6, 0.1, 1.0) if self.locked
                        else tuple(prefs.line_color)[:3] + (1.0,))
                 hud.draw_shape([(a[0], a[1]), (b[0], b[1])], col, closed=False)
-        hud.draw_hud(context.region, self._hud_lines(context, prefs))
+        accent = tuple(prefs.line_color)[:3] + (1.0,)
+        hud.draw_hud(context.region, self._hud_lines(context, prefs),
+                     title=getattr(self, "_hud_title", None), accent=accent)
 
 
 class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
@@ -77,6 +79,7 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
 
     _snapshot_name = "hf_edgebevel_base"
     allow_negative = False
+    _hud_title = "Edge Bevel"
     _LAST_WIDTH = 0.0   # remembered across runs -> R repeats the last width
 
     def _init_tool(self, context, event):
@@ -85,6 +88,7 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
         self.loop = False           # L: bevel the whole connected edge loop
         self.smart = get_prefs(context).smart_bevel_default   # S toggles live
         self.tightness = 0.5        # - / = : how hard support loops hug the bevel
+        self._last_summary = None   # smart_bevel_edges result -> live HUD feedback
         self._edge_key = None       # (vi, vj) edge under cursor / locked
         self._edge_world = None     # (Vector, Vector) world endpoints for drawing
         self._bevel_keys = None     # edges actually beveled (single or loop)
@@ -124,11 +128,14 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
             return
         if self.smart:
             # Smart Bevel: real chamfer + support/holding loops + n-gon clean,
-            # the topology-preserving hard-surface path (EXPERIMENTAL).
-            geometry.smart_bevel_edges(
+            # the topology-preserving hard-surface path (EXPERIMENTAL). The
+            # summary feeds the live HUD (supports added / flanks skipped by the
+            # safety barrier), so tuning tightness gives instant feedback.
+            self._last_summary = geometry.smart_bevel_edges(
                 obj, self._bevel_keys, self.width, self.segments,
                 support=True, tightness=self.tightness, clean_ngons=True)
         else:
+            self._last_summary = None
             geometry.bevel_object_edges(obj, self._bevel_keys,
                                         self.width, self.segments)
 
@@ -183,7 +190,16 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
         else:
             typed = ("  [typing %s]" % self.typed) if self.typed else ""
             loop = "  (loop x%d)" % len(self._bevel_keys or []) if self.loop else ""
-            smart = ("  SMART t=%.1f" % self.tightness) if self.smart else ""
+            if self.smart:
+                smart = "  SMART t=%.1f" % self.tightness
+                s = self._last_summary
+                if s:                          # live support / safety-barrier count
+                    smart += "  (+%d loops" % s.get('supports', 0)
+                    if s.get('skipped'):
+                        smart += ", %d clamped" % s['skipped']
+                    smart += ")"
+            else:
+                smart = ""
             top = ("Width:  %.3f m%s    Segments %d%s%s"
                    % (self.width, typed, self.segments, loop, smart), accent)
         last = HARDFLOW_OT_edge_bevel._LAST_WIDTH
@@ -208,6 +224,7 @@ class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
 
     _snapshot_name = "hf_loopcut_base"
     allow_negative = False
+    _hud_title = "Loop Cut"
 
     def _init_tool(self, context, event):
         self.cuts = 1

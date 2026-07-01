@@ -1,4 +1,6 @@
 # GPU drawing over the viewport and blf text HUD.
+import math
+
 import gpu
 import blf
 from gpu_extras.batch import batch_for_shader
@@ -112,39 +114,140 @@ def _draw_rect(x, y, w, h, color):
     gpu.state.blend_set('NONE')
 
 
-# Default text color and HUD background color.
+def draw_rect_outline(x, y, w, h, color, width=1.0):
+    """A 1px (or `width`) border rectangle -- the HUD panel frame + guide boxes.
+    Uses a LINE_STRIP loop (LINE_LOOP is deprecated)."""
+    gpu.state.blend_set('ALPHA')
+    gpu.state.line_width_set(width)
+    pts = [(x, y, 0.0), (x + w, y, 0.0), (x + w, y + h, 0.0),
+           (x, y + h, 0.0), (x, y, 0.0)]
+    shader = _get_shader()
+    batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": pts})
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
+    gpu.state.line_width_set(1.0)
+    gpu.state.blend_set('NONE')
+
+
+def fade_color(color, factor):
+    """Scale an RGBA color's alpha by `factor` (clamped 0..1) -- the primitive
+    behind translucent guides and fade-in overlays. Returns a new 4-tuple; a
+    3-tuple color is treated as fully opaque first."""
+    f = 0.0 if factor < 0.0 else 1.0 if factor > 1.0 else factor
+    r, g, b, a = (tuple(color) + (1.0,))[:4]
+    return (r, g, b, a * f)
+
+
+def draw_guide_line(p1, p2, color, width=1.5):
+    """A solid translucent guide segment between two screen points -- a snapped
+    axis / cut-direction hint."""
+    _draw_lines([p1, p2], color, primitive='LINE_STRIP', width=width)
+
+
+def draw_dashed_line(p1, p2, color, dash=12.0, gap=7.0, width=1.5):
+    """A dashed 2D screen segment from p1 to p2 -- the guide-line look for snap
+    axes and mirror lines. No-op for a zero-length segment."""
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    length = math.hypot(dx, dy)
+    if length < 1e-6:
+        return
+    ux, uy = dx / length, dy / length
+    segs = []
+    d = 0.0
+    while d < length:
+        a, b = d, min(length, d + dash)
+        segs.append((p1[0] + ux * a, p1[1] + uy * a, 0.0))
+        segs.append((p1[0] + ux * b, p1[1] + uy * b, 0.0))
+        d += dash + gap
+    if len(segs) < 2:
+        return
+    gpu.state.blend_set('ALPHA')
+    gpu.state.line_width_set(width)
+    shader = _get_shader()
+    batch = batch_for_shader(shader, 'LINES', {"pos": segs})
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
+    gpu.state.line_width_set(1.0)
+    gpu.state.blend_set('NONE')
+
+
+def draw_snap_ring(center, radius, color, segments=20, width=1.5):
+    """A small ring around a snapped screen point -- a softer, premium snap
+    marker. Drawn as a closed polyline circle."""
+    pts = [(center[0] + radius * math.cos(t), center[1] + radius * math.sin(t))
+           for t in [i * math.tau / segments for i in range(segments)]]
+    _draw_lines(pts + [pts[0]], color, primitive='LINE_STRIP', width=width)
+
+
+def draw_mirror_plane(quad, fill_color, line_color=None):
+    """A translucent filled quad (+ optional outline) for a mirror / cut-plane
+    hint. `quad` is 3+ screen points in order; skipped when degenerate."""
+    if len(quad) < 3:
+        return
+    draw_face_fill(quad, fill_color)
+    if line_color is not None:
+        draw_shape(list(quad), line_color, closed=True, width=1.5)
+
+
+# Default text color, HUD background, border and accent (the brand blue, matching
+# the default line_color). The accent + border lift the HUD from a bare black box
+# to a framed panel every tool shares.
 _HUD_TEXT = (0.92, 0.92, 0.92, 1.0)
-_HUD_BG = (0.0, 0.0, 0.0, 0.55)
+_HUD_BG = (0.03, 0.03, 0.05, 0.72)
+_HUD_BORDER = (1.0, 1.0, 1.0, 0.14)
+_HUD_ACCENT = (0.15, 0.8, 1.0, 1.0)
 
 
-def draw_hud(region, lines, color=_HUD_TEXT):
-    """Multi-line status text in the bottom left; with a background panel for
-    readability.
+def draw_hud(region, lines, color=_HUD_TEXT, title=None, accent=None):
+    """Multi-line status text in the bottom left, over a framed background panel
+    (fill + subtle border). When `title` is given, a header row is drawn with a
+    short accent bar and the title in `accent` (defaulting to the brand blue) --
+    a consistent, premium HUD frame every tool gets for free.
 
     `lines` items can be either a plain str or a (text, rgba) pair; a line given
     as a pair is drawn in its own color (e.g. to highlight the measurement
     line)."""
-    if not lines:
+    if not lines and not title:
         return
     font_id = 0
     size = 14
+    title_size = 13
     pad = 12        # panel padding
     line_h = 24     # line height
+    header_h = (title_size + 10) if title else 0
     margin = 16     # distance from the screen edge
+    accent = tuple(accent) if accent is not None else _HUD_ACCENT
 
     blf.size(font_id, size)
-
-    # Panel width based on the widest line.
     texts = [ln[0] if isinstance(ln, tuple) else ln for ln in lines]
-    box_w = max(blf.dimensions(font_id, t)[0] for t in texts) + pad * 2
-    box_h = line_h * len(lines) + pad * 2
+    widths = [blf.dimensions(font_id, t)[0] for t in texts]
+    if title:
+        blf.size(font_id, title_size)
+        widths.append(blf.dimensions(font_id, title)[0] + 14)  # room for the bar
+        blf.size(font_id, size)
+    box_w = (max(widths) if widths else 0) + pad * 2
+    box_h = line_h * len(lines) + pad * 2 + header_h
 
     x0, y0 = margin, margin
     _draw_rect(x0, y0, box_w, box_h, _HUD_BG)
+    draw_rect_outline(x0, y0, box_w, box_h, _HUD_BORDER)
 
-    # Draw top to bottom (lines[0] at the top).
+    ty = y0 + box_h - pad
+    if title:
+        bar_h = title_size
+        _draw_rect(x0 + pad, ty - bar_h, 3, bar_h, accent)     # left accent bar
+        blf.size(font_id, title_size)
+        blf.color(font_id, *accent)
+        blf.position(font_id, x0 + pad + 10, ty - bar_h + 1, 0)
+        blf.draw(font_id, title)
+        blf.size(font_id, size)
+        ty -= header_h
+
+    # Draw top to bottom (lines[0] just under the header).
     tx = x0 + pad
-    ty = y0 + box_h - pad - size
+    ty -= size
     for ln in lines:
         text, col = ln if isinstance(ln, tuple) else (ln, color)
         blf.color(font_id, *col)
