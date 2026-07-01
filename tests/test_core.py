@@ -32,6 +32,7 @@ decal_image = _load("decal_image")
 atlas = _load("atlas")
 transform = _load("transform")
 asset_lib = _load("asset_lib")
+command = _load("command")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -722,6 +723,104 @@ def test_scan_assets():
         names = [n for n, _p in items]
         assert names == ["a", "b"]               # sorted, stems, non-blend excluded
         assert all(os.path.isfile(p) for _n, p in items)
+
+
+# --- command: reversible-operation journal (HardFlow Mode undo) -------------
+
+class _Journal:
+    """A tiny do/undo probe: applies a token to a shared list, reverts by
+    removing it, and records how many times each hook fired."""
+
+    def __init__(self, log, token):
+        self.log = log
+        self.token = token
+        self.applies = 0
+        self.reverts = 0
+
+    def make(self):
+        def do():
+            self.applies += 1
+            self.log.append(self.token)
+
+        def undo():
+            self.reverts += 1
+            self.log.remove(self.token)
+        return command.CallbackCommand(do, undo, label="j%s" % self.token)
+
+
+def test_command_execute_undo_are_idempotent():
+    log = []
+    j = _Journal(log, 1)
+    cmd = j.make()
+    cmd.execute()
+    cmd.execute()                 # second execute is a no-op (already done)
+    assert log == [1] and j.applies == 1
+    cmd.undo()
+    cmd.undo()                    # second undo is a no-op (already reverted)
+    assert log == [] and j.reverts == 1
+
+
+def test_command_manager_do_undo_redo():
+    log = []
+    mgr = command.CommandManager()
+    mgr.do(_Journal(log, "a").make())
+    mgr.do(_Journal(log, "b").make())
+    assert log == ["a", "b"] and len(mgr) == 2 and mgr.labels() == ["ja", "jb"]
+    mgr.undo()
+    assert log == ["a"] and mgr.can_redo()
+    mgr.redo()
+    assert log == ["a", "b"] and not mgr.can_redo()
+
+
+def test_command_manager_new_do_clears_redo():
+    log = []
+    mgr = command.CommandManager()
+    mgr.do(_Journal(log, "a").make())
+    mgr.undo()
+    assert mgr.can_redo()
+    mgr.do(_Journal(log, "c").make())     # a fresh action forks history
+    assert not mgr.can_redo()
+    assert log == ["c"]
+
+
+def test_command_manager_undo_all():
+    log = []
+    mgr = command.CommandManager()
+    for t in ("a", "b", "c"):
+        mgr.do(_Journal(log, t).make())
+    mgr.undo_all()
+    assert log == [] and len(mgr) == 0 and not mgr.can_undo()
+
+
+def test_macro_command_reverses_children_in_order():
+    log = []
+    macro = command.MacroCommand(label="chain")
+    macro.add(_Journal(log, 1).make())
+    macro.add(_Journal(log, 2).make())
+    macro.add(_Journal(log, 3).make())
+    macro.execute()
+    assert log == [1, 2, 3]
+    macro.undo()
+    assert log == []              # undone 3 -> 2 -> 1, list emptied cleanly
+
+
+def test_macro_command_rolls_back_on_failing_child():
+    log = []
+    macro = command.MacroCommand(label="chain")
+    macro.add(_Journal(log, 1).make())
+    macro.add(_Journal(log, 2).make())
+
+    def boom():
+        raise RuntimeError("solver failed")
+    macro.add(command.CallbackCommand(boom, lambda: None, label="bad"))
+
+    raised = False
+    try:
+        macro.execute()
+    except RuntimeError:
+        raised = True
+    # all-or-nothing: the two applied children were rolled back, none linger
+    assert raised and log == [] and not macro.done
 
 
 def _run_all():

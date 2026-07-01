@@ -508,5 +508,37 @@ knurl) sections, the pie has no **Modify** slice, and the header menu has no
 
 ---
 
+## 20. HardFlow Mode ⭐ (new — modal-hijack + Command-Pattern prototype)
+
+Architecture: `docs/hardflow_mode_plan.md` + `docs/command_refactor.md`. The pure
+command journal (`core/command.py`) and the bpy-aware command layer
+(`operators/base.py`, incl. `MeshSnapshotCommand`) are headless-verified
+(`tests/test_core.py`, `tests/test_blender.py`); only the modal below needs a
+viewport.
+
+**HardFlow Mode Knife** (`mesh.hardflow_mode_knife`, F3 → "HardFlow Mode Knife"):
+
+Setup: a mesh in Object Mode, selected/active.
+- [ ] Moving the mouse shows a **snap marker** that recolors by target: **yellow**
+      vertex, **green** midpoint, **blue** on-edge, **white** grid.
+- [ ] **`X`** toggles the Ghost Grid snap (marker white ↔ geometry colors / free).
+- [ ] **Click** places points; the rubber-band segment follows the snapped cursor.
+- [ ] **`Backspace`** removes the last point (Command `undo()`); repeated presses
+      walk back through every placement.
+- [ ] **`Z` / `Enter` / double-click** with ≥3 points scores the drawn footprint
+      onto the active mesh; the info bar reports the knife ran.
+- [ ] **`Esc`** before committing rolls the whole session back (`undo_all()`) and
+      leaves the mesh untouched — no leftover `hf_mode_knife` snapshot in the
+      .blend's orphan mesh data.
+- [ ] After a commit, a **single `Ctrl+Z`** reverts the knife (one atomic undo
+      step — the modal never pushes its own per-step undo).
+
+**Command adoption spot-check** — when a production modal tool later adopts
+`base.MeshSnapshotCommand` (see §3 of the refactor doc), verify its **Esc-cancel**
+restores the mesh exactly and a **commit** leaves no `hf_*` snapshot mesh orphaned
+in the file (Blender ▸ Outliner ▸ Blender File ▸ Meshes).
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.

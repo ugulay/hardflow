@@ -212,6 +212,32 @@ def knife_polygon(obj, local_corners, view_dir):
     return scored
 
 
+def bisect_plane(obj, plane_co, plane_no, clear_inner=False, clear_outer=False):
+    """Slice obj's whole mesh with one infinite plane (bmesh, no bpy.ops).
+    `plane_co` / `plane_no` are object-local. clear_inner / clear_outer delete the
+    geometry on the negative / positive side (a straight guillotine slice when
+    both stay False just inserts the split loop). Returns the number of cut edges
+    created. The single-plane primitive behind a future Slice verb; the
+    footprint-limited variant is knife_polygon. Degenerate normal -> 0, no edit."""
+    from mathutils import Vector
+    no = Vector(plane_no)
+    if no.length < 1e-9:
+        return 0
+    no.normalize()
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+    res = bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-6,
+                                 plane_co=Vector(plane_co), plane_no=no,
+                                 clear_inner=clear_inner, clear_outer=clear_outer)
+    cut = sum(1 for e in res.get('geom_cut', ())
+              if isinstance(e, bmesh.types.BMEdge))
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return cut
+
+
 def estimate_thickness(obj, factor=2.0, minimum=1.0):
     """Thickness sufficient for the cutter to pierce all the way through the
     object."""
