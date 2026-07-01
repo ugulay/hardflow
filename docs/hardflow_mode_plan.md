@@ -275,6 +275,22 @@ subdivision-tuning pass** for the exact holding-loop position, so Smart Bevel
 stays `S`-gated / EXPERIMENTAL — the topology *safety* is no longer the open
 risk, the loop *placement feel* is.
 
+**Update (v1.16, Module 4) — bevel-exact placement landed.** The holding-loop
+offset is no longer segment-blind. `core/bevel.seg_factor(segments)` tightens the
+offset for a rounded (multi-segment) bevel — which already braces the edge along
+its own profile — by `2/(segments+1)` (1.0 for a chamfer, so the single-segment
+default is unchanged); `smart_bevel_edges` now passes its `segments` through, so
+the support loop is placed to preserve the *modeled* radius instead of letting
+Subdivision balloon it. The pure `subdiv_fillet_radius` / `support_offset_for_radius`
+pair (unit-tested) expose the offset↔subdivided-radius relationship so a caller
+can target a specific fillet radius. The near-degenerate cut result is also
+stabilized before re-quadding: `dissolve_boolean_ngons(clean_slivers=True)` runs a
+`_clean_boolean_slivers` pass (merge doubles → `dissolve_degenerate` on
+near-zero-area faces/edges → dissolve redundant collinear valence-2 verts via the
+pure `core/topology` predicates), removing the garbage that pinches a Subdivision
+surface. Only the *subjective placement feel* of the loop position remains a live
+tuning item; the math is now exact + tested.
+
 ---
 
 ## 7. Reference prototype (this change)
@@ -394,7 +410,7 @@ Still pending and deliberately deferred (self-contained, low-risk):
 |---|---|---|
 | Trying to wrap native modal operators | — | Ruled out; we shadow, not wrap (§1.1). |
 | CommandManager desyncs with Blender undo | Med | Journal is per-session only; one undo push at commit; never `undo_push` per sub-step (§5.2). |
-| Smart Bevel support loops land wrong post-bevel | Med (was High) | Pure math + skeleton shipped; v1.15 added non-quad-safe flanks + a `flank_can_support` skip barrier so a too-small flank is no longer collapsed. Only live loop-position tuning remains; kept experimental (§6.4). |
+| Smart Bevel support loops land wrong post-bevel | Low (was High) | Pure math + skeleton shipped; v1.15 added non-quad-safe flanks + a `flank_can_support` skip barrier; v1.16 (Module 4) made the offset **bevel-exact** (`seg_factor`, segment-aware) + added the `_clean_boolean_slivers` SubD-stabilizing pass. Only the subjective placement *feel* remains a live tuning item; kept experimental (§6.4). |
 | Feature creep bloats `draw_cut` | Med | New `hardflow_mode.py` stays lean; share via mixin/core, don't grow the monolith (§4.2). |
 | Core layer violation creeps in | Low | Table in §3; `command.py`/`bevel.py` stay bpy-free and unit-tested. |
 

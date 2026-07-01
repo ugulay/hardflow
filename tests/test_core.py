@@ -35,6 +35,10 @@ asset_lib = _load("asset_lib")
 command = _load("command")
 bevel = _load("bevel")
 preview_cache = _load("preview_cache")
+parallax = _load("parallax")
+hud = _load("hud")
+hardsurface = _load("hardsurface")
+topology = _load("topology")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1017,6 +1021,241 @@ def test_preview_gate_stateful():
     assert gate.should_update((1.6, 0.0)) is False    # small nudge from the new pos
     gate.reset()
     assert gate.should_update((1.6, 0.0)) is True     # reset -> fire again
+
+
+# --- parallax: Parallax Occlusion Mapping math (Module 1 / POM) --------------
+
+def test_parallax_luminance_rec709():
+    assert abs(parallax.luminance((1.0, 1.0, 1.0)) - 1.0) < 1e-9
+    assert parallax.luminance((0.0, 0.0, 0.0)) == 0.0
+    assert abs(parallax.luminance((1.0, 0.0, 0.0)) - 0.2126) < 1e-9
+    assert abs(parallax.luminance((0.0, 1.0, 0.0)) - 0.7152) < 1e-9
+
+
+def test_tangent_space_view_identity_and_rotated():
+    # identity basis -> the view passes through unchanged
+    v = parallax.tangent_space_view((1.0, 2.0, 3.0),
+                                    (1.0, 0.0, 0.0), (0.0, 1.0, 0.0),
+                                    (0.0, 0.0, 1.0))
+    assert v == (1.0, 2.0, 3.0)
+    # a swapped basis re-labels the axes: T=+Y, B=+Z, N=+X
+    v = parallax.tangent_space_view((5.0, 7.0, 9.0),
+                                    (0.0, 1.0, 0.0), (0.0, 0.0, 1.0),
+                                    (1.0, 0.0, 0.0))
+    assert v == (7.0, 9.0, 5.0)
+
+
+def test_dynamic_layer_count_scales_with_grazing():
+    # head-on (view along the normal) -> cheapest (min layers)
+    assert parallax.dynamic_layer_count((0.0, 0.0, 1.0), 8, 32) == 8
+    # fully grazing (no normal component) -> most layers
+    assert parallax.dynamic_layer_count((1.0, 0.0, 0.0), 8, 32) == 32
+    # a mid angle lands between, and never escapes the clamp
+    n = parallax.dynamic_layer_count((0.6, 0.0, 0.8), 8, 32)
+    assert 8 <= n <= 32
+
+
+def test_parallax_flat_field_no_shift():
+    # a flat height field (depth 0 everywhere) must not move the UV at all
+    uv = parallax.parallax_occlusion_uv(lambda _uv: 0.0, (0.5, 0.5),
+                                        (0.6, 0.0, 0.8), 0.1, 8)
+    assert abs(uv[0] - 0.5) < 1e-9 and abs(uv[1] - 0.5) < 1e-9
+
+
+def test_parallax_constant_depth_closed_form():
+    # For a constant-depth field d, full POM must resolve to the exact closed
+    # form uv0 - d * P, where P = scale * normalized(view).xy (offset limiting).
+    view = (0.6, 0.0, 0.8)          # already unit length (0.36 + 0.64 = 1)
+    scale, d0 = 0.1, 0.5
+    px = scale * 0.6                # P.x ; P.y = 0
+    uv = parallax.parallax_occlusion_uv(lambda _uv: d0, (0.5, 0.5),
+                                        view, scale, 8)
+    assert abs(uv[0] - (0.5 - d0 * px)) < 1e-6
+    assert abs(uv[1] - 0.5) < 1e-6
+
+
+def test_parallax_ramp_crosses_between_layers():
+    # A depth field that ramps with u should intersect the ray somewhere strictly
+    # inside the swept span, i.e. the corrected u moves opposite the view.x.
+    view = (0.8, 0.0, 0.6)
+    scale = 0.2
+
+    def ramp(uv):
+        # deeper toward -u, so the ray (marching toward -u) finds a crossing
+        return min(1.0, max(0.0, 0.5 + (0.5 - uv[0])))
+
+    uv = parallax.parallax_occlusion_uv(ramp, (0.5, 0.5), view, scale, 16)
+    # view.x > 0 -> UV shifts to smaller u; and it stays within the max sweep P.x
+    assert uv[0] < 0.5
+    assert uv[0] >= 0.5 - scale * 0.8 - 1e-6
+
+
+def test_parallax_delta_uv_offset_limited():
+    # deltaUV = scale * unit(view).xy / n ; head-on view -> no lateral step
+    dux, duy = parallax.parallax_delta_uv((0.0, 0.0, 1.0), 0.1, 8)
+    assert abs(dux) < 1e-9 and abs(duy) < 1e-9
+    dux, duy = parallax.parallax_delta_uv((0.6, 0.0, 0.8), 0.1, 8)
+    assert abs(dux - (0.1 * 0.6 / 8)) < 1e-9 and abs(duy) < 1e-9
+
+
+# --- hud: shortcut bar + alignment guide math (Module 2 / viewport polish) ---
+
+def test_shortcut_bar_layout_centered():
+    lay = hud.shortcut_bar_layout([100.0, 100.0], 1000.0, gap=10.0)
+    # two 100px chips + one 10px gap = 210 total, centered in 1000 -> x0 = 395
+    assert abs(lay['bar'][2] - 210.0) < 1e-9
+    assert abs(lay['chips'][0][0] - 395.0) < 1e-9
+    assert abs(lay['chips'][1][0] - (395.0 + 110.0)) < 1e-9
+
+
+def test_shortcut_bar_layout_left_anchors_when_too_wide():
+    # a row wider than the viewport minus margins falls back to margin-anchored
+    lay = hud.shortcut_bar_layout([600.0, 600.0], 400.0, margin=24.0, gap=8.0)
+    assert lay['chips'][0][0] == 24.0
+
+
+def test_shortcut_bar_layout_empty():
+    lay = hud.shortcut_bar_layout([], 800.0)
+    assert lay['chips'] == [] and lay['bar'][2] == 0.0
+    # non-positive widths are dropped
+    lay = hud.shortcut_bar_layout([0.0, -5.0], 800.0)
+    assert lay['chips'] == []
+
+
+def test_axis_alignment_vertical_horizontal_none():
+    assert hud.axis_alignment((100, 10), (103, 400), tol=6.0) == 'V'
+    assert hud.axis_alignment((10, 200), (500, 203), tol=6.0) == 'H'
+    assert hud.axis_alignment((10, 10), (500, 400), tol=6.0) is None
+    # both within tol -> vertical wins (coincident point)
+    assert hud.axis_alignment((100, 100), (102, 102), tol=6.0) == 'V'
+
+
+def test_alignment_guides_span_and_dedupe():
+    region = (1920, 1080)
+    # two anchors on the exact same vertical line; one off on its own
+    anchors = [(300, 500), (300, 900), (800, 200)]
+    # cursor shares X with the first two anchors (300) and Y with none
+    guides = hud.alignment_guides(anchors, (301, 600), region, tol=6.0)
+    # the two anchors at x=300 collapse to a single guide
+    assert len(guides) == 1
+    (p1, p2) = guides[0]
+    assert p1 == (300, 0.0) and p2 == (300, 1080)
+
+
+def test_alignment_guides_horizontal():
+    region = (1000, 800)
+    guides = hud.alignment_guides([(400, 250)], (900, 252), region, tol=6.0)
+    assert guides == [((0.0, 250), (1000, 250))]
+
+
+def test_alignment_guides_none():
+    assert hud.alignment_guides([(10, 10)], (500, 500), (800, 600)) == []
+
+
+# --- hardsurface: Smart Sharpen decision math (Module 3 / HardOps parity) -----
+
+def test_dihedral_angle_flat_right_and_reversed():
+    assert abs(hardsurface.dihedral_angle((0, 0, 1), (0, 0, 1))) < 1e-9   # flat
+    assert abs(hardsurface.dihedral_angle((1, 0, 0), (0, 1, 0))
+               - math.pi / 2) < 1e-9                                      # 90
+    assert abs(hardsurface.dihedral_angle((1, 0, 0), (-1, 0, 0))
+               - math.pi) < 1e-9                                          # fold
+    # non-unit inputs are normalized first
+    assert abs(hardsurface.dihedral_angle((0, 0, 5), (0, 0, 2))) < 1e-9
+    # degenerate normal -> treated as flat
+    assert hardsurface.dihedral_angle((0, 0, 0), (0, 0, 1)) == 0.0
+
+
+def test_should_sharpen_threshold():
+    t = math.radians(30)
+    assert hardsurface.should_sharpen(math.radians(45), t) is True
+    assert hardsurface.should_sharpen(math.radians(30), t) is True   # inclusive
+    assert hardsurface.should_sharpen(math.radians(10), t) is False
+
+
+def test_sharp_edges_filters_by_angle():
+    t = math.radians(30)
+    items = [
+        ("flat", (0, 0, 1), (0, 0, 1)),          # 0 deg -> soft
+        ("corner", (1, 0, 0), (0, 1, 0)),        # 90 deg -> hard
+        ("slight", (0, 0, 1), (0.1, 0.0, 1.0)),  # ~5.7 deg -> soft
+    ]
+    assert hardsurface.sharp_edges(items, t) == ["corner"]
+
+
+def test_adaptive_bevel_width():
+    assert abs(hardsurface.adaptive_bevel_width((2.0, 2.0, 2.0)) - 0.02) < 1e-9
+    # keyed to the SMALLEST side
+    assert abs(hardsurface.adaptive_bevel_width((10.0, 10.0, 0.5)) - 0.005) < 1e-9
+    # degenerate -> the floor
+    assert hardsurface.adaptive_bevel_width((0.0, 0.0, 0.0)) == 1e-4
+
+
+# --- topology: near-zero-area / redundant-vert predicates (Module 4) ---------
+
+def test_triangle_area():
+    assert abs(topology.triangle_area((0, 0, 0), (1, 0, 0), (0, 1, 0))
+               - 0.5) < 1e-9
+    # collinear triangle -> zero area
+    assert topology.triangle_area((0, 0, 0), (1, 0, 0), (2, 0, 0)) == 0.0
+
+
+def test_polygon_area_unit_square_translation_invariant():
+    sq = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    assert abs(topology.polygon_area(sq) - 1.0) < 1e-9
+    # translating the whole polygon must not change its area (Newell property)
+    far = [(x + 10, y + 5, z + 3) for (x, y, z) in sq]
+    assert abs(topology.polygon_area(far) - 1.0) < 1e-9
+    # a tilted planar square still measures 1.0
+    tilt = [(0, 0, 0), (1, 0, 0), (1, 1, 1), (0, 1, 1)]
+    assert abs(topology.polygon_area(tilt) - 2 ** 0.5) < 1e-9
+    assert topology.polygon_area([(0, 0, 0), (1, 0, 0)]) == 0.0   # <3 pts
+
+
+def test_is_sliver():
+    good = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    assert topology.is_sliver(good) is False
+    # a near-zero-area needle triangle is a sliver
+    needle = [(0, 0, 0), (1, 0, 0), (0.5, 1e-9, 0)]
+    assert topology.is_sliver(needle) is True
+    assert topology.is_sliver([(0, 0, 0), (1, 0, 0)]) is True     # degenerate
+
+
+def test_collinear_and_redundant_vertex():
+    assert topology.collinear((0, 0, 0), (1, 0, 0), (2, 0, 0)) is True
+    assert topology.collinear((0, 0, 0), (1, 1, 0), (2, 0, 0)) is False
+    # redundant_vertex: a mid-edge vert on a straight run is removable
+    assert topology.redundant_vertex((0, 0, 0), (1, 0, 0), (2, 0, 0)) is True
+    assert topology.redundant_vertex((0, 0, 0), (1, 0.5, 0), (2, 0, 0)) is False
+
+
+# --- bevel: bevel-exact (segment-aware) support-loop placement (Module 4) -----
+
+def test_seg_factor_monotonic():
+    assert bevel.seg_factor(1) == 1.0            # chamfer: unchanged
+    assert bevel.seg_factor(3) == 0.5
+    assert bevel.seg_factor(0) == 1.0            # clamped to >=1
+    assert bevel.seg_factor(2) < bevel.seg_factor(1)   # rounder -> tighter
+
+
+def test_subdiv_fillet_radius_roundtrip():
+    for segments in (1, 2, 4):
+        off = 0.08
+        r = bevel.subdiv_fillet_radius(off, segments)
+        assert abs(bevel.support_offset_for_radius(r, segments) - off) < 1e-9
+    assert bevel.subdiv_fillet_radius(0.0) == 0.0
+    assert bevel.support_offset_for_radius(-1.0) == 0.0
+
+
+def test_support_loop_positions_segment_aware():
+    # segments=1 keeps the classic placement (backward compatible)
+    assert bevel.support_loop_positions(0.1, tightness=0.5) == [0.0325]
+    # a 3-segment (rounded) bevel tightens by seg_factor(3)=0.5
+    assert bevel.support_loop_positions(0.1, tightness=0.5, segments=3) \
+        == [0.01625]
+    # fractions form respects segments too (offset 0.01625 over a 0.5 flank)
+    fr = bevel.support_loop_fractions(0.1, 0.5, tightness=0.5, segments=3)
+    assert fr == [0.0325]
 
 
 def _run_all():

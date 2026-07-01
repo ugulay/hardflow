@@ -809,6 +809,12 @@ class HARDFLOW_OT_draw(Operator):
             hud.draw_grid(self._grid_screen_verts(context),
                           tuple(prefs.grid_color))
 
+        # Dynamic alignment guides: light up a full-span dashed line whenever the
+        # live cursor is square (same screen X or Y) with a placed point -- the
+        # BoxCutter-style hint that the next corner lines up with an earlier one.
+        if self.points and self.cursor is not None:
+            hud.draw_alignment_guides(region, self.points, self.cursor)
+
         pts = self._shape_screen_points(context)
         closed = self.shape != 'POLY' or len(self.points) >= 2
         width = prefs.line_width * context.preferences.system.ui_scale
@@ -834,17 +840,13 @@ class HARDFLOW_OT_draw(Operator):
             f"    Geo {'ON' if self.geo else 'OFF'}"
             f"    ND {'ON' if self.nd else 'OFF'}"
         )
-        # Hints split into short lines -> roomier than one long line.
+        # The common toggles/cycles now live in the bottom shortcut bar; the HUD
+        # keeps the status plus one compact line for the less-frequent keys.
         lines = [
             status,
-            ("Q/W/E/R/T/Y/U shape    [ ] sides/arc    Tab mode    "
-             "type = exact size    < > plane    Shift+< > rotate grid    Z close",
-             dim),
-            ("-/= inset    ,/. rotate    A array    D axis    M mirror    "
-             "B bevel    O orient    G stamp    J live-bool", dim),
-            ("Ctrl+Wheel grid    PgUp/Dn depth    H grid origin    X grid    "
-             "V vertex    N non-destructive    S save settings    Enter apply    "
-             "Esc cancel", dim),
+            ("Q/W/E/R/T/Y/U shape    type = exact size    < > plane    "
+             "Shift+< > rotate    Ctrl+Wheel grid    PgUp/Dn depth    "
+             "H origin    G stamp    S save", dim),
         ]
         # Surface the in-draw operation state only when something is active.
         bits = []
@@ -880,7 +882,23 @@ class HARDFLOW_OT_draw(Operator):
         measure = self._measure(context)
         if measure:
             lines.insert(0, (measure, accent))  # measurement line accented, on top
-        hud.draw_hud(region, lines)
+        hud.draw_hud(region, lines, title="Draw Cut", accent=accent)
+
+        # Premium shortcut bar along the bottom: the pressable toggles/cycles with
+        # their live engaged state (accent key box = ON / current mode).
+        hud.draw_shortcut_bar(region, [
+            ("Tab", self.mode.title()),
+            ("[ ]", "Sides/Arc"),
+            ("B", "Bevel", self.bevel_cut),
+            ("C", "Cutter Bvl", self.cutter_bevel),
+            ("J", "Live Bool", self.live_bool),
+            ("O", "Project", self.orientation == 'PROJECT'),
+            ("M", "Mirror", bool(self.mirror_axis)),
+            ("V", "Vertex", self.geo),
+            ("N", "Non-Destr", self.nd),
+            ("Enter", "Apply"),
+            ("Esc", "Cancel"),
+        ])
 
     def _measure(self, context):
         """Return the world-scale size of the shape being drawn, in meters."""

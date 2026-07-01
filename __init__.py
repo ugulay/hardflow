@@ -33,6 +33,7 @@ _classes = (
     hardops.HARDFLOW_OT_display_toggle,
     hardops.HARDFLOW_OT_random_color,
     hardops.HARDFLOW_OT_copy_material,
+    hardops.HARDFLOW_OT_smart_sharpen,
     hardops.HARDFLOW_OT_recalc_normals,
     cutters.HARDFLOW_OT_apply_cutters,
     cutters.HARDFLOW_OT_select_cutter,

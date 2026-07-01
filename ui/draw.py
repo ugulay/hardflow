@@ -5,6 +5,8 @@ import gpu
 import blf
 from gpu_extras.batch import batch_for_shader
 
+from ..core import hud as _layout   # pure shortcut-bar + alignment-guide math
+
 # Created lazily on first draw. gpu.shader.from_builtin() raises a SystemError
 # in --background mode (no GPU), and doing it at import time would break headless
 # import of the whole add-on (e.g. tests/test_blender.py). Drawing only happens
@@ -296,3 +298,87 @@ def draw_hud(region, lines, color=_HUD_TEXT, title=None, accent=None):
         blf.position(font_id, tx, ty, 0)
         blf.draw(font_id, text)
         ty -= line_h
+
+
+# --- Module 2: dynamic alignment guides + premium shortcut bar ---------------
+
+# Chip palette for the shortcut bar. A resting chip is a dark translucent pill; an
+# active one (the current mode / an engaged toggle) gets the brand-blue key box so
+# the pressed state reads at a glance.
+_BAR_BG = (0.02, 0.02, 0.04, 0.60)
+_CHIP_BG = (0.10, 0.11, 0.14, 0.82)
+_KEY_RESTING = (0.20, 0.21, 0.26, 0.92)
+_KEY_ACTIVE = _HUD_ACCENT
+_KEY_GLYPH_ACTIVE = (0.02, 0.03, 0.05, 1.0)
+
+
+def draw_alignment_guides(region, anchors, cursor, color=None, tol=6.0):
+    """Dashed, full-span guide lines wherever `cursor` lines up (on screen X or Y,
+    within `tol` px) with one of the `anchors` -- the BoxCutter-style dynamic
+    alignment hint that shows a drawn point is square with an earlier one. The
+    which-lines-up decision is core.hud.alignment_guides (pure + unit-tested); this
+    only strokes the segments. No-op when there is nothing to align to."""
+    if not anchors or cursor is None:
+        return
+    col = color if color is not None else fade_color(_HUD_ACCENT, 0.55)
+    size = (region.width, region.height)
+    for p1, p2 in _layout.alignment_guides(anchors, cursor, size, tol):
+        draw_dashed_line(p1, p2, col, dash=10.0, gap=8.0, width=1.2)
+
+
+def draw_shortcut_bar(region, items):
+    """A premium, translucent shortcut bar centered along the bottom of the
+    viewport: each item renders as a pressable-looking chip ``[KEY] Label``.
+
+    `items` is a list of ``(key, label)`` or ``(key, label, active)``; an active
+    chip gets the accent key box (the current cut mode, an engaged toggle) so the
+    live state is legible without reading the HUD. Text is measured here; the row
+    packing is core.hud.shortcut_bar_layout (pure + unit-tested). No-op for an
+    empty list."""
+    if not items:
+        return
+    font_id = 0
+    key_size = label_size = 12
+    pad = 9.0          # inner chip padding (left of key box / right of label)
+    key_gap = 6.0      # gap between the key box and its label
+    kb_pad = 10.0      # key-box horizontal padding around the glyph
+
+    norm, widths = [], []
+    for it in items:
+        key, label = it[0], it[1]
+        active = it[2] if len(it) > 2 else False
+        blf.size(font_id, key_size)
+        kw = blf.dimensions(font_id, key)[0]
+        blf.size(font_id, label_size)
+        lw = blf.dimensions(font_id, label)[0]
+        keybox_w = kw + kb_pad
+        chip_w = pad + keybox_w + key_gap + lw + pad
+        norm.append((key, label, active, keybox_w, kw, lw))
+        widths.append(chip_w)
+
+    layout = _layout.shortcut_bar_layout(widths, region.width)
+    bx, by, bw, bh = layout['bar']
+    if not layout['chips']:
+        return
+    _draw_rect(bx - 9, by - 5, bw + 18, bh + 10, _BAR_BG)   # bar backdrop
+
+    for (cx, cw), (key, label, active, keybox_w, kw, lw) in zip(
+            layout['chips'], norm):
+        _draw_rect(cx, by, cw, bh, _CHIP_BG)
+        # key box
+        kbx, kby = cx + pad, by + 4
+        kbh = bh - 8
+        _draw_rect(kbx, kby, keybox_w, kbh, _KEY_ACTIVE if active else _KEY_RESTING)
+        draw_rect_outline(kbx, kby, keybox_w, kbh, _HUD_BORDER)
+        # key glyph -- dark on the accent when active, else light
+        blf.size(font_id, key_size)
+        blf.color(font_id, *(_KEY_GLYPH_ACTIVE if active else _HUD_TEXT))
+        blf.position(font_id, kbx + (keybox_w - kw) / 2.0,
+                     by + (bh - key_size) / 2.0 + 1, 0)
+        blf.draw(font_id, key)
+        # label
+        blf.size(font_id, label_size)
+        blf.color(font_id, *_HUD_TEXT)
+        blf.position(font_id, kbx + keybox_w + key_gap,
+                     by + (bh - label_size) / 2.0 + 1, 0)
+        blf.draw(font_id, label)

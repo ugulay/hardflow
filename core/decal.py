@@ -117,7 +117,37 @@ def add_shrinkwrap(decal, target, offset=None):
     return mod
 
 
+def add_normal_transfer(decal, target):
+    """Transfer `target`'s smooth surface normals onto the (shrinkwrapped) decal
+    with a Data Transfer modifier, so the decal shades as part of the curved
+    surface instead of catching its own flat-sticker lighting -- the smart
+    normal-transfer that makes a decal read as if it were painted onto the mesh.
+
+    Placed AFTER the shrinkwrap in the stack (position conforms first, then the
+    normals are borrowed from the conformed result). Custom split normals must be
+    enabled to show the transfer; Blender < 4.1 gated that behind `use_auto_smooth`
+    while 4.1+ dropped the flag (custom normals are always live), so it is only set
+    when the attribute still exists. The whole build is wrapped: an API mismatch
+    logs and returns None instead of leaving the decal half-configured.
+
+    Returns the modifier, or None when the transfer could not be created."""
+    try:
+        me = decal.data
+        if hasattr(me, "use_auto_smooth"):
+            me.use_auto_smooth = True
+        mod = decal.modifiers.new("HF_NormalTransfer", 'DATA_TRANSFER')
+        mod.object = target
+        mod.use_loop_data = True
+        mod.data_types_loops = {'CUSTOM_NORMAL'}
+        mod.loop_mapping = 'POLYINTERP_NEAREST'
+        return mod
+    except (RuntimeError, AttributeError, TypeError) as ex:
+        print("[Hardflow] normal transfer skipped: %s" % ex)
+        return None
+
+
 DECAL_NODE_GROUP = "HF_DecalShader"
+PARALLAX_GROUP_PREFIX = "HF_Parallax_"
 
 # Per-type tuning of the shared node group's inputs. v0.9's image library will
 # plug textures into the same group sockets; here we just set flat defaults.
@@ -271,12 +301,198 @@ def decal_material(decal_type):
     return mat
 
 
-def image_decal_material(image):
+def _parallax_uv_group(image, num_layers):
+    """Get/create a per-image Parallax Occlusion Mapping node group that shifts a
+    UV along the tangent-space view ray so `image`'s luminance reads as real
+    depth: recessed panel lines slide behind their lip at grazing angles instead
+    of staying a flat sticker (the Decal-Machine-class effect). Cached per
+    (image, layer count).
+
+    Inputs:  UV (Vector), View (Vector, tangent-space, toward the camera),
+             Depth (Float, recess depth in UV units).
+    Output:  UV (Vector), parallax-corrected.
+
+    The graph UNROLLS the steep ray-march of core/parallax.py -- the only shape a
+    shader graph allows, since it has neither loops nor branches. For each layer k
+    it samples `image` at ``uv0 - k*deltaUV`` (offset-limiting step
+    ``deltaUV = Depth * view.xy / N``), takes ``1 - luminance`` as the surface
+    depth, and tests whether the ray's running depth ``k/N`` has reached it. A
+    first-hit mask -- ``hit_k AND no-earlier-hit``, the "no-earlier-hit" tracked
+    with a running MAXIMUM accumulator -- selects exactly the first crossing layer
+    with pure Math nodes, and its offset is summed into ``selectedOffset``. The
+    result is ``finalUV = UV - selectedOffset``, so a flat field (no crossing)
+    passes the UV straight through unchanged. More layers = smoother at grazing
+    angles at the cost of more nodes; the count is clamped to [2, 24]."""
+    n = max(2, min(24, int(num_layers)))
+    name = "%s%s_%d" % (PARALLAX_GROUP_PREFIX, image.name, n)
+    ng = bpy.data.node_groups.get(name)
+    if ng is not None:
+        return ng
+
+    ng = bpy.data.node_groups.new(name, 'ShaderNodeTree')
+    iface = ng.interface
+    iface.new_socket(name="UV", in_out='INPUT', socket_type='NodeSocketVector')
+    iface.new_socket(name="View", in_out='INPUT', socket_type='NodeSocketVector')
+    depth_in = iface.new_socket(name="Depth", in_out='INPUT',
+                                socket_type='NodeSocketFloat')
+    depth_in.default_value = 0.05
+    iface.new_socket(name="UV", in_out='OUTPUT', socket_type='NodeSocketVector')
+
+    nodes, links = ng.nodes, ng.links
+    g_in = nodes.new('NodeGroupInput')
+    g_in.location = (-1500, 0)
+    g_out = nodes.new('NodeGroupOutput')
+    g_out.location = (1000, 0)
+
+    def vmath(op, x, y):
+        nd = nodes.new('ShaderNodeVectorMath')
+        nd.operation = op
+        nd.location = (x, y)
+        return nd
+
+    def fmath(op, x, y):
+        nd = nodes.new('ShaderNodeMath')
+        nd.operation = op
+        nd.location = (x, y)
+        return nd
+
+    # deltaUV = view.xy * Depth / N  (offset limiting -- no 1/view.z divide, so
+    # the step stays bounded by Depth instead of exploding at grazing angles).
+    sep = nodes.new('ShaderNodeSeparateXYZ')
+    sep.location = (-1300, 260)
+    links.new(g_in.outputs["View"], sep.inputs[0])
+    comb = nodes.new('ShaderNodeCombineXYZ')       # (view.x, view.y, 0)
+    comb.location = (-1120, 260)
+    links.new(sep.outputs["X"], comb.inputs["X"])
+    links.new(sep.outputs["Y"], comb.inputs["Y"])
+    p_scaled = vmath('SCALE', -940, 260)           # P = view.xy * Depth
+    links.new(comb.outputs[0], p_scaled.inputs[0])
+    links.new(g_in.outputs["Depth"], p_scaled.inputs["Scale"])
+    delta = vmath('SCALE', -760, 260)              # deltaUV = P / N
+    links.new(p_scaled.outputs[0], delta.inputs[0])
+    delta.inputs["Scale"].default_value = 1.0 / n
+
+    accum_offset = None      # running selected-offset vector socket
+    running_hit = None       # running Math socket: 1 once any layer has hit
+    y = 200
+    for k in range(n + 1):
+        y -= 240
+        off_k = vmath('SCALE', -600, y)            # offset_k = deltaUV * k
+        links.new(delta.outputs[0], off_k.inputs[0])
+        off_k.inputs["Scale"].default_value = float(k)
+        uv_k = vmath('SUBTRACT', -440, y)          # uv_k = UV - offset_k
+        links.new(g_in.outputs["UV"], uv_k.inputs[0])
+        links.new(off_k.outputs[0], uv_k.inputs[1])
+        tex = nodes.new('ShaderNodeTexImage')      # sample the height/color map
+        tex.image = image
+        tex.location = (-280, y)
+        links.new(uv_k.outputs[0], tex.inputs["Vector"])
+        bw = nodes.new('ShaderNodeRGBToBW')        # luminance
+        bw.location = (-100, y)
+        links.new(tex.outputs["Color"], bw.inputs["Color"])
+        depth_k = fmath('SUBTRACT', 60, y)         # depth = 1 - luminance
+        depth_k.inputs[0].default_value = 1.0
+        links.new(bw.outputs[0], depth_k.inputs[1])
+        hit_k = fmath('GREATER_THAN', 220, y)      # ray depth k/N past surface?
+        hit_k.inputs[0].default_value = float(k) / n
+        links.new(depth_k.outputs[0], hit_k.inputs[1])
+        if running_hit is None:                    # k == 0: first layer
+            first_hit = hit_k.outputs[0]
+            running_hit = hit_k.outputs[0]
+        else:
+            inv = fmath('SUBTRACT', 380, y)        # 1 - running_hit
+            inv.inputs[0].default_value = 1.0
+            links.new(running_hit, inv.inputs[1])
+            fh = fmath('MULTIPLY', 520, y)         # firstHit = hit * (1-earlier)
+            links.new(hit_k.outputs[0], fh.inputs[0])
+            links.new(inv.outputs[0], fh.inputs[1])
+            first_hit = fh.outputs[0]
+            rh = fmath('MAXIMUM', 520, y - 110)    # running_hit = max(run, hit)
+            links.new(running_hit, rh.inputs[0])
+            links.new(hit_k.outputs[0], rh.inputs[1])
+            running_hit = rh.outputs[0]
+        term = vmath('SCALE', 680, y)              # selected offset contribution
+        links.new(off_k.outputs[0], term.inputs[0])
+        links.new(first_hit, term.inputs["Scale"])
+        if accum_offset is None:
+            accum_offset = term.outputs[0]
+        else:
+            add = vmath('ADD', 820, y)
+            links.new(accum_offset, add.inputs[0])
+            links.new(term.outputs[0], add.inputs[1])
+            accum_offset = add.outputs[0]
+
+    final_uv = vmath('SUBTRACT', 850, 40)          # finalUV = UV - selectedOffset
+    links.new(g_in.outputs["UV"], final_uv.inputs[0])
+    if accum_offset is not None:
+        links.new(accum_offset, final_uv.inputs[1])
+    links.new(final_uv.outputs[0], g_out.inputs["UV"])
+    return ng
+
+
+def _wire_parallax(tree, image, num_layers, depth):
+    """Feed a tangent-space Camera Vector + a UV source into the per-image
+    parallax group and return its corrected-UV output socket (to drive the decal's
+    texture nodes). The 'camera vector' is Geometry.Incoming (surface -> camera),
+    resolved onto the surface basis (Tangent, Normal x Tangent, Normal) so the
+    group's ray-march runs in UV space. Raises on any API mismatch so the caller
+    can fall back to plain UVs -- POM is a bonus, never a hard dependency."""
+    nodes, links = tree.nodes, tree.links
+    uv = nodes.new('ShaderNodeUVMap')
+    uv.location = (-1000, 300)
+    geo = nodes.new('ShaderNodeNewGeometry')
+    geo.location = (-1000, 40)
+    tang = nodes.new('ShaderNodeTangent')
+    tang.location = (-1000, -220)
+    tang.direction_type = 'UV_MAP'
+    try:
+        tang.uv_map = "UVMap"
+    except (TypeError, AttributeError):
+        pass
+    bit = nodes.new('ShaderNodeVectorMath')        # bitangent = Normal x Tangent
+    bit.operation = 'CROSS_PRODUCT'
+    bit.location = (-780, -120)
+    links.new(geo.outputs["Normal"], bit.inputs[0])
+    links.new(tang.outputs["Tangent"], bit.inputs[1])
+
+    def dot(a_sock, b_sock, yy):
+        d = nodes.new('ShaderNodeVectorMath')
+        d.operation = 'DOT_PRODUCT'
+        d.location = (-560, yy)
+        links.new(a_sock, d.inputs[0])
+        links.new(b_sock, d.inputs[1])
+        return d.outputs["Value"]
+
+    inc = geo.outputs["Incoming"]
+    view = nodes.new('ShaderNodeCombineXYZ')       # view_ts = (I.T, I.B, I.N)
+    view.location = (-380, 0)
+    links.new(dot(inc, tang.outputs["Tangent"], 140), view.inputs["X"])
+    links.new(dot(inc, bit.outputs[0], 0), view.inputs["Y"])
+    links.new(dot(inc, geo.outputs["Normal"], -140), view.inputs["Z"])
+
+    grp = nodes.new('ShaderNodeGroup')
+    grp.location = (-200, 300)
+    grp.node_tree = _parallax_uv_group(image, num_layers)
+    links.new(uv.outputs["UV"], grp.inputs["UV"])
+    links.new(view.outputs[0], grp.inputs["View"])
+    grp.inputs["Depth"].default_value = float(depth)
+    return grp.outputs["UV"]
+
+
+def image_decal_material(image, parallax=False, parallax_layers=8,
+                         parallax_depth=0.05):
     """Get/create a material that drives the shared HF_DecalShader group from an
     image: the image's Color feeds Base Color and its Alpha feeds Alpha, so a PNG
     cut-out (logo, warning mark) reads as a transparent decal on the surface. One
-    material is cached per image data-block."""
-    name = "HF_Decal_Img_%s" % image.name
+    material is cached per (image, parallax settings).
+
+    When `parallax` is set, a Parallax Occlusion Mapping graph (_wire_parallax +
+    _parallax_uv_group) recomputes the sampling UV per fragment from the height
+    map's luminance and the camera vector, so the decal gains true view-dependent
+    depth. The POM build is wrapped so any node-API mismatch degrades gracefully
+    to the flat (UV-unshifted) decal rather than leaving a broken material."""
+    suffix = ("_POM%d" % int(parallax_layers)) if parallax else ""
+    name = "HF_Decal_Img_%s%s" % (image.name, suffix)
     mat = bpy.data.materials.get(name)
     if mat is not None:
         return mat
@@ -285,6 +501,12 @@ def image_decal_material(image):
     tex = tree.nodes.new('ShaderNodeTexImage')
     tex.image = image
     tex.location = (-320, 0)
+    if parallax:
+        try:
+            uv_out = _wire_parallax(tree, image, parallax_layers, parallax_depth)
+            tree.links.new(uv_out, tex.inputs["Vector"])
+        except Exception as ex:  # noqa: BLE001 -- never break a decal over POM
+            print("[Hardflow] parallax wiring skipped (%s); flat decal" % ex)
     tree.links.new(tex.outputs["Color"], group.inputs["Base Color"])
     tree.links.new(tex.outputs["Alpha"], group.inputs["Alpha"])
     return mat
@@ -363,16 +585,22 @@ def discard_bake_image(material, image, remove_node=True, remove_image=True):
 
 
 def _assemble_decal(context, target, mesh, location, normal, tangent,
-                    material, offset, tag):
+                    material, offset, tag, normal_transfer=False):
     """Shared decal assembly: orient the quad to the surface, link it into the
     decal collection, give it the material, stick it down with a shrinkwrap, and
-    parent it to the target so it follows the object. Returns the new object."""
+    parent it to the target so it follows the object. Returns the new object.
+
+    When `normal_transfer` is set, a Data Transfer modifier is stacked after the
+    shrinkwrap so the decal borrows the target's surface normals (see
+    add_normal_transfer) -- it then shades as part of the curved surface."""
     decal = bpy.data.objects.new("Hardflow_Decal", mesh)
     decal.matrix_world = decal_matrix(location, normal, tangent)
 
     decal_collection(context).objects.link(decal)
     decal.data.materials.append(material)
     add_shrinkwrap(decal, target, offset=offset)
+    if normal_transfer:
+        add_normal_transfer(decal, target)
 
     # follow the target when it moves, keeping the placed world pose
     decal.parent = target
@@ -386,28 +614,40 @@ def _assemble_decal(context, target, mesh, location, normal, tangent,
 
 def make_decal(context, target, location, normal, tangent,
                width=0.2, height=0.2, decal_type='INFO', offset=None,
-               segments=12):
+               segments=12, normal_transfer=False):
     """Create a type-template decal (Info/Panel/Subset) on the target surface and
     return it. The caller supplies the surface hit (location, normal) and a
     tangent (roll direction). `segments` sets the decal grid resolution so it
-    conforms to curved / multi-face surfaces (see build_decal_mesh)."""
+    conforms to curved / multi-face surfaces (see build_decal_mesh);
+    `normal_transfer` borrows the target's normals so it shades into the surface."""
     mesh = build_decal_mesh(width, height, segments=segments)
     return _assemble_decal(context, target, mesh, location, normal, tangent,
-                           decal_material(decal_type), offset, decal_type)
+                           decal_material(decal_type), offset, decal_type,
+                           normal_transfer=normal_transfer)
 
 
 def make_image_decal(context, target, location, normal, tangent, image,
                      width=0.2, height=0.2, offset=None,
-                     uv_rect=(0.0, 0.0, 1.0, 1.0), segments=12):
+                     uv_rect=(0.0, 0.0, 1.0, 1.0), segments=12,
+                     parallax=False, parallax_layers=8, parallax_depth=0.05,
+                     normal_transfer=False):
     """Create an image-driven decal (v0.9 library / 'decal from image') on the
     target surface and return it. The grid carries the image's color+alpha via
     image_decal_material; the caller usually sizes width/height to the image's
     aspect (see core/decal_image.aspect_size). uv_rect selects a sub-region of
     the image -- pass a trim-sheet cell (core/atlas.cell_rect) for a trim decal.
-    `segments` sets the grid resolution so the decal conforms to curved surfaces."""
+    `segments` sets the grid resolution so the decal conforms to curved surfaces.
+
+    `parallax` builds a Parallax Occlusion Mapping material so the image's
+    luminance reads as real, view-dependent depth (parallax_layers/parallax_depth
+    tune it); `normal_transfer` borrows the target's surface normals."""
     mesh = build_decal_mesh(width, height, uv_rect=uv_rect, segments=segments)
+    material = image_decal_material(image, parallax=parallax,
+                                    parallax_layers=parallax_layers,
+                                    parallax_depth=parallax_depth)
     decal = _assemble_decal(context, target, mesh, location, normal, tangent,
-                            image_decal_material(image), offset, 'IMAGE')
+                            material, offset, 'IMAGE',
+                            normal_transfer=normal_transfer)
     decal["hf_decal_image"] = image.name
     return decal
 

@@ -192,6 +192,35 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "multi-face surfaces instead of clipping through them",
         default=12, min=1, soft_max=64,
     )
+    decal_parallax: BoolProperty(
+        name="Parallax Occlusion",
+        description="Give image decals true, view-dependent depth: a Parallax "
+                    "Occlusion Mapping shader shifts the sampled UV along the "
+                    "camera vector using the image's luminance as a height map, "
+                    "so panel lines recess and rivets self-occlude at grazing "
+                    "angles instead of reading as a flat sticker",
+        default=False,
+    )
+    decal_parallax_depth: FloatProperty(
+        name="Parallax Depth",
+        description="Apparent recess depth of the parallax effect, in UV units. "
+                    "Larger looks deeper but exaggerates the swim at extreme "
+                    "grazing angles",
+        default=0.05, min=0.0, soft_max=0.5,
+    )
+    decal_parallax_layers: IntProperty(
+        name="Parallax Layers",
+        description="Ray-march steps of the parallax shader. More layers are "
+                    "smoother at grazing angles but build a heavier node graph",
+        default=8, min=2, max=24,
+    )
+    decal_normal_transfer: BoolProperty(
+        name="Decal Normal Transfer",
+        description="Add a Data Transfer modifier so a placed decal borrows the "
+                    "target's surface normals and shades as part of the curved "
+                    "surface, instead of catching its own flat lighting",
+        default=False,
+    )
     bake_size: IntProperty(
         name="Bake Resolution",
         description="Resolution (px) of the image when baking a decal into the "
@@ -394,6 +423,10 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "decal_size")
         col.prop(self, "decal_offset")
         col.prop(self, "decal_resolution")
+        col.prop(self, "decal_parallax")
+        col.prop(self, "decal_parallax_depth")
+        col.prop(self, "decal_parallax_layers")
+        col.prop(self, "decal_normal_transfer")
         col.prop(self, "bake_size")
         col.prop(self, "decal_library_path")
         col.prop(self, "atlas_max_width")

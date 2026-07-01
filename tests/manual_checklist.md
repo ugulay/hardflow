@@ -653,5 +653,68 @@ and pick any image (or set an already-loaded one via the datablock picker).
 
 ---
 
+## Decal depth — Parallax Occlusion Mapping + Normal Transfer (Module 1)
+
+Enable **Preferences → Parallax Occlusion** (and set a **Parallax Depth**, e.g.
+0.08) before placing.
+
+- [ ] Place an **image decal** with a bit of tonal contrast (a panel/grunge PNG)
+      on a flat face. Orbit to a **grazing angle**: the dark areas should
+      **recess** and slide behind their lip (view-dependent), not stay a flat
+      print. Head-on there is little/no shift (correct).
+- [ ] Raise **Parallax Depth** → the apparent recess deepens; raise **Parallax
+      Layers** → the grazing-angle silhouette gets smoother (more nodes).
+- [ ] The decal's node tree contains an **`HF_Parallax_<image>_<N>`** group feeding
+      the base-color image's **Vector** input; deleting/disabling it falls back to
+      a flat decal (no crash).
+- [ ] With a **bad/one-pixel image** or on an odd Blender build, placement still
+      succeeds as a flat decal and the console logs `parallax wiring skipped`
+      (graceful degrade).
+- [ ] Enable **Decal Normal Transfer**, place a decal across a **curved / bevelled
+      edge**: it should shade as part of the surface (an `HF_NormalTransfer` Data
+      Transfer modifier sits after `HF_Shrinkwrap`), not catch flat sticker
+      lighting. On a build without the modifier it logs `normal transfer skipped`.
+
+---
+
+## Viewport polish — shortcut bar + alignment guides (Module 2)
+
+- [ ] Start **Draw Cut** (Ctrl+Shift+D). A **premium translucent shortcut bar**
+      sits centered along the bottom: chips like `[Tab] Cut`, `[B] Bevel`,
+      `[J] Live Bool`, `[V] Vertex`, `[Enter] Apply`. Toggling **B / C / J / M /
+      V / N** flips the matching chip's key box to the **accent (ON)** color live;
+      **Tab** updates the mode chip label.
+- [ ] Place a first point, then move the cursor so it is roughly **above** or
+      **level with** that point: a **dashed full-span guide line** snaps on
+      (vertical when square in X, horizontal when square in Y) and disappears when
+      you move off. With several points placed, guides appear for whichever ones
+      you line up with (near-duplicates collapse to one line).
+- [ ] The top-left HUD is now shorter (status + one hint line) since the bar
+      carries the toggles — nothing important was lost.
+- [ ] Enter **HardFlow Mode** (Ctrl+Shift+X). Same bottom bar (`[Tab] Knife`,
+      `[←/→] Plane: …`, `[X] Snap`, `[Enter] Commit`); the **Depth** chip is
+      accent-lit only on the **Extrude** verb. Alignment guides also light up
+      against placed points, alongside the existing per-plane axis guides.
+- [ ] At a **narrow viewport width** the bar left-anchors instead of sliding its
+      first chips off-screen (never clipped on the left).
+
+---
+
+## Topology & SubD stability (Module 4)
+
+- [ ] Cut a boolean into a cube, then add a **Subdivision Surface** modifier.
+      Toggle **Preferences → Re-quad Cut N-gons** on and re-cut: the cut border
+      should subdivide **without pinches / dark sliver artifacts** (the
+      `_clean_boolean_slivers` pass dissolved the near-zero-area faces + redundant
+      cut-line verts). The N-gon count around the cut drops vs. the old behavior.
+- [ ] **Edge Bevel → `S` (Smart)** on a cube edge, raise **segments** with `[ ]`:
+      the support/holding loop now sits **tighter** on a rounder bevel (seg-aware
+      placement) and the beveled edge holds its radius under Subdivision instead
+      of ballooning. HUD still reports `+N loops, M clamped`.
+- [ ] Smart Bevel on an **irregular boolean off-cut** still never collapses a thin
+      flank (the `flank_can_support` barrier), it just adds fewer loops.
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.

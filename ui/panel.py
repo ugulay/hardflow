@@ -133,6 +133,9 @@ class HARDFLOW_PT_tools(Panel):
                      icon='MOD_BEVEL')
         row.operator("mesh.hardflow_loop_cut", text="Loop Cut",
                      icon='MOD_MULTIRES')
+        # One-shot hard-surface init: sharpen + bevel + weighted normal.
+        col.operator("object.hardflow_smart_sharpen", text="Smart Sharpen",
+                     icon='MOD_BEVEL')
 
         # 4. Curves -- pipes, cables, swept profiles.
         col = layout.column(align=True)

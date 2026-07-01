@@ -8,6 +8,7 @@
 # (build_prism, apply/add_boolean) and the non-modal bevel/mirror operators are
 # verified. For pure math: python tests/test_core.py. For the modal tools that
 # can't run headless (draw, Push/Pull, Offset, the menus): tests/manual_checklist.md.
+import math
 import os
 import sys
 
@@ -2427,6 +2428,65 @@ def test_draw_cut_apply_destructive_atomic_chain():
         assert new_objs, "slice did not keep the carved piece"
     finally:
         hardflow.unregister()
+
+
+def test_mark_sharp_edges_marks_all_cube_edges():
+    _reset()
+    cube = _add_cube("Sharp", size=2.0)
+    n = geometry.mark_sharp_edges(cube, math.radians(30.0))
+    assert n == 12, n                         # every 90-degree cube edge is hard
+    me = cube.data
+    assert all(e.use_edge_sharp for e in me.edges), "edges not marked sharp"
+    assert all(p.use_smooth for p in me.polygons), "faces not shaded smooth"
+    # a very loose threshold leaves the flat cube faces' interior... cube has no
+    # sub-90 edges, so a 170-degree threshold marks none.
+    n2 = geometry.mark_sharp_edges(cube, math.radians(170.0))
+    assert n2 == 0, n2
+    assert not any(e.use_edge_sharp for e in cube.data.edges), "not cleared"
+
+
+def test_smart_sharpen_operator_idempotent():
+    _reset()
+    hardflow.register()
+    try:
+        cube = _add_cube("Init", size=2.0)
+        _activate(cube)
+        bpy.ops.object.hardflow_smart_sharpen()
+        bev = cube.modifiers.get("HF_Bevel")
+        wn = cube.modifiers.get("HF_WeightedNormal")
+        assert bev is not None and bev.type == 'BEVEL', "no bevel modifier"
+        assert wn is not None and wn.type == 'WEIGHTED_NORMAL', "no weighted normal"
+        assert bev.limit_method == 'WEIGHT', bev.limit_method
+        assert list(cube.modifiers)[-1] is wn, "weighted normal not at the bottom"
+        # Re-run: the managed modifiers update in place, never stacking copies.
+        bpy.ops.object.hardflow_smart_sharpen()
+        bevels = [m for m in cube.modifiers if m.type == 'BEVEL']
+        wns = [m for m in cube.modifiers if m.type == 'WEIGHTED_NORMAL']
+        assert len(bevels) == 1 and len(wns) == 1, (len(bevels), len(wns))
+    finally:
+        hardflow.unregister()
+
+
+def test_dissolve_boolean_ngons_cleans_redundant_vert():
+    _reset()
+    import bmesh
+    me = bpy.data.meshes.new("Sliver")
+    bm = bmesh.new()
+    v0 = bm.verts.new((0, 0, 0))
+    v1 = bm.verts.new((0.5, 0, 0))    # redundant midpoint on the bottom edge
+    v2 = bm.verts.new((1, 0, 0))
+    v3 = bm.verts.new((1, 1, 0))
+    v4 = bm.verts.new((0, 1, 0))
+    bm.faces.new((v0, v1, v2, v3, v4))
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("Sliver", me)
+    bpy.context.collection.objects.link(ob)
+    geometry.dissolve_boolean_ngons(ob, clean_slivers=True)
+    # the collinear mid-edge vertex is dissolved -> a clean quad, no SubD pinch
+    assert len(ob.data.vertices) == 4, len(ob.data.vertices)
+    assert len(ob.data.polygons) == 1, len(ob.data.polygons)
+    assert len(ob.data.polygons[0].vertices) == 4
 
 
 def _run():
