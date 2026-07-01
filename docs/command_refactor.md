@@ -122,11 +122,19 @@ def _init_tool(self, context, event):
     self._commands = command.CommandManager()
     self._edit = None               # the live MeshSnapshotCommand
 
-def _lock_face(self, context, co):
+def _lock_face(self, context, co):          # Object Mode
     ...
     self._edit = base.MeshSnapshotCommand(
         self.obj, self._mutate, snapshot_name=self._snapshot_name)
     self._commands.do(self._edit)   # snapshot 'before' + first apply
+
+def _lock_edit(self, context, event):       # Edit Mode: same command, mode-aware
+    ...
+    self._edit = base.MeshSnapshotCommand(
+        self.obj, self._mutate, snapshot_name=self._snapshot_name,
+        restore=geometry.restore_edit_mesh)   # the ONLY Object/Edit difference
+    self._commands.do(self._edit)
+    return True
 
 def _refresh_preview(self):
     self._edit.reapply(self._mutate)     # restore + re-edit with current value
@@ -245,8 +253,15 @@ def _build_and_apply(self, context):
     return {'FINISHED'}
 ```
 
-This is the highest-value, lowest-risk step: it touches one method and directly
-kills the reported failure mode.
+Caveat, stated honestly: `draw_cut._apply_destructive` is *already* effectively
+atomic — `robust_boolean` cleans up its own half-added modifiers and never
+raises on a solver failure (it returns `(ok, used, msg)`), and the whole
+`execute` is one Blender undo step. So the `MacroCommand` here buys **explicit,
+inspectable** rollback of a genuinely raising chain (and a uniform vocabulary
+with the modal tools), not a fix for a currently-crashing path. Treat it as a
+clarity/robustness upgrade, and validate it against a deliberately-broken cutter
+before shipping. The real per-step undo win is in the **modal** tools (§3 Q1),
+where Blender gives you no intra-session undo at all.
 
 **Step 2 — placements become `PlacePointCommand`.**
 `self.points` / `self.world_points` `append`/`pop` (and the `BACK_SPACE` handler)
@@ -268,7 +283,7 @@ plan) has a clean seam to cut along.
 
 | File | Change | Verified |
 |---|---|---|
-| `operators/base.py` | **New.** `HardFlowCommand` / `MeshSnapshotCommand` / `PlacePointCommand`. | headless (`test_place_point_command_*`, `test_mesh_snapshot_command_*`) |
+| `operators/base.py` | **New.** `HardFlowCommand` / `MeshSnapshotCommand` (mode-aware: injectable `snapshot`/`restore`, so Object + Edit share one command) / `PlacePointCommand`. | headless (`test_place_point_command_*`, `test_mesh_snapshot_command_*`) |
 | `core/geometry.py` | **New** `bisect_plane` bmesh primitive (Slice verb + the Q2 example). | headless (`test_bisect_plane_slices_cube`) |
 | `operators/hardflow_mode.py` | Refactored to consume `base.PlacePointCommand` + `MeshSnapshotCommand` (the knife now snapshots + is macro-committed). | compiles; live smoke test pending |
 | `tests/test_blender.py` | +4 headless tests (bisect, place-point redo, snapshot preview/commit/undo, macro rollback on a real mesh). | run with `blender --background` |

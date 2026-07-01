@@ -1918,6 +1918,36 @@ def test_mesh_snapshot_command_preview_commit_undo():
     cmd.free()                                # idempotent
 
 
+def test_mesh_snapshot_command_uses_injected_restore():
+    # Mode-aware: a tool passes restore=geometry.restore_edit_mesh (or any custom
+    # restore) and the command routes through it -- the Object/Edit split in
+    # _FaceDragModal collapses to one injected callable. Verified without a mode
+    # toggle by recording that the injected callables fire.
+    _reset()
+    from hardflow.operators import base
+    ob = _add_cube("Inject", size=2.0)
+    calls = {"snap": 0, "restore": 0}
+
+    def _snap(o, name):
+        calls["snap"] += 1
+        return geometry.snapshot_mesh(o, name)
+
+    def _restore(o, snap):
+        calls["restore"] += 1
+        geometry.restore_mesh(o, snap)
+
+    cmd = base.MeshSnapshotCommand(
+        ob, lambda o: geometry.bisect_plane(o, Vector((0, 0, 0)),
+                                            Vector((0, 0, 1))),
+        snapshot=_snap, restore=_restore, label="inject")
+    cmd.execute()                     # snapshot once + restore + mutate
+    cmd.reapply()                     # restore + mutate
+    cmd.undo()                        # restore
+    assert calls["snap"] == 1, calls  # snapshot captured exactly once
+    assert calls["restore"] == 3, calls
+    cmd.free()
+
+
 def test_mesh_snapshot_command_in_macro_rolls_back():
     # A two-edit macro on a real mesh: a mid-chain failure restores every mesh
     # snapshot, so nothing is left half-applied (the boolean-chain guarantee).

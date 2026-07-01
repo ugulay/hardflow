@@ -63,31 +63,38 @@ class MeshSnapshotCommand(HardFlowCommand):
         manager `clear()` on commit (Blender then owns the net change).
 
     `mutate(obj)` is any bmesh edit -- extrude, inset, knife, bisect... -- always
-    run against the restored 'before' state, so it is safe to call every frame."""
+    run against the restored 'before' state, so it is safe to call every frame.
+
+    Mode-aware: `restore` defaults to geometry.restore_mesh (Object Mode). Pass
+    `restore=geometry.restore_edit_mesh` for an Edit-Mode tool -- both share the
+    same (obj, snapshot) signature and the same snapshot_mesh capture, so the
+    _FaceDragModal Object/Edit split collapses to one injected callable."""
 
     def __init__(self, obj, mutate, label="Mesh edit",
-                 snapshot_name="hf_command"):
+                 snapshot_name="hf_command", snapshot=None, restore=None):
         super().__init__(label)
         self.obj = obj
         self._mutate = mutate
         self._snapshot_name = snapshot_name
+        self._snapshot = snapshot or geometry.snapshot_mesh
+        self._restore = restore or geometry.restore_mesh
         self._snap = None
 
     def _ensure_snapshot(self):
         if self._snap is None:
-            self._snap = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+            self._snap = self._snapshot(self.obj, self._snapshot_name)
 
     def _apply(self):
         # Snapshot the 'before' once, reset to it, then run the edit. Resetting
         # first keeps _apply re-runnable: the mutation always builds from the
         # clean pre-edit state, never stacked on top of a previous apply.
         self._ensure_snapshot()
-        geometry.restore_mesh(self.obj, self._snap)
+        self._restore(self.obj, self._snap)
         self._mutate(self.obj)
 
     def _revert(self):
         if self._snap is not None:
-            geometry.restore_mesh(self.obj, self._snap)
+            self._restore(self.obj, self._snap)
 
     def reapply(self, mutate=None):
         """Live-preview frame during a drag: restore to the snapshot and run the
@@ -97,7 +104,7 @@ class MeshSnapshotCommand(HardFlowCommand):
         if mutate is not None:
             self._mutate = mutate
         self._ensure_snapshot()
-        geometry.restore_mesh(self.obj, self._snap)
+        self._restore(self.obj, self._snap)
         self._mutate(self.obj)
 
     def free(self):
