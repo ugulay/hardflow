@@ -129,6 +129,18 @@ the power tool, grow `hardflow_mode` as the streamlined "mode," and share logic
 by extracting `_snap_screen` / `_plane_basis` into the mixin (or a small
 `core`-side helper) once both need them.
 
+**Update (v1.14.1) — the shared plane-basis seam landed.** The part of
+`_plane_basis` both tools built identically — the on-face SURFACE basis
+(`ray_cast_surface_ex` → `face_edge_tangent` → `basis_from_normal`) and the VIEW
+basis — is now `core/raycast.surface_basis_at` / `core/raycast.view_basis`, and
+both `draw_cut._surface_basis_at`/`_view_basis` and the shell's delegate to it.
+The *rest* of each `_plane_basis` / `_snap_screen` stays per-tool on purpose:
+`draw_cut` carries EDGES, the `H` movable grid origin and `Shift+←/→` grid spin
+and returns a *screen* point; the shell returns a *world* point from a simpler
+VIEW/SURFACE/X/Y/Z cycle. Forcing those two different contracts into one function
+would add branches, not remove them — so only the genuinely-identical basis pick
+is shared, which is the clean seam this section called for.
+
 ### 4.3 Steps
 
 1. **Prototype (done).** `HARDFLOW_OT_mode_knife` — snap chain + command undo +
@@ -319,6 +331,17 @@ build:
   does not apply to this Object-Mode shell), `Tab` switches the active verb
   (Knife ↔ Extrude) in-session, and the mode is entered from a Ctrl+Shift+X
   keymap + an Edit pie slot. Headless `test_mode_shell_verb_and_plane_cycle`.
+- **Full `draw_cut` command adoption + shared plane-basis seam (v1.14.1)** —
+  *done.* `draw_cut` gained its own per-session `CommandManager`: placements are
+  a two-child `PlacePointCommand` macro (`_record_placement`; Backspace = `undo`),
+  and the live boolean preview is a `base.LivePreviewCommand` (non-destructive
+  temp-modifier lifecycle, deliberately not a `MeshSnapshotCommand`). The on-face
+  SURFACE basis and the VIEW basis it shared with the mode shell are lifted into
+  `core/raycast.surface_basis_at` / `view_basis`; both tools delegate (§4.2
+  update). Headless `test_draw_placement_journal`,
+  `test_livepreview_command_lifecycle`, `test_draw_cut_uses_livepreview_command`,
+  `test_surface_basis_shared_helper`. With this, the three-layer command
+  architecture is consistent across **every** modal tool.
 
 Still pending and deliberately deferred (self-contained, low-risk):
 

@@ -5,7 +5,21 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+## [1.14.1] — 2026-07-01
+
+Internal architecture release: the per-modal command layer is now adopted end to
+end, and the duplicated surface/view plane-basis logic is shared. No user-visible
+behaviour change; verified against a standalone `bpy` build (Blender 5.0.1).
+
 ### Changed
+- **Shared surface/view plane basis (`_HardflowModeModal` seam).** `draw_cut` and
+  the HardFlow Mode shell each inlined the same `ray_cast_surface_ex` →
+  `face_edge_tangent` → `basis_from_normal` chain for the SURFACE plane, plus a
+  near-identical VIEW basis. Both are lifted into `core/raycast.surface_basis_at`
+  / `core/raycast.view_basis`, and the two operators now delegate — one
+  implementation of the on-face construction basis, the clean seam the
+  `_HardflowModeModal` extraction was meant to leave. Headless
+  `test_surface_basis_shared_helper`.
 - **`draw_cut` fully adopts the per-modal command layer.** The main draw operator
   now owns a per-session `CommandManager`: each placement click is a two-child
   `MacroCommand` of `base.PlacePointCommand`s (the screen + world anchor lists

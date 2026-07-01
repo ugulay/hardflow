@@ -68,6 +68,15 @@ def basis_from_normal(normal, up_hint=Vector((0.0, 0.0, 1.0))):
     return right, up2, n
 
 
+def view_basis(rv3d, origin):
+    """(origin, right, up, normal) for a VIEW-facing construction plane through
+    `origin`: perpendicular to the view direction, with the screen's right/up
+    axes. The one shared VIEW-plane basis (draw_cut + the HardFlow Mode shell);
+    callers pass their own origin (active object, or the 3D cursor)."""
+    right, up = view_right_up(rv3d)
+    return origin, right, up, view_direction(rv3d)
+
+
 def closest_axis_distance(region, rv3d, coord, axis_co, axis_dir):
     """Signed distance along the axis line (axis_co + t*axis_dir) of the point
     on that axis nearest to the mouse ray through `coord`. Drives the Push/Pull
@@ -170,3 +179,23 @@ def face_edge_tangent(obj, index, matrix, normal, near_point=None):
         edges.append(tuple(rot @ (b - a)))
     t = decal_math.dominant_tangent(edges, tuple(normal))
     return Vector(t) if t is not None else None
+
+
+def surface_basis_at(context, region, rv3d, screen_co, ignore=None):
+    """Construction basis aligned to the face under screen_co:
+    (origin, right, up, normal) from the surface ray hit, aligned to the face
+    edge NEAREST the hit (so a shape drawn on the face lines up with the edge you
+    start on -- correct on non-rectangular / boolean-cut faces). Falls back to the
+    view's up when no edge is found; returns None if the ray misses geometry.
+    `ignore` skips objects (e.g. a tool's live preview cage). The one shared
+    surface-plane pick behind draw_cut's SURFACE plane and the HardFlow Mode
+    shell -- so both foreshorten a drawn shape onto the same picked face."""
+    hit = ray_cast_surface_ex(context, region, rv3d, screen_co, ignore)
+    if hit is None:
+        return None
+    location, normal, obj, index, matrix = hit
+    up_hint = face_edge_tangent(obj, index, matrix, normal, near_point=location)
+    if up_hint is None:
+        _vr, up_hint = view_right_up(rv3d)
+    right, up, n = basis_from_normal(normal, up_hint=up_hint)
+    return location.copy(), right, up, n

@@ -394,32 +394,16 @@ class HARDFLOW_OT_draw(Operator):
     }
 
     def _view_basis(self, context):
-        rv3d = context.region_data
         origin = context.active_object.matrix_world.translation
-        right, up = raycast.view_right_up(rv3d)
-        return origin, right, up, raycast.view_direction(rv3d)
+        return raycast.view_basis(context.region_data, origin)
 
     def _surface_basis_at(self, context, screen_co):
-        """Construction basis aligned to the face under screen_co:
-        (origin, right, up, normal) from the surface hit, or None if the ray
-        misses geometry."""
-        region, rv3d = context.region, context.region_data
+        """Construction basis aligned to the face under screen_co (delegates to
+        the shared raycast.surface_basis_at). Ignores the live preview cage so the
+        ray hits the real model, not the wire overlay."""
         ignore = [self._preview] if self._preview else None
-        hit = raycast.ray_cast_surface_ex(context, region, rv3d, screen_co, ignore)
-        if hit is None:
-            return None
-        location, normal, obj, index, matrix = hit
-        # Smart tangent: align the on-surface grid to the face edge NEAREST the hit
-        # point, so the drawn shape lines up with the edge you start on -- correct
-        # on non-rectangular (boolean-cut) faces where the single longest edge is
-        # at an odd angle. Fall back to the view's up (which beats world up on an
-        # angled face) when no edge is found.
-        up_hint = raycast.face_edge_tangent(obj, index, matrix, normal,
-                                            near_point=location)
-        if up_hint is None:
-            _vr, up_hint = raycast.view_right_up(rv3d)
-        right, up, n = raycast.basis_from_normal(normal, up_hint=up_hint)
-        return location.copy(), right, up, n
+        return raycast.surface_basis_at(
+            context, context.region, context.region_data, screen_co, ignore)
 
     def _lock_surface_basis(self, context, screen_co):
         """Capture and cache the surface basis at the first click so the whole

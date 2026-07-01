@@ -220,27 +220,14 @@ class _HardflowModeModal:
         return origin, right, up, n
 
     def _view_basis(self, context, origin):
-        rv3d = context.region_data
-        right, up = raycast.view_right_up(rv3d)
-        return origin, right, up, raycast.view_direction(rv3d)
+        return raycast.view_basis(context.region_data, origin)
 
     def _surface_basis_at(self, context, screen_co):
-        """Construction basis aligned to the face under screen_co (promoted from
-        draw_cut._surface_basis_at): (origin, right, up, normal) from the surface
-        hit, aligned to the face edge nearest the hit, or None if the ray misses
-        geometry. The shell draws GPU only (no live preview object), so nothing is
-        ignored by the raycast."""
-        region, rv3d = context.region, context.region_data
-        hit = raycast.ray_cast_surface_ex(context, region, rv3d, screen_co, None)
-        if hit is None:
-            return None
-        location, normal, obj, index, matrix = hit
-        up_hint = raycast.face_edge_tangent(obj, index, matrix, normal,
-                                            near_point=location)
-        if up_hint is None:
-            _vr, up_hint = raycast.view_right_up(rv3d)
-        right, up, n = raycast.basis_from_normal(normal, up_hint=up_hint)
-        return location.copy(), right, up, n
+        """Construction basis aligned to the face under screen_co (delegates to
+        the shared raycast.surface_basis_at). The shell draws GPU only -- no live
+        preview object -- so nothing is ignored by the raycast."""
+        return raycast.surface_basis_at(
+            context, context.region, context.region_data, screen_co, None)
 
     def _cycle_plane(self, step):
         self._plane = _PLANES[(_PLANES.index(self._plane) + step) % len(_PLANES)]

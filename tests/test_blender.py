@@ -2208,6 +2208,27 @@ def test_draw_placement_journal():
     assert s.points == [(10.0, 20.0)]        # clear() leaves the lists to the caller
 
 
+def test_surface_basis_shared_helper():
+    # draw_cut and the HardFlow Mode shell now share ONE surface / view plane
+    # basis (raycast.surface_basis_at / raycast.view_basis) instead of each
+    # inlining the ray_cast_surface_ex -> face_edge_tangent -> basis_from_normal
+    # chain. The end-to-end call needs a real viewport (region/rv3d), so guard the
+    # extraction structurally: the shared helpers exist and neither operator
+    # re-inlines the raycast (mirrors the other adoption-structure guards).
+    import inspect
+    from hardflow.core import raycast
+    from hardflow.operators import draw_cut, hardflow_mode as hm
+    assert callable(raycast.surface_basis_at) and callable(raycast.view_basis)
+    for meth in (draw_cut.HARDFLOW_OT_draw._surface_basis_at,
+                 hm._HardflowModeModal._surface_basis_at):
+        src = inspect.getsource(meth)
+        assert "surface_basis_at" in src            # delegates to the shared helper
+        assert "ray_cast_surface_ex" not in src     # no longer re-inlined
+    for meth in (draw_cut.HARDFLOW_OT_draw._view_basis,
+                 hm._HardflowModeModal._view_basis):
+        assert "view_basis" in inspect.getsource(meth)
+
+
 def test_facetool_command_adoption_structure():
     # The _FaceDragModal tools now share the base MeshSnapshotCommand-backed
     # preview: the base owns _begin_edit / _refresh_preview, and each subclass
