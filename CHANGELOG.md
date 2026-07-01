@@ -5,6 +5,18 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+### Changed
+- **`draw_cut`'s live boolean preview adopts the command layer.** The ad-hoc
+  `HF_LivePreview` temp-modifier bookkeeping (`_bool_targets`, `_remove_live_mod`,
+  the scene-wide cleanup sweep) is replaced by a new
+  `operators/base.LivePreviewCommand` — a *named, non-destructive* command that
+  owns the temp-modifier lifecycle (`execute`/`refresh`/`clear`). It deliberately
+  does **not** subclass `MeshSnapshotCommand`: the live preview never mutates the
+  target mesh (it lets the viewport evaluate a temporary Boolean modifier), so a
+  snapshot port would force a per-frame boolean bake. Behaviour and cost are
+  unchanged; the preview just joins the shared command vocabulary. Headless
+  `test_livepreview_command_lifecycle` + `test_draw_cut_uses_livepreview_command`.
+
 ## [1.14.0] — 2026-07-01
 
 ### Added

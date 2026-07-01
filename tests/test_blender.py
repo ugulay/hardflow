@@ -2127,6 +2127,56 @@ def test_mesh_snapshot_command_snapshot_property():
     assert cmd.snapshot is None                       # dropped on free
 
 
+def test_livepreview_command_lifecycle():
+    # The named non-destructive live-boolean preview: refresh() attaches an
+    # HF_LivePreview Boolean modifier to each target pointing at the cutter,
+    # retargets when the wanted set changes, and clear()/undo() strip them all.
+    # Never mutates target geometry (that is the whole reason it isn't a
+    # MeshSnapshotCommand).
+    _reset()
+    from hardflow.operators import base
+    target = _add_cube("PvTarget", size=2.0)
+    other = _add_cube("PvOther", size=2.0, location=(4, 0, 0))
+    cutter = _add_cube("PvCutter", size=1.0, location=(1, 0, 0))
+    tris_before = len(target.data.polygons)
+
+    cmd = base.LivePreviewCommand(cutter, 'DIFFERENCE')
+    cmd.execute()                                     # arm; no modifier yet
+    assert target.modifiers.get("HF_LivePreview") is None
+
+    cmd.refresh([target])                             # attach to the one target
+    mod = target.modifiers.get("HF_LivePreview")
+    assert mod is not None and mod.object == cutter
+    assert mod.operation == 'DIFFERENCE' and mod.show_render is False
+    assert len(target.data.polygons) == tris_before   # base mesh untouched
+
+    cmd.refresh([other])                              # retarget: target stripped
+    assert target.modifiers.get("HF_LivePreview") is None
+    assert other.modifiers.get("HF_LivePreview") is not None
+
+    cmd.refresh([target])                             # idempotent re-add
+    assert len(target.modifiers) == 1
+
+    cmd.undo()                                        # _revert == clear
+    assert target.modifiers.get("HF_LivePreview") is None
+    assert other.modifiers.get("HF_LivePreview") is None
+
+    # Scene sweep: a stray modifier on an untracked object is still caught.
+    other.modifiers.new("HF_LivePreview", 'BOOLEAN')
+    cmd.clear(bpy.context)
+    assert other.modifiers.get("HF_LivePreview") is None
+    cmd.free()                                        # idempotent
+
+
+def test_draw_cut_uses_livepreview_command():
+    # Guard the adoption: draw_cut's live boolean preview routes through the named
+    # command, not the old ad-hoc _bool_targets / _remove_live_mod bookkeeping.
+    from hardflow.operators import draw_cut
+    cls = draw_cut.HARDFLOW_OT_draw
+    assert not hasattr(cls, "_remove_live_mod")
+    assert "LivePreviewCommand" in (cls._sync_live_boolean.__doc__ or "")
+
+
 def test_facetool_command_adoption_structure():
     # The _FaceDragModal tools now share the base MeshSnapshotCommand-backed
     # preview: the base owns _begin_edit / _refresh_preview, and each subclass

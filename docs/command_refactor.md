@@ -14,16 +14,21 @@ its cutter(s) as an atomic `MacroCommand`.
 
 **Audit (v1.14, 2026-07):** the three-layer command architecture is complete and
 consistent across `hardflow_mode`, `face_tool` (Push/Pull, Offset, Edge Bevel, Loop
-Cut) and `draw_cut`'s destructive path. Two follow-ups remain, both in `draw_cut`
-and both **non-blocking** (the monolith is otherwise intact):
+Cut) and `draw_cut`'s destructive path.
 
-1. **Placement points** are still plain `self.points`/`self.world_points`
-   `append`/`pop`, not `PlacePointCommand` — `draw_cut` has no session
-   `CommandManager` of its own (Step 2 below).
-2. **The live boolean preview** is *not* a `MeshSnapshotCommand` — and it should
-   not become one (see the corrected Step 3 below): it is a non-destructive
-   temp-modifier lifecycle, so its named form is a lightweight
-   `LivePreviewCommand`, not the mesh-mutating snapshot command.
+- **Step 3 — the live boolean preview — now landed.** `draw_cut`'s
+  `_sync_live_boolean` / `_clear_live_boolean` / `_bool_targets` bookkeeping is
+  replaced by a single `base.LivePreviewCommand` (§4 Step 3, corrected). It owns
+  the temp-`HF_LivePreview`-modifier lifecycle — *not* a mesh snapshot, so the
+  preview stays non-destructive and per-frame cheap. Headless
+  `test_livepreview_command_lifecycle` + `test_draw_cut_uses_livepreview_command`.
+- **Step 2 — placement journaling — remains** (the one open follow-up, still
+  **non-blocking**; the monolith is otherwise intact): `draw_cut`'s placement
+  points are still plain `self.points`/`self.world_points` `append`/`pop`, not
+  `PlacePointCommand`, so `draw_cut` has no session `CommandManager` of its own.
+  It's a purely internal consistency step — `Backspace` already works — with no
+  user-visible change, so it is deferred until it can be exercised against a live
+  Blender modal (the headless suite can't drive the draw loop).
 
 ---
 
@@ -297,10 +302,17 @@ The right named form is a lightweight `LivePreviewCommand(HardFlowCommand)` that
 owns the temp-modifier lifecycle instead of a mesh snapshot: `execute()`/`refresh()`
 attach + retarget the `HF_LivePreview` modifier on the wanted targets;
 `undo()`/`free()` strip every one back off (folding in today's scene-wide safety
-sweep). That collapses the scattered `_bool_targets` bookkeeping under one named,
-journal-recorded owner **without** changing behaviour or cost — the preview stays
-non-destructive and just as cheap. Fold it in together with Step 2's
-`CommandManager`, once that journal exists on `draw_cut`.
+sweep). That collapses the scattered `_bool_targets` bookkeeping under one named
+owner **without** changing behaviour or cost — the preview stays non-destructive
+and just as cheap.
+
+**Landed in v1.14, standalone.** `draw_cut` holds the `LivePreviewCommand`
+directly (`self._live_cmd`), driven by `execute()`/`refresh()`/`clear()` — *not*
+in a `CommandManager` journal. That is deliberate: the journal (Step 2) is for
+`Backspace`-undoable placements, and the live preview is a continuously-refreshed
+side-effect you never `Backspace`, so putting it in the same journal would make
+`Backspace` strip the preview instead of the last point. The command needs no
+journal to be the single named owner, so Step 3 shipped without waiting on Step 2.
 
 After all three, `draw_cut` and `hardflow_mode` share the same command
 vocabulary, and a future extraction of `_HardflowModeModal` (Phase 1 of the main
@@ -315,7 +327,9 @@ plan) has a clean seam to cut along.
 | `operators/base.py` | **New.** `HardFlowCommand` / `MeshSnapshotCommand` (mode-aware: injectable `snapshot`/`restore`, so Object + Edit share one command) / `PlacePointCommand`. | headless (`test_place_point_command_*`, `test_mesh_snapshot_command_*`) |
 | `core/geometry.py` | **New** `bisect_plane` bmesh primitive (Slice verb + the Q2 example). | headless (`test_bisect_plane_slices_cube`) |
 | `operators/hardflow_mode.py` | Refactored to consume `base.PlacePointCommand` + `MeshSnapshotCommand` (the knife now snapshots + is macro-committed). | compiles; live smoke test pending |
-| `tests/test_blender.py` | +4 headless tests (bisect, place-point redo, snapshot preview/commit/undo, macro rollback on a real mesh). | run with `blender --background` |
+| `operators/base.py` | **New** `LivePreviewCommand` (v1.14): the temp-`HF_LivePreview`-modifier lifecycle as a named non-destructive command. | headless (`test_livepreview_command_lifecycle`) |
+| `operators/draw_cut.py` | Live boolean preview adopts `LivePreviewCommand`; the ad-hoc `_bool_targets` / `_remove_live_mod` bookkeeping is gone. | headless (`test_draw_cut_uses_livepreview_command`) |
+| `tests/test_blender.py` | +4 headless tests (bisect, place-point redo, snapshot preview/commit/undo, macro rollback on a real mesh), +2 for the live preview command. | run with `blender --background` |
 
 Nothing above forces a change on the existing operators; the command layer is
 purely additive until a tool opts in via the Step 1–3 path.

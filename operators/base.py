@@ -160,6 +160,95 @@ class BooleanCutCommand(MeshSnapshotCommand):
             raise RuntimeError(msg)
 
 
+class LivePreviewCommand(HardFlowCommand):
+    """Non-destructive live boolean preview as a named, reversible command.
+
+    Unlike MeshSnapshotCommand (which mutates + restores the real mesh every
+    frame), this NEVER edits target geometry: it hangs a temporary
+    'HF_LivePreview' Boolean modifier on each target pointing at the live cutter
+    cage, so Blender's viewport evaluates the real subtraction/union while the
+    shape is drawn; undo()/free() strip every one back off. That keeps the
+    preview cheap (no per-frame boolean bake) AND reversible through the same
+    vocabulary as every other tool step -- the named form of draw_cut's
+    _sync_live_boolean / _clear_live_boolean / _bool_targets bookkeeping.
+
+    Porting the draw preview to MeshSnapshotCommand instead would force a real
+    boolean bake on every mouse-move (a regression); the modifier lifecycle is
+    the right shape here, so the command owns *that*, not a mesh snapshot.
+
+    execute() only arms the (empty) preview; refresh() does the per-frame work
+    (add the modifier to new targets, retarget existing ones, strip the ones that
+    left), kept outside the _done guard exactly like MeshSnapshotCommand.reapply.
+    """
+
+    label = "Live boolean preview"
+    MOD_NAME = "HF_LivePreview"
+
+    def __init__(self, cutter, operation, solver='FAST'):
+        super().__init__()
+        self.cutter = cutter          # the live wire cutter cage object
+        self.operation = operation    # 'DIFFERENCE' / 'UNION' / 'INTERSECT'
+        self.solver = solver          # snappy preview; commit uses the real solver
+        self._targets = []            # objects currently carrying the temp mod
+
+    def _apply(self):
+        pass                          # arm only; refresh() attaches the modifiers
+
+    def _revert(self):
+        self.clear()
+
+    def refresh(self, targets):
+        """Point the temp modifier at `targets`: add it to new ones, retarget the
+        existing, strip the ones that left the set. Idempotent per frame."""
+        wanted = set(targets)
+        for t in list(self._targets):
+            if t not in wanted:
+                self._strip(t)
+                self._targets.remove(t)
+        for t in targets:
+            mod = t.modifiers.get(self.MOD_NAME)
+            if mod is None:
+                mod = t.modifiers.new(self.MOD_NAME, 'BOOLEAN')
+                mod.show_render = False
+                self._targets.append(t)
+            mod.operation = self.operation
+            mod.object = self.cutter
+            try:
+                mod.solver = self.solver
+            except (TypeError, AttributeError):
+                pass
+
+    def clear(self, context=None):
+        """Strip every temp modifier this command added. The optional scene sweep
+        catches a target that left the tracked set mid-draw (active/selection
+        changed) -- the safety net that keeps a preview modifier from surviving
+        the tool."""
+        for t in self._targets:
+            self._strip(t)
+        self._targets = []
+        scene = getattr(context, "scene", None) if context is not None else None
+        if scene is not None:
+            for ob in scene.objects:
+                if (ob.type == 'MESH'
+                        and ob.modifiers.get(self.MOD_NAME) is not None):
+                    self._strip(ob)
+
+    def free(self):
+        """Drop the preview (== clear). Idempotent; call on commit and cancel."""
+        self.clear()
+
+    @classmethod
+    def _strip(cls, obj):
+        """Remove the temp modifier from obj, ignoring a deleted object / missing
+        modifier (mirrors the old draw_cut._remove_live_mod)."""
+        try:
+            mod = obj.modifiers.get(cls.MOD_NAME)
+            if mod is not None:
+                obj.modifiers.remove(mod)
+        except (ReferenceError, RuntimeError, AttributeError):
+            pass
+
+
 def boolean_chain(context, target, cutters, operation='DIFFERENCE',
                   solver='EXACT', label="Boolean chain"):
     """Build (but do not execute) a MacroCommand that applies each cutter to

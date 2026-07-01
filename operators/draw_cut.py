@@ -109,7 +109,7 @@ class HARDFLOW_OT_draw(Operator):
         self.bevel_cut = prefs.draw_bevel_cut       # bevel the cut edge; B toggles
         self.cutter_bevel = prefs.draw_cutter_bevel  # chamfer the cutter; C toggles
         self.live_bool = prefs.live_boolean_preview  # live boolean result; J toggles
-        self._bool_targets = []   # targets carrying the live-preview boolean mod
+        self._live_cmd = None     # base.LivePreviewCommand owning the temp mod(s)
         self.grid_size = prefs.grid_world  # live grid spacing (Ctrl+Wheel adjusts)
         self.depth = 0.0          # explicit cutter depth (0 = auto pierce); PgUp/Dn
         self.points = []          # confirmed screen points (current view)
@@ -1096,40 +1096,20 @@ class HARDFLOW_OT_draw(Operator):
     # cutter cage is shown), so a heavy mesh stays responsive while drawing.
     _LIVE_BOOL_MAX_VERTS = 8000
 
-    @staticmethod
-    def _remove_live_mod(obj):
-        """Strip the temporary HF_LivePreview boolean modifier from obj, ignoring
-        a deleted object / missing modifier."""
-        try:
-            mod = obj.modifiers.get("HF_LivePreview")
-            if mod is not None:
-                obj.modifiers.remove(mod)
-        except (ReferenceError, RuntimeError, AttributeError):
-            pass
-
     def _clear_live_boolean(self, context):
-        """Remove every live-preview boolean modifier this draw added. Idempotent;
-        called before the real cut on commit and on cancel."""
-        for t in getattr(self, "_bool_targets", []):
-            self._remove_live_mod(t)
-        self._bool_targets = []
-        # Safety net: a target that left the tracked set mid-draw (active/selection
-        # changed) could still carry an HF_LivePreview modifier. Sweep the scene so
-        # a temp preview modifier never survives the tool.
-        scene = getattr(context, "scene", None)
-        if scene is not None:
-            for ob in scene.objects:
-                if (ob.type == 'MESH'
-                        and ob.modifiers.get("HF_LivePreview") is not None):
-                    self._remove_live_mod(ob)
+        """Strip the live-preview boolean modifier(s) via the LivePreviewCommand.
+        Idempotent; called before the real cut on commit and on cancel."""
+        if self._live_cmd is not None:
+            self._live_cmd.clear(context)
 
     def _sync_live_boolean(self, context):
-        """Show the actual boolean RESULT on the target(s) while drawing: add a
-        temporary Boolean modifier pointing at the live cutter cage, so Blender's
-        viewport evaluates the real subtraction/union as the shape changes. Active
-        only for the boolean modes (Cut/Make/Intersect) with a valid cutter, the
-        live preview on, and the target light enough; removed otherwise. The temp
-        modifier is always stripped before the real cut (see `_commit`)."""
+        """Show the actual boolean RESULT on the target(s) while drawing, through
+        the named base.LivePreviewCommand: a temporary Boolean modifier pointing
+        at the live cutter cage, so Blender's viewport evaluates the real
+        subtraction/union as the shape changes. Active only for the boolean modes
+        (Cut/Make/Intersect) with a valid cutter, the live preview on, and the
+        target light enough; stripped otherwise. The temp modifier is always
+        removed before the real cut (see `_commit`)."""
         op = {'CUT': 'DIFFERENCE', 'MAKE': 'UNION',
               'INTERSECT': 'INTERSECT'}.get(self.mode)
         if not (self.live_bool and op is not None and self._preview is not None):
@@ -1138,24 +1118,13 @@ class HARDFLOW_OT_draw(Operator):
         targets = [t for t in self._targets(context)
                    if t is not None and t.type == 'MESH'
                    and len(t.data.vertices) <= self._LIVE_BOOL_MAX_VERTS]
-        wanted = set(targets)
-        for t in list(self._bool_targets):
-            if t not in wanted:
-                self._remove_live_mod(t)
-                self._bool_targets.remove(t)
-        for t in targets:
-            mod = t.modifiers.get("HF_LivePreview")
-            if mod is None:
-                mod = t.modifiers.new("HF_LivePreview", 'BOOLEAN')
-                mod.show_render = False
-                if t not in self._bool_targets:
-                    self._bool_targets.append(t)
-            mod.operation = op
-            mod.object = self._preview
-            try:
-                mod.solver = 'FAST'  # snappy preview; commit uses the real solver
-            except (TypeError, AttributeError):
-                pass
+        if self._live_cmd is None:
+            self._live_cmd = base.LivePreviewCommand(self._preview, op)
+            self._live_cmd.execute()
+        # The wire cutter cage is rebuilt each frame, so re-point every sync.
+        self._live_cmd.cutter = self._preview
+        self._live_cmd.operation = op
+        self._live_cmd.refresh(targets)
 
     # --- geometry application -------------------------------------------
 
