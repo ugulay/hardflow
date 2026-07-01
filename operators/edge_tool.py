@@ -99,8 +99,8 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
         self.locked = True
         self._lock_mouse_x = co[0]
         self._scale = max(1e-4, max(self.obj.dimensions) / 400.0)
-        self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
-        self._bevel_keys = self._compute_keys()
+        self._begin_edit()                        # snapshot the pre-bevel mesh
+        self._bevel_keys = self._compute_keys()   # keys from that clean mesh
 
     def _compute_keys(self):
         """The edges to bevel: the picked edge, or its whole loop when L is on
@@ -117,20 +117,20 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
         self.width = grid.snap_scalar(w, get_prefs(context).grid_world, self.snap)
         self.typed = ""
 
-    def _refresh_preview(self):
-        if self._base is None or not self._bevel_keys:
+    def _mutate(self, obj):
+        # Re-bevel the picked edge(s) at the current width -- the edit only; the
+        # session command restores the pre-bevel snapshot first.
+        if not self._bevel_keys or self.width <= 1e-6:
             return
-        geometry.restore_mesh(self.obj, self._base)
-        if self.width > 1e-6:
-            if self.smart:
-                # Smart Bevel: real chamfer + support/holding loops + n-gon clean,
-                # the topology-preserving hard-surface path (EXPERIMENTAL).
-                geometry.smart_bevel_edges(
-                    self.obj, self._bevel_keys, self.width, self.segments,
-                    support=True, tightness=self.tightness, clean_ngons=True)
-            else:
-                geometry.bevel_object_edges(self.obj, self._bevel_keys,
-                                            self.width, self.segments)
+        if self.smart:
+            # Smart Bevel: real chamfer + support/holding loops + n-gon clean,
+            # the topology-preserving hard-surface path (EXPERIMENTAL).
+            geometry.smart_bevel_edges(
+                obj, self._bevel_keys, self.width, self.segments,
+                support=True, tightness=self.tightness, clean_ngons=True)
+        else:
+            geometry.bevel_object_edges(obj, self._bevel_keys,
+                                        self.width, self.segments)
 
     def _set_value(self, v):
         self.width = max(0.0, v)
@@ -223,8 +223,7 @@ class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
         self.locked = True
         self.slide = 0.0
         self._lock_mouse_x = co[0]
-        self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
-        self._refresh_preview()      # show the loop straight away
+        self._begin_edit()           # snapshot + insert the loop straight away
 
     def _update_drag(self, context, co):
         # Drag horizontally to slide a single inserted loop along its ring; full
@@ -233,11 +232,12 @@ class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
             self.slide = max(-1.0, min(1.0, (co[0] - self._lock_mouse_x) / 250.0))
         self.typed = ""
 
-    def _refresh_preview(self):
-        if self._base is None or self._edge_key is None:
+    def _mutate(self, obj):
+        # Re-insert the loop(s) at the current count/slide -- the edit only; the
+        # session command restores the pre-cut snapshot first.
+        if self._edge_key is None:
             return
-        geometry.restore_mesh(self.obj, self._base)
-        geometry.loop_cut(self.obj, self._edge_key, self.cuts, self.slide)
+        geometry.loop_cut(obj, self._edge_key, self.cuts, self.slide)
 
     def _set_value(self, v):
         try:

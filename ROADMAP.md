@@ -578,12 +578,14 @@ tools instead. All pure math is unit-tested; the bpy paths add headless coverage
       5.1.2 (axis aligns to the clicked edge within ~0.02deg); headless
       `test_face_edge_tangent_near_point`.
 
-## v1.14 — Super Modeling Mode (in progress)
+## v1.14 — Super Modeling Mode
 Evolve the toolkit toward SketchUp fluidity + a pro hard-surface pipeline on three
 foundation layers, each fitting the one-directional (ui/ops → core) architecture.
-Landed items are syntax + pure + headless verified (70 pure + 89 headless); the
-modal GUI is tracked in `tests/manual_checklist.md` §16/§20. Design + status:
-`docs/hardflow_mode_plan.md`, `docs/command_refactor.md`.
+All three layers are now landed; only Smart Bevel's exact support-loop placement
+stays EXPERIMENTAL pending a live subdivision-tuning pass. Landed items are syntax
++ pure + headless verified (70 pure + 105 headless, run live against a standalone
+`bpy` build); the modal GUI is tracked in `tests/manual_checklist.md` §16/§20.
+Design + status: `docs/hardflow_mode_plan.md`, `docs/command_refactor.md`.
 
 **Shadowing Engine** — shadow native tools instead of wrapping them (a modal
 operator can't intercept another modal's events):
@@ -594,9 +596,13 @@ operator can't intercept another modal's events):
       (`HARDFLOW_OT_mode_knife`).
 - [x] **Extrude verb** — draw a footprint, PgUp/PgDn depth, build a new prism solid
       (`HARDFLOW_OT_mode_extrude` → `geometry.build_prism`). Header menu ▸ Edit.
-- [ ] Promote the richer SURFACE / EDGES planes from `draw_cut._plane_basis` onto
-      the shared shell; one keymap + pie slot to enter the mode with `Tab` cycling
-      the active verb.
+- [x] **SURFACE plane + Tab verb cycle + entry point** — the shell's plane cycle
+      gained **SURFACE** (aligned to the face under the first click, promoted from
+      `draw_cut._surface_basis_at`; EDGES stays Edit-Mode-only, so it does not apply
+      to this Object-Mode shell), `Tab` switches the active verb (Knife ↔ Extrude)
+      in-session (like `draw_cut`'s boolean-mode Tab), and the mode is entered from a
+      **Ctrl+Shift+X** keymap (rebindable) + an **Edit pie** slot. Headless
+      `test_mode_shell_verb_and_plane_cycle`.
 
 **Per-modal atomic macro (Command-Pattern undo)** — the fix for "undo crashes in
 long boolean chains":
@@ -607,9 +613,18 @@ long boolean chains":
       (`operators/base.py`); a modal session commits as ONE Blender undo step.
 - [x] **Atomic boolean chain** — `BooleanCutCommand`/`boolean_chain`: N cutters as
       an all-or-nothing MacroCommand (headless `test_boolean_chain_command_atomic`).
-- [ ] Adopt the CommandManager in the shipping `_FaceDragModal` tools (Push/Pull,
-      Offset, Edge Bevel, Loop Cut) and wire `boolean_chain` into `draw_cut`'s
-      destructive apply — mechanical, but wants a live pass first.
+- [x] **CommandManager adopted in the shipping tools** — the shared
+      `_FaceDragModal` (Push/Pull, Offset, Edge Bevel, Loop Cut) now runs its live
+      preview through a per-session `CommandManager` + `base.MeshSnapshotCommand`
+      (`_begin_edit` snapshots + applies, `_refresh_preview` re-applies via the
+      command, cancel = `undo_all`, commit = `clear` → one Blender undo step); each
+      tool supplies `_mutate` instead of its own `_refresh_preview`. `draw_cut`'s
+      `_apply_destructive` now applies the cutter(s) through an atomic
+      `MacroCommand` of `BooleanCutCommand`s, so a multi-target CUT/MAKE or a SLICE
+      rolls back cleanly on a mid-chain solver failure (no half-cut target / spare
+      slice duplicate). Headless `test_facetool_command_adoption_structure`,
+      `test_facetool_begin_edit_lifecycle`,
+      `test_draw_cut_apply_destructive_atomic_chain`.
 
 **Smart Topology** — beyond a plain chamfer:
 - [x] **Smart Bevel support loops** — `core/bevel.support_loop_positions` (pure) +

@@ -61,7 +61,7 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         self.typed = ""
         self.locked = True
         geometry.flush_edit_mesh(self.obj)   # sync selection before snapshot
-        self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+        self._begin_edit(restore=geometry.restore_edit_mesh)
         return True
 
     def _lock_face(self, context, co):
@@ -75,7 +75,7 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         self.thickness = 0.0
         self.typed = ""
         self.locked = True
-        self._base = geometry.snapshot_mesh(self.obj, self._snapshot_name)
+        self._begin_edit()
         self._capture_offset_inference()
 
     def _capture_offset_inference(self):
@@ -115,26 +115,23 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
 
     # --- dragging / apply ------------------------------------------------
 
-    def _refresh_preview(self):
-        """Show the real inset (and, in the EXTRUDE phase, the extruded inner
-        face) live: restore the snapshot, then re-apply. Routes through the
-        edit-mesh in Edit Mode, the object mesh otherwise."""
-        if self._base is None:
+    def _mutate(self, obj):
+        """Re-inset the locked face (and, in the EXTRUDE phase, extrude the inner
+        face) by the current value -- the edit only; the session command restores
+        the snapshot first. Routes through the edit-mesh in Edit Mode."""
+        if self.thickness <= 1e-6:
             return
         if self.edit:
-            geometry.restore_edit_mesh(self.obj, self._base)
-            if self.phase == 'EXTRUDE' and self.thickness > 1e-6:
-                geometry.edit_inset_extrude_faces(self.obj, self.thickness,
+            if self.phase == 'EXTRUDE':
+                geometry.edit_inset_extrude_faces(obj, self.thickness,
                                                   self._extrude_vec())
-            elif self.thickness > 1e-6:
-                geometry.edit_inset_faces(self.obj, self.thickness)
-            return
-        geometry.restore_mesh(self.obj, self._base)
-        if self.phase == 'EXTRUDE' and self.thickness > 1e-6:
-            geometry.inset_extrude_faces(self.obj, [self.face_index],
+            else:
+                geometry.edit_inset_faces(obj, self.thickness)
+        elif self.phase == 'EXTRUDE':
+            geometry.inset_extrude_faces(obj, [self.face_index],
                                          self.thickness, self._extrude_vec())
-        elif self.thickness > 1e-6:
-            geometry.inset_faces(self.obj, [self.face_index], self.thickness)
+        else:
+            geometry.inset_faces(obj, [self.face_index], self.thickness)
 
     def _extrude_vec(self):
         """Object-local extrude vector for the inner face: the face normal scaled

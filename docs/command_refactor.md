@@ -6,9 +6,13 @@ step-by-step refactoring proposal for the modal tools — without breaking the
 working machinery.*
 
 Status: `operators/base.py` and `core/geometry.bisect_plane` are **landed and
-tested** (pure + headless). The `draw_cut` refactor below is a **proposal** with
-runnable example blocks, not an applied change — the monolith stays intact until
-each step is validated live.
+tested** (pure + headless). The `_FaceDragModal` adoption (§3 Q1) and the
+`draw_cut` boolean-chain step (§4 Step 1) are **now landed and verified** against a
+standalone `bpy` build — the shared preview runs through a per-session
+`CommandManager` + `MeshSnapshotCommand`, and `draw_cut._apply_destructive` applies
+its cutter(s) as an atomic `MacroCommand`. Steps 2–3 of the `draw_cut` proposal
+(placement points → `PlacePointCommand`, live cutter preview → `MeshSnapshotCommand`)
+remain optional follow-ups; the monolith is otherwise intact.
 
 ---
 

@@ -81,6 +81,14 @@ class MeshSnapshotCommand(HardFlowCommand):
         self._restore = restore or geometry.restore_mesh
         self._snap = None
 
+    @property
+    def snapshot(self):
+        """The captured 'before' mesh datablock (None until the first execute).
+        Exposed so a modal tool can read the pre-edit geometry -- e.g. to build
+        drag inference candidates -- from the same snapshot the command owns,
+        instead of keeping a second copy."""
+        return self._snap
+
     def _ensure_snapshot(self):
         if self._snap is None:
             self._snap = self._snapshot(self.obj, self._snapshot_name)

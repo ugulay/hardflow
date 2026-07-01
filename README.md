@@ -79,12 +79,13 @@ price tag.
   **Loop Cut** (pick an edge, insert an edge loop) — edge work without entering
   Edit Mode. All the direct-modeling tools also pick **through generative
   modifiers** (subdivision, etc.).
-- **HardFlow Mode** — a streamlined "shadowing" draw mode that owns its own modal
-  loop (it never invokes Blender's native tools): draw a snapped polyline on the
-  Ghost Grid, then **Knife** it onto a mesh or **Extrude** it into a new solid.
-  `←/→` cycle the construction plane (VIEW / X / Y / Z), Backspace steps a point
-  back, and the whole session commits as a **single atomic undo step** (a per-modal
-  Command-Pattern journal); Esc rolls the entire session back.
+- **HardFlow Mode** (**Ctrl+Shift+X**) — a streamlined "shadowing" draw mode that
+  owns its own modal loop (it never invokes Blender's native tools): draw a snapped
+  polyline on the Ghost Grid, then **Knife** it onto a mesh or **Extrude** it into a
+  new solid, with **`Tab`** switching verb in-session. `←/→` cycle the construction
+  plane (VIEW / **SURFACE** / X / Y / Z), Backspace steps a point back, and the
+  whole session commits as a **single atomic undo step** (a per-modal Command-
+  Pattern journal); Esc rolls the entire session back.
 - **Construction grid** — drop a wire reference grid at the 3D cursor on the
   XY / XZ / YZ plane to model against (a construction plane); spacing
   follows the same world grid as the snap tools.
@@ -116,11 +117,12 @@ price tag.
 Every roadmap feature through **v1.13**, grouped by the paid tool whose workflow
 it brings to Blender for free. The right column points at the implementing module.
 
-> **Super Modeling Mode (in progress, Unreleased)** — a SketchUp-fluidity /
-> pro-pipeline evolution on three new layers: the **Shadowing Engine** (HardFlow
-> Mode verbs), a **per-modal atomic macro** (Command-Pattern undo), and **Smart
-> Topology** (Smart Bevel + boolean n-gon cleanup). See the *Super Modeling Mode*
-> subsection at the end of the matrix.
+> **Super Modeling Mode (Unreleased)** — a SketchUp-fluidity / pro-pipeline
+> evolution on three new layers: the **Shadowing Engine** (HardFlow Mode verbs,
+> now with a SURFACE plane + `Tab` verb cycle + keymap/pie entry), a **per-modal
+> atomic macro** (Command-Pattern undo, now driving the direct-modeling tools and
+> the boolean cut chain), and **Smart Topology** (Smart Bevel + boolean n-gon
+> cleanup). See the *Super Modeling Mode* subsection at the end of the matrix.
 
 ### Boolean & drawing
 
@@ -260,20 +262,22 @@ it brings to Blender for free. The right column points at the implementing modul
 | HUD measurement | Drawn shape size in meters (Box W×H, Circle r/d, Poly segments) | `ui/draw.py` |
 | Customizable keymap | Rebind shortcuts from the standard Blender keymap editor | `keymaps.py` |
 
-### Super Modeling Mode (in progress)
+### Super Modeling Mode
 
-*A SketchUp-fluidity / pro hard-surface-pipeline evolution. Three foundation
-layers are landed (syntax + pure + headless verified; modal GUI in the manual
-checklist); deeper adoption is deferred pending live-Blender validation — see
-`docs/hardflow_mode_plan.md`.*
+*A SketchUp-fluidity / pro hard-surface-pipeline evolution on three foundation
+layers, all landed (syntax + pure + headless verified — the headless suite runs
+live against a standalone `bpy` build; the modal GUI is in the manual checklist).
+Only Smart Bevel's exact support-loop placement is still EXPERIMENTAL, pending a
+live subdivision-tuning pass — see `docs/hardflow_mode_plan.md`.*
 
 | Feature | What it does | Where |
 |---------|--------------|-------|
 | Shadowing Engine | HardFlow Mode owns its own modal loop and routes the raw mouse through the core snap chain to bmesh — it never invokes Blender's native modal tools | `operators/hardflow_mode.py _HardflowModeModal` |
 | HardFlow Mode: Knife | Draw a snapped polyline on the Ghost Grid, score it onto the active mesh | `operators/hardflow_mode.py HARDFLOW_OT_mode_knife` |
 | HardFlow Mode: Extrude | Draw a footprint, PgUp/PgDn depth, build a new prism solid along the plane normal | `operators/hardflow_mode.py HARDFLOW_OT_mode_extrude`, `core/geometry.py build_prism` |
-| Per-modal atomic macro | A tool session's edits live in a Command journal and commit as **one** Blender undo step; `Backspace` steps back, `Esc` rolls the session back | `core/command.py`, `operators/base.py MeshSnapshotCommand` |
-| Atomic boolean chain | N cutters applied as an all-or-nothing MacroCommand — a mid-chain failure rolls the whole chain back (no half-baked cutters) | `operators/base.py BooleanCutCommand/boolean_chain` |
+| Mode plane + verb cycle | The shell cycles VIEW / **SURFACE** (aligned to the face under the first click) / X / Y / Z, and `Tab` switches the active verb (Knife ↔ Extrude) in-session; enter it from **Ctrl+Shift+X** or the **Edit pie** | `operators/hardflow_mode.py _surface_basis_at/_cycle_verb`, `keymaps.py`, `ui/pie.py` |
+| Per-modal atomic macro | A tool session's edits live in a Command journal and commit as **one** Blender undo step; `Backspace` steps back, `Esc` rolls the session back. Now drives the direct-modeling tools' live preview (Push/Pull, Offset, Edge Bevel, Loop Cut) | `core/command.py`, `operators/base.py MeshSnapshotCommand`, `operators/face_tool.py` |
+| Atomic boolean chain | N cutters applied as an all-or-nothing MacroCommand — a mid-chain failure rolls the whole chain back (no half-baked cutters, no orphaned slice piece). Wired into the draw-cut destructive apply | `operators/base.py BooleanCutCommand/boolean_chain`, `operators/draw_cut.py _apply_destructive` |
 | Smart Bevel & support loops | Bevel + support/holding loops so the edge survives Subdivision (`S` on Edge Bevel, `-`/`=` tightness) — EXPERIMENTAL | `core/bevel.py support_loop_positions`, `core/geometry.py smart_bevel_edges` |
 | Boolean n-gon cleanup | Opt-in: re-quad the n-gons a boolean cut / Apply Cutters leaves (N-panel ▸ Cutter Options ▸ Topology) | `core/geometry.py dissolve_boolean_ngons`, `preferences.py cut_dissolve_ngons` |
 
@@ -288,6 +292,7 @@ Select a mesh in Object Mode:
 
 - **Alt+Q** → pie menu (all tools)
 - **Ctrl+Shift+D** → direct drawing tool
+- **Ctrl+Shift+X** → HardFlow Mode (Knife verb; `Tab` switches to Extrude)
 
 In drawing mode:
 
@@ -334,10 +339,13 @@ Offset, the draw tool, and snapping also work in **Edit Mode** (v1.3).
 > dice / clean modifier tools and the step / taper / knurl greeble; use the
 > Object-Mode Edge Bevel / Loop Cut and Blender's own modifiers instead.
 
-**HardFlow Mode:** header menu ▸ Edit ▸ **"HardFlow Mode: Knife"** / **"…:
-Extrude"** (or F3). Click to place snapped points; `←/→` cycle the construction
-plane, Backspace steps back, `Z` / Enter / double-click commit, Esc cancels. In
-Extrude, **PgUp / PgDn** set the depth. The whole session is one undo step.
+**HardFlow Mode:** **Ctrl+Shift+X**, pie ▸ Edit ▸ **HardFlow Mode**, or header
+menu ▸ Edit ▸ **"HardFlow Mode: Knife"** / **"…: Extrude"** (or F3). Click to place
+snapped points; `←/→` cycle the construction plane (VIEW / **SURFACE** — locked to
+the face under the first click / X / Y / Z), **`Tab`** switches the active verb
+(Knife ↔ Extrude) without leaving the session, Backspace steps back, `Z` / Enter /
+double-click commit, Esc cancels. In Extrude, **PgUp / PgDn** set the depth. The
+whole session is one undo step.
 
 **Smart Bevel & topology (Super Modeling Mode):** in **Edge Bevel** press `S` to
 add support/holding loops so the bevel survives Subdivision (`-` / `=` adjust how
@@ -384,7 +392,7 @@ hardflow/
 │   ├── boolean_ops.py      # boolean from selected objects
 │   ├── cutters.py          # non-destructive cutter management (apply/select/remove)
 │   ├── pipe.py             # pipe (round/square/rect) + cable/rope + sweep (L/U/T/I)
-│   ├── face_tool.py        # shared modal base for the face-drag tools (_FaceDragModal)
+│   ├── face_tool.py        # shared modal base for the face-drag tools (_FaceDragModal, command-backed preview)
 │   ├── push_pull.py        # Push/Pull — copy/repeat/inference (Object + Edit)
 │   ├── offset.py           # Offset — repeat + recess/panel chain (Object + Edit)
 │   ├── edge_tool.py        # Object-Mode Edge Bevel + Loop Cut (shared _EdgePickModal)

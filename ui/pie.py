@@ -98,6 +98,8 @@ class HARDFLOW_MT_pie_edit(Menu):
         _draw(pie, "mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL')
         _draw(pie, "mesh.hardflow_loop_cut", "Loop Cut", 'MOD_MULTIRES')
         _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')
+        # HardFlow Mode (enters on Knife; Tab -> Extrude in-session).
+        _draw(pie, "mesh.hardflow_mode_knife", "HardFlow Mode", 'MOD_LINEART')
 
 
 class HARDFLOW_MT_pie_curves(Menu):

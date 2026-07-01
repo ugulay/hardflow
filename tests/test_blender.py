@@ -2112,6 +2112,133 @@ def test_boolean_chain_command_atomic():
     bad.free()
 
 
+def test_mesh_snapshot_command_snapshot_property():
+    # The public snapshot accessor lets a modal tool read the pre-edit mesh from
+    # the same datablock the command owns (used by _FaceDragModal inference).
+    _reset()
+    from hardflow.operators import base
+    ob = _add_cube("SnapProp", size=2.0)
+    cmd = base.MeshSnapshotCommand(ob, lambda o: None, label="noop")
+    assert cmd.snapshot is None                       # before execute
+    cmd.execute()
+    assert cmd.snapshot is not None                   # captured on first apply
+    assert len(cmd.snapshot.vertices) == len(ob.data.vertices)
+    cmd.free()
+    assert cmd.snapshot is None                       # dropped on free
+
+
+def test_facetool_command_adoption_structure():
+    # The _FaceDragModal tools now share the base MeshSnapshotCommand-backed
+    # preview: the base owns _begin_edit / _refresh_preview, and each subclass
+    # supplies _mutate (the edit WITHOUT the restore) instead of its own
+    # _refresh_preview. Guard the contract so a future edit can't half-migrate it.
+    from hardflow.operators import face_tool, push_pull, offset, edge_tool
+    assert hasattr(face_tool._FaceDragModal, "_begin_edit")
+    assert hasattr(face_tool._FaceDragModal, "_refresh_preview")
+    for cls in (push_pull.HARDFLOW_OT_push_pull, offset.HARDFLOW_OT_offset,
+                edge_tool.HARDFLOW_OT_edge_bevel, edge_tool.HARDFLOW_OT_loop_cut):
+        assert "_mutate" in cls.__dict__, "%s must supply _mutate" % cls.__name__
+        assert "_refresh_preview" not in cls.__dict__, \
+            "%s must reuse the base _refresh_preview" % cls.__name__
+
+
+def test_facetool_begin_edit_lifecycle():
+    # The _FaceDragModal preview lifecycle on a real mesh via a stand-in `self`
+    # (the modal shell itself needs a viewport; this covers the snapshot/restore
+    # composition it now delegates to the per-session command): _begin_edit
+    # snapshots + applies, _refresh_preview never stacks, undo_all restores.
+    _reset()
+    import types
+    from hardflow.operators import face_tool
+    from hardflow.core import command
+    ob = _add_cube("FaceTool", size=2.0)
+    before = len(ob.data.vertices)
+
+    def _slice(o):
+        geometry.bisect_plane(o, Vector((0, 0, 0)), Vector((0, 0, 1)))
+
+    s = types.SimpleNamespace(obj=ob, _snapshot_name="hf_test",
+                              _commands=command.CommandManager(),
+                              _edit=None, _base=None)
+    s._mutate = _slice
+    face_tool._FaceDragModal._begin_edit(s)          # snapshot + first apply
+    assert s._edit is not None and s._base is not None
+    applied = len(ob.data.vertices)
+    assert applied > before
+    face_tool._FaceDragModal._refresh_preview(s)     # drag frame: restore + re-apply
+    assert len(ob.data.vertices) == applied          # never stacked
+    s._commands.undo_all()                           # cancel -> restore snapshot
+    assert len(ob.data.vertices) == before
+    s._edit.free()
+
+
+def test_mode_shell_verb_and_plane_cycle():
+    # HardFlow Mode shell: SURFACE promoted onto the plane cycle, and Tab cycles
+    # the active verb (Knife <-> Extrude) in-session. Both are plain list walks;
+    # call them unbound on a stand-in `self` (an Operator subclass can't be
+    # __new__'d without a live invocation) so they check without a viewport.
+    import types
+    from hardflow.operators import hardflow_mode as hm
+    assert "SURFACE" in hm._PLANES
+    assert hm._VERBS == ("KNIFE", "EXTRUDE")
+    assert hm.HARDFLOW_OT_mode_knife._START_VERB == "KNIFE"
+    assert hm.HARDFLOW_OT_mode_extrude._START_VERB == "EXTRUDE"
+    shell = hm._HardflowModeModal
+    fake = types.SimpleNamespace(_active_verb="KNIFE", verb="Knife", _plane="VIEW")
+    shell._cycle_verb(fake)
+    assert fake._active_verb == "EXTRUDE" and fake.verb == "Extrude"
+    shell._cycle_verb(fake)
+    assert fake._active_verb == "KNIFE" and fake.verb == "Knife"
+    # Plane cycle steps VIEW -> SURFACE -> ... and wraps.
+    shell._cycle_plane(fake, 1)
+    assert fake._plane == "SURFACE"
+    fake._plane = "VIEW"
+    shell._cycle_plane(fake, -1)
+    assert fake._plane == hm._PLANES[-1]
+
+
+def test_draw_cut_apply_destructive_atomic_chain():
+    # draw_cut._apply_destructive now applies the cutter through an atomic
+    # base.MacroCommand of BooleanCutCommands. Call it unbound with a stand-in
+    # `self` (mode + report/_report_boolean stubs) to prove the wiring: CUT on
+    # multiple targets cuts them all and removes the cutter; SLICE keeps the
+    # carved piece.
+    _reset()
+    import types
+    from hardflow.operators import draw_cut
+    hardflow.register()
+    try:
+        apply_destructive = draw_cut.HARDFLOW_OT_draw._apply_destructive
+        noop = lambda *a, **k: None
+
+        # CUT across two targets with one cutter (multi-object path). The cutter
+        # sits at the corner shared by both targets so its DIFFERENCE clips each.
+        t1 = _add_cube("AtomT1", size=2.0, location=(0.0, 0.0, 0.0))
+        t2 = _add_cube("AtomT2", size=2.0, location=(2.0, 2.0, 2.0))
+        cutter = _add_cube("AtomCut", size=1.0, location=(1.0, 1.0, 1.0))
+        v1, v2 = len(t1.data.vertices), len(t2.data.vertices)
+        fake = types.SimpleNamespace(mode='CUT', report=noop,
+                                     _report_boolean=noop)
+        apply_destructive(fake, bpy.context, [t1, t2], cutter, 'FAST')
+        assert len(t1.data.vertices) != v1 and len(t2.data.vertices) != v2
+        assert "AtomCut" not in bpy.data.objects        # cutter cleaned up
+
+        # SLICE: the target is carved and a second (intersected) piece is kept.
+        target = _add_cube("SliceT", size=2.0, location=(8.0, 0.0, 0.0))
+        _activate(target)
+        cutter = _add_cube("SliceCut", size=1.0, location=(8.5, 0.5, 0.5))
+        objs_before = set(bpy.data.objects.keys())
+        fake = types.SimpleNamespace(mode='SLICE', report=noop,
+                                     _report_boolean=noop)
+        apply_destructive(fake, bpy.context, [target], cutter, 'FAST')
+        assert "SliceCut" not in bpy.data.objects        # cutter cleaned up
+        # A carved-off duplicate survives the successful slice.
+        new_objs = set(bpy.data.objects.keys()) - objs_before - {"SliceCut"}
+        assert new_objs, "slice did not keep the carved piece"
+    finally:
+        hardflow.unregister()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

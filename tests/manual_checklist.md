@@ -533,10 +533,21 @@ command journal (`core/command.py`) and the bpy-aware command layer
 run on the shared `_HardflowModeModal` shell, so the snap/plane/undo checks below
 apply to each — verify them once on Knife, then spot-check on Extrude.
 
+**Entry points:**
+- [ ] **`Ctrl+Shift+X`** (rebindable in Preferences ▸ Keymap) enters HardFlow Mode
+      on the **Knife** verb; **pie ▸ Edit ▸ HardFlow Mode** does the same.
+
 **Shared shell (either verb):**
-- [ ] **`←` / `→`** cycles the construction **plane** (VIEW → X → Y → Z; the HUD
-      shows `plane …`). Drawn points snap onto the chosen plane through the object
-      origin (or the 3D cursor when nothing is active).
+- [ ] **`←` / `→`** cycles the construction **plane** (VIEW → **SURFACE** → X → Y →
+      Z; the HUD shows `plane …`). Drawn points snap onto the chosen plane through
+      the object origin (or the 3D cursor when nothing is active).
+- [ ] **SURFACE plane**: cycle to it, then the **first click** locks the plane to
+      the face under the cursor (aligned to the nearest face edge); the rest of the
+      footprint stays on that plane. When the ray misses geometry the HUD shows
+      `SURFACE(miss)` and it falls back to a view-facing plane.
+- [ ] **`Tab`** switches the active **verb** in-session (Knife ↔ Extrude) without
+      losing the points placed so far; the HUD label + help line update (Extrude
+      gains the `depth … (PgUp/PgDn)` readout).
 
 **HardFlow Mode Knife** (`mesh.hardflow_mode_knife`, F3 → "HardFlow Mode Knife"):
 
@@ -570,12 +581,16 @@ Setup: any scene (an active object sets the plane origin; else the 3D cursor).
       undo step). Watch for: a degenerate (self-crossing / collinear) footprint —
       it should report "degenerate footprint", not crash.
 
-**Command adoption spot-check** — when a production modal tool later adopts
-`base.MeshSnapshotCommand` (see §3 of the refactor doc), verify its **Esc-cancel**
-restores the mesh exactly and a **commit** leaves no `hf_*` snapshot mesh orphaned
-in the file (Blender ▸ Outliner ▸ Blender File ▸ Meshes). The same applies to a
-boolean chain wrapped in `base.boolean_chain`: a forced mid-chain failure must
-leave the target **unchanged** (atomic rollback), not half-cut.
+**Command adoption spot-check** — the `_FaceDragModal` tools (Push/Pull, Offset,
+Edge Bevel, Loop Cut) now run their live preview through
+`base.MeshSnapshotCommand` + a per-session `CommandManager`, and
+`draw_cut._apply_destructive` applies its cutter(s) through `base.boolean_chain`.
+For each direct-modeling tool verify its **Esc-cancel** restores the mesh exactly
+and a **commit** leaves no `hf_*` snapshot mesh orphaned in the file (Blender ▸
+Outliner ▸ Blender File ▸ Meshes), and that a **single `Ctrl+Z`** reverts the whole
+edit. For the boolean chain: a multi-object **Cut** across several selected meshes,
+or a **Slice**, must commit every piece or (on a forced solver failure) leave every
+target **unchanged** — never half-cut, never an orphaned slice duplicate.
 
 ---
 

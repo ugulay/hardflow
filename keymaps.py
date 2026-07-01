@@ -16,6 +16,7 @@ addon_keymaps = []
 _OWNED = (
     ('wm.call_menu_pie', 'HARDFLOW_MT_pie'),
     ('mesh.hardflow_draw', None),
+    ('mesh.hardflow_mode_knife', None),
 )
 
 
@@ -24,7 +25,7 @@ def register_keymaps():
     kc = wm.keyconfigs.addon
     if not kc:
         return
-    from .operators import draw_cut
+    from .operators import draw_cut, hardflow_mode
     from .ui import pie
 
     km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
@@ -37,6 +38,13 @@ def register_keymaps():
     # Direct cut -> Ctrl+Shift+D
     kmi = km.keymap_items.new(
         draw_cut.HARDFLOW_OT_draw.bl_idname, 'D', 'PRESS', ctrl=True, shift=True)
+    addon_keymaps.append((km, kmi))
+
+    # HardFlow Mode -> Ctrl+Shift+X. Enters on the Knife verb; Tab switches to
+    # Extrude in-session. (Not a default Blender 3D-View shortcut; rebindable.)
+    kmi = km.keymap_items.new(
+        hardflow_mode.HARDFLOW_OT_mode_knife.bl_idname, 'X', 'PRESS',
+        ctrl=True, shift=True)
     addon_keymaps.append((km, kmi))
 
 
