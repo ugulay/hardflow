@@ -1851,6 +1851,23 @@ def test_hardflow_mode_slice_splits_into_two():
     assert abs(_mesh_volume(other) - 2.0) < 0.3, _mesh_volume(other)
 
 
+def test_hardflow_mode_knife_scores_along_plane_normal():
+    # v1.17: Knife sweeps the score along the CONSTRUCTION-PLANE normal (not the
+    # camera view), so a footprint on the +Z face scores straight into the top
+    # face. Now viewport-free (reads self._basis), so it runs headless.
+    _reset()
+    target = _add_cube("K", size=2.0)
+    bpy.context.view_layer.objects.active = target
+    v0 = len(target.data.vertices)
+    stub = _mode_stub(_square_footprint())      # basis normal = +Z
+    msg = stub._build_knife(bpy.context)
+    stub._commands.clear()
+    for c in stub._mesh_cmds:
+        c.free()
+    assert "knifed" in msg, msg
+    assert len(target.data.vertices) > v0       # the score cut new geometry in
+
+
 def test_conform_trim_decal():
     _reset()
     target = _add_cube("Target", size=2.0)

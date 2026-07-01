@@ -5,6 +5,17 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+### Fixed
+- **HardFlow Mode Knife now follows the construction plane.** The Knife verb
+  always swept the score along the camera **view** direction (Blender
+  "Knife Project" style), so on the SURFACE / X / Y / Z plane it cut through the
+  mesh skewed to the viewing angle instead of into the plane you drew on --
+  inconsistent with Extrude and the boolean verbs, which use the plane normal. It
+  now sweeps along the **construction-plane normal** (`self._basis`). On the VIEW
+  plane the normal *is* the view direction, so the default knife-project-from-view
+  is unchanged; SURFACE/axis planes now score straight into the plane. (Also makes
+  `_build_knife` viewport-free, so it's covered headless.)
+
 ## [1.17.0] — 2026-07-02
 
 Draw-to-cut booleans in HardFlow Mode + trim-sheet background removal. The pure

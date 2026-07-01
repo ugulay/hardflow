@@ -324,10 +324,16 @@ class _HardflowModeModal:
             raise RuntimeError("Knife needs an active mesh (Tab to Extrude)")
         mw_inv = obj.matrix_world.inverted_safe()
         local = [mw_inv @ w for w in self.world_points]
-        view_dir = mw_inv.to_3x3() @ raycast.view_direction(context.region_data)
+        # Sweep the score along the CONSTRUCTION-PLANE normal (self._basis), so a
+        # footprint drawn on the SURFACE / X / Y / Z plane scores straight into
+        # that plane -- consistent with Extrude and the boolean verbs, instead of
+        # skewing with the camera. On the VIEW plane the plane normal *is* the view
+        # direction, so the familiar knife-project-from-view is unchanged.
+        _o, _r, _u, normal = self._basis
+        knife_dir = (mw_inv.to_3x3() @ normal).normalized()
 
         def _score(o):
-            geometry.knife_polygon(o, local, view_dir)
+            geometry.knife_polygon(o, local, knife_dir)
 
         knife = base.MeshSnapshotCommand(obj, _score, label="Knife",
                                          snapshot_name="hf_mode_knife")
