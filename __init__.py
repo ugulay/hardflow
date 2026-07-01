@@ -21,6 +21,7 @@ _classes = (
     edge_tool.HARDFLOW_OT_edge_bevel,
     edge_tool.HARDFLOW_OT_loop_cut,
     hardflow_mode.HARDFLOW_OT_mode_knife,
+    hardflow_mode.HARDFLOW_OT_mode_extrude,
     construction.HARDFLOW_OT_add_primitive,
     construction.HARDFLOW_OT_add_guide,
     construction.HARDFLOW_OT_add_grid,

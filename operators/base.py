@@ -8,6 +8,7 @@
 # the one-directional layer rule (ops -> core) is intact.
 from ..core import command as _command
 from ..core import geometry
+from ..core import boolean
 
 
 class HardFlowCommand(_command.Command):
@@ -113,3 +114,53 @@ class MeshSnapshotCommand(HardFlowCommand):
         Idempotent: a second call is a no-op."""
         geometry.free_mesh(self._snap)
         self._snap = None
+
+
+class BooleanCutCommand(MeshSnapshotCommand):
+    """One destructive boolean step as an atomic, reversible command: snapshot the
+    target, run `core.boolean.robust_boolean`, and RAISE when the solver
+    ultimately fails so a MacroCommand of several cuts rolls the whole chain back
+    (never leaving half the cutters baked). This is the operator-layer answer to
+    "undo crashes in long boolean chains" -- the intermediate states are owned by
+    one command, and N of them commit or roll back all-or-nothing.
+
+    The last successful cut's outcome is kept on `.message` / `.solver_used` so
+    the operator can still report a solver fallback after the macro commits."""
+
+    label = "Boolean cut"
+
+    def __init__(self, context, target, cutter, operation='DIFFERENCE',
+                 solver='EXACT', label=None, snapshot_name="hf_boolean"):
+        self.context = context
+        self.cutter = cutter
+        self.operation = operation
+        self.solver = solver
+        self.message = ""
+        self.solver_used = None
+        super().__init__(target, self._mutate_boolean,
+                         label=label or self.label, snapshot_name=snapshot_name)
+
+    def _mutate_boolean(self, target):
+        ok, used, msg = boolean.robust_boolean(
+            self.context, target, self.cutter, self.operation, self.solver)
+        self.message = msg
+        self.solver_used = used
+        if not ok:
+            # robust_boolean already cleaned up its own half-added modifier and
+            # reported (False, ...) rather than raising; we escalate to an
+            # exception so the enclosing MacroCommand triggers atomic rollback.
+            raise RuntimeError(msg)
+
+
+def boolean_chain(context, target, cutters, operation='DIFFERENCE',
+                  solver='EXACT', label="Boolean chain"):
+    """Build (but do not execute) a MacroCommand that applies each cutter to
+    `target` as an atomic BooleanCutCommand. `.execute()` commits every cut or, on
+    the first solver failure, rolls the whole chain back and re-raises -- the
+    all-or-nothing boolean chain the modal tools can adopt so a mid-chain failure
+    never strands a partially-cut mesh. Each cut snapshots under a distinct name
+    so their rollbacks don't collide."""
+    cmds = [BooleanCutCommand(context, target, cut, operation, solver,
+                              snapshot_name="hf_boolean_%d" % i)
+            for i, cut in enumerate(cutters)]
+    return _command.MacroCommand(cmds, label=label)

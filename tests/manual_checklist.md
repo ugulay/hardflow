@@ -397,8 +397,17 @@ Setup: a cube in Object Mode, selected/active.
 - [ ] **Enter / click** keeps the bevel; **Esc** rolls the mesh back to the
       original (no change). `Ctrl+Z` reverts in one step.
 - [ ] **`R` repeat** — run again on another edge, press `R` → last width.
+- [ ] **`S` Smart Bevel** ⭐ (EXPERIMENTAL) — lock an edge, drag a width, press
+      `S`: the HUD shows `SMART t=0.5` and the preview adds **support / holding
+      loops** flanking the bevel; **`-` / `=`** lower / raise **tightness** (loops
+      hug the bevel harder). Add a **Subdivision** modifier and confirm the bevel
+      stays crisp (vs. soft with Smart off). Watch for: support loops landing in
+      the wrong spot or a T-junction on a non-quad flank — this is the "tune live"
+      caveat; headless only checks that Smart never *removes* geometry
+      (`test_smart_bevel_edges`).
 - [ ] Headless geometry is covered by `test_nearest_edge_on_face` +
-      `test_bevel_object_edges`; the modal/raycast pick needs this GUI pass.
+      `test_bevel_object_edges` (+ `test_smart_bevel_edges`); the modal/raycast
+      pick needs this GUI pass.
 
 Watch for: picking the wrong edge (the raycast→nearest-edge mapping), and any
 console error on a non-manifold/curved face.
@@ -508,13 +517,20 @@ knurl) sections, the pie has no **Modify** slice, and the header menu has no
 
 ---
 
-## 20. HardFlow Mode ⭐ (new — modal-hijack + Command-Pattern prototype)
+## 20. HardFlow Mode ⭐ (Shadowing Engine — shared shell, Knife + Extrude verbs)
 
 Architecture: `docs/hardflow_mode_plan.md` + `docs/command_refactor.md`. The pure
 command journal (`core/command.py`) and the bpy-aware command layer
-(`operators/base.py`, incl. `MeshSnapshotCommand`) are headless-verified
-(`tests/test_core.py`, `tests/test_blender.py`); only the modal below needs a
-viewport.
+(`operators/base.py`, incl. `MeshSnapshotCommand`, `BooleanCutCommand`,
+`boolean_chain`) are headless-verified (`tests/test_core.py`,
+`tests/test_blender.py`); only the modal verbs below need a viewport. Both verbs
+run on the shared `_HardflowModeModal` shell, so the snap/plane/undo checks below
+apply to each — verify them once on Knife, then spot-check on Extrude.
+
+**Shared shell (either verb):**
+- [ ] **`←` / `→`** cycles the construction **plane** (VIEW → X → Y → Z; the HUD
+      shows `plane …`). Drawn points snap onto the chosen plane through the object
+      origin (or the 3D cursor when nothing is active).
 
 **HardFlow Mode Knife** (`mesh.hardflow_mode_knife`, F3 → "HardFlow Mode Knife"):
 
@@ -533,10 +549,27 @@ Setup: a mesh in Object Mode, selected/active.
 - [ ] After a commit, a **single `Ctrl+Z`** reverts the knife (one atomic undo
       step — the modal never pushes its own per-step undo).
 
+**HardFlow Mode Extrude** (`mesh.hardflow_mode_extrude`, header menu ▸ Edit ▸
+"HardFlow Mode: Extrude", or F3):
+
+Setup: any scene (an active object sets the plane origin; else the 3D cursor).
+- [ ] Same snap marker / `X` snap / `←`/`→` plane / `Backspace` undo behaviour as
+      Knife (shared shell).
+- [ ] **PageUp / PageDown** change the extrude **depth** (HUD shows `depth … m`).
+- [ ] **`Z` / `Enter` / double-click** with ≥3 points builds a **new solid**
+      (prism) from the footprint, extruded along the plane normal; it becomes the
+      active/selected object and the info bar reports the n-gon + depth.
+- [ ] **`Esc`** before committing discards with no new object created.
+- [ ] After a commit, a **single `Ctrl+Z`** removes the whole solid (one atomic
+      undo step). Watch for: a degenerate (self-crossing / collinear) footprint —
+      it should report "degenerate footprint", not crash.
+
 **Command adoption spot-check** — when a production modal tool later adopts
 `base.MeshSnapshotCommand` (see §3 of the refactor doc), verify its **Esc-cancel**
 restores the mesh exactly and a **commit** leaves no `hf_*` snapshot mesh orphaned
-in the file (Blender ▸ Outliner ▸ Blender File ▸ Meshes).
+in the file (Blender ▸ Outliner ▸ Blender File ▸ Meshes). The same applies to a
+boolean chain wrapped in `base.boolean_chain`: a forced mid-chain failure must
+leave the target **unchanged** (atomic rollback), not half-cut.
 
 ---
 

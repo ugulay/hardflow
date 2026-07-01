@@ -840,6 +840,68 @@ def test_edge_loop():
     assert len(loop) == 1 and set(loop[0]) == set(ek), (loop, ek)
 
 
+def test_smart_bevel_edges():
+    # Smart Bevel: bevel one edge, add holding loops, clean n-gons -- all in one
+    # bmesh session. Compared against the plain chamfer, the smart pass never
+    # removes geometry (support loops only add), and reports a structured summary.
+    _reset()
+    top_key = lambda c: geometry.nearest_edge_on_face(
+        c, max(range(len(c.data.polygons)),
+               key=lambda i: c.data.polygons[i].normal.z),
+        Vector((1.0, 0.0, 1.0)))
+
+    plain = _add_cube("PlainBevel", size=2.0)
+    geometry.bevel_object_edges(plain, [top_key(plain)], 0.2, segments=2)
+    plain_v = len(plain.data.vertices)
+
+    cube = _add_cube("SmartBevel", size=2.0)
+    before = len(cube.data.vertices)
+    summary = geometry.smart_bevel_edges(cube, [top_key(cube)], 0.2, segments=2,
+                                         support=True, tightness=0.5)
+    assert summary['beveled'] == 1, summary
+    assert isinstance(summary['supports'], int) and summary['supports'] >= 0
+    assert isinstance(summary['ngons'], int) and summary['ngons'] >= 0
+    assert len(cube.data.vertices) > before, "smart bevel added no geometry"
+    # support loops only ever add geometry over the plain chamfer, never remove it
+    assert len(cube.data.vertices) >= plain_v, (len(cube.data.vertices), plain_v)
+    assert len(cube.data.polygons) > 0, "smart bevel emptied the mesh"
+
+    # width 0 is a no-op that still returns the zeroed summary
+    flat = _add_cube("SmartBevelZero", size=2.0)
+    fv = len(flat.data.vertices)
+    z = geometry.smart_bevel_edges(flat, [top_key(flat)], 0.0)
+    assert z == {'beveled': 0, 'supports': 0, 'ngons': 0}
+    assert len(flat.data.vertices) == fv          # untouched
+    # a bad edge key bevels nothing
+    assert geometry.smart_bevel_edges(cube, [(0, 9000)], 0.2)['beveled'] == 0
+
+
+def test_dissolve_boolean_ngons():
+    # An n-gon (single hexagon face) is triangulated and re-quadded so no face is
+    # left with more than 4 sides; an all-quad cube is reported clean and unchanged.
+    _reset()
+    import bmesh
+    import math as _m
+    me = bpy.data.meshes.new("hex")
+    bm = bmesh.new()
+    verts = [bm.verts.new((_m.cos(a), _m.sin(a), 0.0))
+             for a in [i * _m.tau / 6.0 for i in range(6)]]
+    bm.faces.new(verts)                       # one 6-sided n-gon
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new("Hex", me)
+    bpy.context.collection.objects.link(obj)
+    assert len(obj.data.polygons) == 1 and len(obj.data.polygons[0].vertices) == 6
+    cleaned = geometry.dissolve_boolean_ngons(obj)
+    assert cleaned == 1, cleaned
+    assert max(len(p.vertices) for p in obj.data.polygons) <= 4, "n-gon survived"
+
+    cube = _add_cube("CleanCube", size=2.0)
+    faces_before = len(cube.data.polygons)
+    assert geometry.dissolve_boolean_ngons(cube) == 0     # already quads
+    assert len(cube.data.polygons) == faces_before        # untouched
+
+
 def test_loop_cut():
     # Loop cut on a 3x3 quad grid: the ring of an interior horizontal edge is the
     # full column (4 edges); subdividing it inserts a loop -> +4 verts, +3 faces.
@@ -1775,6 +1837,9 @@ def test_new_operators_registered():
                      "hardflow_export_asset"):
             assert hasattr(bpy.ops.object, name), "missing operator: %s" % name
         assert hasattr(bpy.ops.mesh, "hardflow_edge_weight")
+        # HardFlow Mode shadowing verbs (Knife + Extrude) register on the shell.
+        assert hasattr(bpy.ops.mesh, "hardflow_mode_knife")
+        assert hasattr(bpy.ops.mesh, "hardflow_mode_extrude")
     finally:
         hardflow.unregister()
 
@@ -1971,6 +2036,47 @@ def test_mesh_snapshot_command_in_macro_rolls_back():
         raised = True
     assert raised and not macro.done
     assert len(ob.data.vertices) == before    # 'good' edit was rolled back
+    good.free()
+    bad.free()
+
+
+def test_boolean_chain_command_atomic():
+    # base.boolean_chain: N cutters applied to one target as an atomic macro.
+    _reset()
+    from hardflow.operators import base
+    from hardflow.core import command
+    target = _add_cube("BoolTarget", size=2.0)
+    _activate(target)
+    c1 = _add_cube("Cutter1", size=1.0, location=(1.0, 1.0, 1.0))
+    c2 = _add_cube("Cutter2", size=1.0, location=(-1.0, -1.0, -1.0))
+    v0 = len(target.data.vertices)
+    chain = base.boolean_chain(bpy.context, target, [c1, c2], 'DIFFERENCE')
+    chain.execute()
+    assert chain.done and len(chain) == 2
+    assert len(target.data.vertices) != v0, "boolean chain did not modify target"
+    for c in chain._commands:
+        c.free()
+
+    # Atomic rollback: a chain whose last step raises restores the target fully,
+    # so a failed cut never leaves a half-applied boolean (the crash-safety goal).
+    _reset()
+    target = _add_cube("BoolTarget2", size=2.0)
+    _activate(target)
+    cutter = _add_cube("Cutter3", size=1.0, location=(1.0, 1.0, 1.0))
+    v0 = len(target.data.vertices)
+    good = base.BooleanCutCommand(bpy.context, target, cutter, 'DIFFERENCE')
+
+    def _boom(_o):
+        raise RuntimeError("forced solver failure")
+    bad = base.MeshSnapshotCommand(target, _boom, label="bad")
+    macro = command.MacroCommand([good, bad], label="chain")
+    raised = False
+    try:
+        macro.execute()
+    except RuntimeError:
+        raised = True
+    assert raised and not macro.done
+    assert len(target.data.vertices) == v0, "rollback left the target modified"
     good.free()
     bad.free()
 

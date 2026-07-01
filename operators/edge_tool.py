@@ -83,6 +83,8 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
         self.width = 0.0
         self.segments = 2
         self.loop = False           # L: bevel the whole connected edge loop
+        self.smart = False          # S: Smart Bevel (support loops + n-gon clean)
+        self.tightness = 0.5        # - / = : how hard support loops hug the bevel
         self._edge_key = None       # (vi, vj) edge under cursor / locked
         self._edge_world = None     # (Vector, Vector) world endpoints for drawing
         self._bevel_keys = None     # edges actually beveled (single or loop)
@@ -120,8 +122,15 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
             return
         geometry.restore_mesh(self.obj, self._base)
         if self.width > 1e-6:
-            geometry.bevel_object_edges(self.obj, self._bevel_keys,
-                                        self.width, self.segments)
+            if self.smart:
+                # Smart Bevel: real chamfer + support/holding loops + n-gon clean,
+                # the topology-preserving hard-surface path (EXPERIMENTAL).
+                geometry.smart_bevel_edges(
+                    self.obj, self._bevel_keys, self.width, self.segments,
+                    support=True, tightness=self.tightness, clean_ngons=True)
+            else:
+                geometry.bevel_object_edges(self.obj, self._bevel_keys,
+                                            self.width, self.segments)
 
     def _set_value(self, v):
         self.width = max(0.0, v)
@@ -148,6 +157,21 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
                 self._bevel_keys = self._compute_keys()
                 self._refresh_preview()
             return True
+        # S: Smart Bevel -- add support/holding loops + clean n-gons so the bevel
+        # survives Subdivision (topology-preserving hard-surface bevel).
+        if event.type == 'S':
+            self.smart = not self.smart
+            if self.locked:
+                self._refresh_preview()
+            return True
+        # - / = : tune how hard the support loops hug the bevel (Smart only). Safe
+        # to bind: this tool has allow_negative=False, so MINUS is free of numeric.
+        if event.type in {'MINUS', 'EQUAL'} and self.smart:
+            step = 0.1 if event.type == 'EQUAL' else -0.1
+            self.tightness = min(1.0, max(0.0, round(self.tightness + step, 3)))
+            if self.locked:
+                self._refresh_preview()
+            return True
         return False
 
     def _hud_lines(self, context, prefs):
@@ -159,16 +183,20 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
         else:
             typed = ("  [typing %s]" % self.typed) if self.typed else ""
             loop = "  (loop x%d)" % len(self._bevel_keys or []) if self.loop else ""
-            top = ("Width:  %.3f m%s    Segments %d%s"
-                   % (self.width, typed, self.segments, loop), accent)
+            smart = ("  SMART t=%.1f" % self.tightness) if self.smart else ""
+            top = ("Width:  %.3f m%s    Segments %d%s%s"
+                   % (self.width, typed, self.segments, loop, smart), accent)
         last = HARDFLOW_OT_edge_bevel._LAST_WIDTH
         repeat = ("    R repeat %.3f m" % last) if last > 1e-6 else ""
+        tight = "    - / = tightness" if self.smart else ""
         return [
             top,
             ("Click edge = lock    drag / type = width    [ ] segments    "
-             "L loop %s    X snap %s" % ('ON' if self.loop else 'OFF',
-                                         'ON' if self.snap else 'OFF'), dim),
-            ("Enter / click apply%s    Esc cancel" % repeat, dim),
+             "L loop %s    S smart %s%s" % ('ON' if self.loop else 'OFF',
+                                            'ON' if self.smart else 'OFF', tight),
+             dim),
+            ("X snap %s    Enter / click apply%s    Esc cancel"
+             % ('ON' if self.snap else 'OFF', repeat), dim),
         ]
 
 

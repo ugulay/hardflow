@@ -4,6 +4,8 @@ import math
 import bpy
 import bmesh
 
+from . import bevel as _bevel
+
 
 def snapshot_mesh(obj, name="hf_snapshot"):
     """Return an unlinked copy of obj's mesh data, for restoring it after a live
@@ -1083,6 +1085,164 @@ def bevel_object_edges(obj, edge_keys, width, segments=2, profile=0.5):
     obj.data.update()
     bm.free()
     return n
+
+
+# --- Smart Bevel & topology cleanup (Super Modeling Mode) ---------------
+
+
+def _join_tris(bm, faces):
+    """Re-quad a triangle soup with `bmesh.ops.join_triangles`, tolerating older
+    Blenders that lack the cmp_* comparison switches. In-place, no return."""
+    kw = dict(angle_face_threshold=math.radians(40.0),
+              angle_shape_threshold=math.radians(40.0))
+    try:
+        bmesh.ops.join_triangles(bm, faces=faces, cmp_seam=False, cmp_sharp=False,
+                                 cmp_uvs=False, cmp_vcols=False,
+                                 cmp_materials=False, **kw)
+    except TypeError:                       # pre-cmp_* signature
+        bmesh.ops.join_triangles(bm, faces=faces, **kw)
+
+
+def dissolve_boolean_ngons(obj, only_ngons=True, rejoin_quads=True):
+    """Clean up the n-gons a boolean cut (or a bevel) leaves behind: triangulate
+    the 5+-sided faces, then -- when `rejoin_quads` -- join the fresh triangles
+    back into quads where the surface stays flat, so the result is quad-friendly
+    again instead of a triangle soup. Object Mode, bmesh only (no bpy.ops).
+
+    `only_ngons` limits the pass to faces with more than 4 sides (tris and quads
+    are left alone); pass False to re-triangulate every face. Returns the number
+    of n-gon faces that were triangulated (0 when the mesh is already clean)."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    ngons = [f for f in bm.faces if len(f.verts) > (4 if only_ngons else 2)]
+    n = len(ngons)
+    if n:
+        res = bmesh.ops.triangulate(bm, faces=ngons)
+        if rejoin_quads:
+            fresh = [f for f in res.get('faces', ()) if f.is_valid]
+            if fresh:
+                _join_tris(bm, fresh)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return n
+
+
+def _flank_support_loop(bm, face, shoulder_edge, offset):
+    """Insert one holding / support loop into quad `face`, parallel to
+    `shoulder_edge` (the edge it shares with a new bevel face) and sitting
+    `offset` meters out from it. Splits the two side edges at the matching
+    fraction and connects the new verts -- a face-local loop cut, so it is
+    deterministic and needs no ring walk. Returns True when a loop was added,
+    False for a non-quad flank or a degenerate split."""
+    if len(face.verts) != 4:
+        return False
+    sv = set(shoulder_edge.verts)
+    sides = [e for e in face.edges
+             if e is not shoulder_edge and len(set(e.verts) & sv) == 1]
+    if len(sides) != 2:
+        return False
+    new_verts = []
+    for e in sides:
+        shared = set(e.verts) & sv
+        if not shared:
+            return False
+        anchor = next(iter(shared))         # this side edge's end on the shoulder
+        length = e.calc_length()
+        if length < 1e-9:
+            return False
+        frac = min(0.98, max(0.02, offset / length))
+        try:
+            _, nv = bmesh.utils.edge_split(e, anchor, frac)
+        except (ValueError, RuntimeError):
+            return False
+        new_verts.append(nv)
+    if len(new_verts) != 2 or new_verts[0] is new_verts[1] or not face.is_valid:
+        return False
+    try:
+        bmesh.utils.face_split(face, new_verts[0], new_verts[1])
+    except (ValueError, RuntimeError):
+        return False
+    return True
+
+
+def smart_bevel_edges(obj, edge_keys, width, segments=2, profile=0.5,
+                      support=True, tightness=0.5, clean_ngons=True):
+    """Smart, topology-preserving Object-Mode bevel -- the hard-surface upgrade
+    over `bevel_object_edges`. Three steps, all in one bmesh session:
+
+      1. bevel `edge_keys` into real chamfer geometry (bmesh.ops.bevel);
+      2. when `support`, drop a holding / support loop on each face flanking the
+         new bevel so the chamfer stays crisp under a Subdivision modifier
+         (placement from core/bevel.support_loop_positions, `tightness` in [0,1]);
+      3. when `clean_ngons`, triangulate + re-quad any n-gons the bevel produced.
+
+    bmesh only, no bpy.ops. Returns a summary dict:
+        {'beveled': edges_beveled, 'supports': loops_added, 'ngons': ngons_cleaned}
+
+    EXPERIMENTAL: the support-loop step is deterministic and headless-tested by
+    count, but the exact holding-loop position wants a live cube -> Subdivision
+    pass to tune (tracked in tests/manual_checklist.md). Width <= 0 is a no-op."""
+    summary = {'beveled': 0, 'supports': 0, 'ngons': 0}
+    if width <= 0.0:
+        return summary
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    nv = len(bm.verts)
+    wanted = []
+    for a, b in edge_keys:
+        if 0 <= a < nv and 0 <= b < nv:
+            e = bm.edges.get((bm.verts[a], bm.verts[b]))
+            if e is not None:
+                wanted.append(e)
+    if not wanted:
+        bm.free()
+        return summary
+
+    res = bmesh.ops.bevel(bm, geom=wanted, offset=width, offset_type='OFFSET',
+                          segments=max(1, int(segments)), profile=profile,
+                          affect='EDGES', clamp_overlap=True)
+    summary['beveled'] = len(wanted)
+    bevel_faces = set(f for f in res.get('faces', ()) if f.is_valid)
+
+    if support and bevel_faces:
+        offsets = _bevel.support_loop_positions(width, tightness, count=1)
+        offset = offsets[0] if offsets else 0.0
+        if offset > 0.0:
+            # A shoulder edge borders the bevel strip: exactly one bevel face and
+            # one original (flanking) face. Add the holding loop on the flank.
+            shoulders, done_edges = [], set()
+            for f in bevel_faces:
+                for e in f.edges:
+                    if len(e.link_faces) != 2:
+                        continue
+                    flanks = [lf for lf in e.link_faces if lf not in bevel_faces]
+                    if len(flanks) == 1:
+                        shoulders.append((e, flanks[0]))
+            for e, flank in shoulders:
+                if e in done_edges or not e.is_valid or not flank.is_valid:
+                    continue
+                done_edges.add(e)
+                if _flank_support_loop(bm, flank, e, offset):
+                    summary['supports'] += 1
+
+    if clean_ngons:
+        ngons = [f for f in bm.faces if len(f.verts) > 4]
+        if ngons:
+            summary['ngons'] = len(ngons)
+            r2 = bmesh.ops.triangulate(bm, faces=ngons)
+            fresh = [f for f in r2.get('faces', ()) if f.is_valid]
+            if fresh:
+                _join_tris(bm, fresh)
+
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    return summary
 
 
 def edit_knife_polygon(obj, local_corners, view_dir):
