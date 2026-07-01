@@ -2181,6 +2181,33 @@ def test_draw_cut_uses_livepreview_command():
     assert "LivePreviewCommand" in (cls._sync_live_boolean.__doc__ or "")
 
 
+def test_draw_placement_journal():
+    # draw_cut's placement clicks go through a per-session CommandManager: each
+    # click appends to BOTH the screen and world point lists as one macro, so
+    # Backspace (undo) pops them together and a reset (clear) drops the journal.
+    # Driven on a stand-in self -- the modal shell needs a viewport, but
+    # _record_placement only touches the two lists + the manager, so it runs
+    # headless (mirrors test_facetool_begin_edit_lifecycle / mode_shell tests).
+    import types
+    from hardflow.operators import draw_cut
+    from hardflow.core import command
+    s = types.SimpleNamespace(points=[], world_points=[],
+                              _commands=command.CommandManager())
+    place = draw_cut.HARDFLOW_OT_draw._record_placement
+    place(s, (10.0, 20.0), Vector((1, 2, 3)))
+    place(s, (30.0, 40.0), Vector((4, 5, 6)))
+    assert s.points == [(10.0, 20.0), (30.0, 40.0)]
+    assert len(s.world_points) == 2 and s.world_points[1] == Vector((4, 5, 6))
+
+    s._commands.undo()                       # Backspace: pop screen + world both
+    assert s.points == [(10.0, 20.0)]
+    assert len(s.world_points) == 1 and s.world_points[0] == Vector((1, 2, 3))
+
+    s._commands.clear()                      # reset key: drop the journal
+    assert not s._commands.can_undo()
+    assert s.points == [(10.0, 20.0)]        # clear() leaves the lists to the caller
+
+
 def test_facetool_command_adoption_structure():
     # The _FaceDragModal tools now share the base MeshSnapshotCommand-backed
     # preview: the base owns _begin_edit / _refresh_preview, and each subclass

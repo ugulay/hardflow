@@ -6,6 +6,14 @@ logic: minor versions add features, patch versions fix bugs.
 ## [Unreleased]
 
 ### Changed
+- **`draw_cut` fully adopts the per-modal command layer.** The main draw operator
+  now owns a per-session `CommandManager`: each placement click is a two-child
+  `MacroCommand` of `base.PlacePointCommand`s (the screen + world anchor lists
+  move as one), so `Backspace` = `undo()` and the shape/plane/stamp reset keys =
+  `clear()`. The hand-rolled `append`/`pop` history is gone, and `draw_cut` now
+  shares the same command vocabulary as `face_tool` / `hardflow_mode` end to end.
+  No user-visible change (Backspace behaves as before). Headless
+  `test_draw_placement_journal`.
 - **`draw_cut`'s live boolean preview adopts the command layer.** The ad-hoc
   `HF_LivePreview` temp-modifier bookkeeping (`_bool_targets`, `_remove_live_mod`,
   the scene-wide cleanup sweep) is replaced by a new

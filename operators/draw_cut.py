@@ -116,6 +116,10 @@ class HARDFLOW_OT_draw(Operator):
         self.world_points = []    # anchored 3D point per click; keeps a fixed
         #                           plane's shape locked in space when the view
         #                           changes mid-draw (parallel to self.points)
+        # Per-session journal for the placement clicks (screen + world lists move
+        # together as one PlacePointCommand macro), so Backspace = undo() and the
+        # reset keys = clear(). Same command vocabulary as face_tool / hardflow_mode.
+        self._commands = command.CommandManager()
         self.cursor = (0, 0)      # current (snapped) mouse point
         self.typed = ""           # numeric size buffer: type an exact dimension
         self._raw_cursor = (0, 0)  # snapped cursor before any typed-size lock
@@ -224,9 +228,7 @@ class HARDFLOW_OT_draw(Operator):
                 self.typed = self.typed[:-1]
                 self._apply_numeric(context)
             elif self.points:
-                self.points.pop()
-                if self.world_points:
-                    self.world_points.pop()
+                self._commands.undo()   # pops the screen + world point together
 
         elif event.type in {'Q', 'W', 'E', 'R', 'T', 'Y', 'U'} \
                 and event.value == 'PRESS':
@@ -234,6 +236,7 @@ class HARDFLOW_OT_draw(Operator):
                           'T': 'SLOT', 'Y': 'STAR', 'U': 'ARC'}[event.type]
             self.points = []
             self.world_points = []
+            self._commands.clear()   # drop the half-drawn shape's journal
             self.typed = ""
 
         elif (event.type in {'LEFT_BRACKET', 'RIGHT_BRACKET'}
@@ -350,6 +353,7 @@ class HARDFLOW_OT_draw(Operator):
                                    % len(order)]
                 self.points = []  # plane changed -> reset the half-drawn shape
                 self.world_points = []
+                self._commands.clear()      # and drop its placement journal
                 self._surface_basis = None  # re-pick the surface on next click
                 self._edges_basis = None    # re-read the selected edges for EDGES
                 self._forced_main_key = None  # drop the Ctrl+Click main-edge pick
@@ -546,8 +550,8 @@ class HARDFLOW_OT_draw(Operator):
         """Record a clicked point as both its screen position and its anchored 3D
         world position on the current construction plane. The world anchor lets a
         fixed plane (SURFACE/EDGES/X/Y/Z) keep the shape locked in space when the
-        view changes mid-draw; VIEW plane ignores it and follows the camera."""
-        self.points.append((screen_co[0], screen_co[1]))
+        view changes mid-draw; VIEW plane ignores it and follows the camera. Both
+        lists move together as one journal entry, so Backspace undoes both."""
         region, rv3d = context.region, context.region_data
         origin, right, up, normal = self._plane_basis(context)
         w = raycast.ray_to_plane(region, rv3d, screen_co, origin, normal)
@@ -557,7 +561,17 @@ class HARDFLOW_OT_draw(Operator):
             # desync this point from the rest on the next orbit.
             w = raycast.ray_to_plane(
                 region, rv3d, screen_co, origin, raycast.view_direction(rv3d))
-        self.world_points.append(w)
+        self._record_placement((screen_co[0], screen_co[1]), w)
+
+    def _record_placement(self, screen_pt, world_pt):
+        """Append one click to the screen + world point lists as a single journal
+        entry (a two-child MacroCommand), so Backspace (undo) removes both
+        together and the reset keys (clear) drop them cleanly. No bpy/context
+        here -> unit-testable on a stand-in self."""
+        self._commands.do(command.MacroCommand([
+            base.PlacePointCommand(self.points, screen_pt),
+            base.PlacePointCommand(self.world_points, world_pt),
+        ]))
 
     def _sync_points_from_world(self, context):
         """Re-project the anchored 3D points back to screen for the *current*
@@ -1538,6 +1552,10 @@ class HARDFLOW_OT_draw(Operator):
     def _cleanup(self, context):
         self._clear_live_boolean(context)  # strip any temp preview mods first
         self._clear_preview()  # discards the cage on cancel; no-op after commit
+        # Drop the placement journal: on commit the net change is the cutter (one
+        # Blender undo step); on cancel the placements only touched the in-memory
+        # point lists, which die with the operator -- so clear(), never undo_all().
+        self._commands.clear()
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
