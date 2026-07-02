@@ -2045,6 +2045,24 @@ def test_panel_health_cache():
     assert panel._HEALTH_CACHE["key"] != key1              # cache invalidated
 
 
+def test_panel_draw_mode_scene_property():
+    # The N-panel's persistent Boolean draw mode is a Scene EnumProperty that
+    # register() adds and unregister() cleans up; the shape buttons draw with it.
+    _reset()
+    hardflow.register()
+    try:
+        from hardflow.ui import panel
+        scene = bpy.context.scene
+        assert hasattr(scene, "hardflow_draw_mode")
+        scene.hardflow_draw_mode = 'SLICE'
+        assert scene.hardflow_draw_mode == 'SLICE'
+        ids = {m[0] for m in panel.DRAW_MODE_ITEMS}
+        assert {'CUT', 'SLICE', 'MAKE', 'INTERSECT', 'JOIN', 'KNIFE'} <= ids
+    finally:
+        hardflow.unregister()
+    assert not hasattr(bpy.types.Scene, "hardflow_draw_mode")   # cleaned up
+
+
 def test_choose_solver_from_health():
     # a clean, closed manifold cube starts on the fast MANIFOLD solver where it
     # exists (Blender 4.5+), else the accurate EXACT solver

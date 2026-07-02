@@ -115,6 +115,7 @@ def register():
     bpy.types.Image.hardflow_trim = PointerProperty(
         type=trim_editor.HARDFLOW_TrimSheet)
     bpy.types.Scene.hardflow_trim_image = PointerProperty(type=bpy.types.Image)
+    panel.register()       # the persistent Boolean draw-mode Scene property
     decal_library.register()
     menu.register()        # header dropdown (after the menu classes exist)
     keymaps.register_keymaps()
@@ -131,6 +132,7 @@ def unregister():
     keymaps.unregister_keymaps()
     menu.unregister()
     decal_library.unregister()
+    panel.unregister()
     gizmos.unregister()
     if hasattr(bpy.types.Scene, "hardflow_trim_image"):
         del bpy.types.Scene.hardflow_trim_image

@@ -1,9 +1,34 @@
 # N-panel (View3D > Sidebar > Hardflow): tools, snap settings, cutter list.
 import bpy
 from bpy.types import Panel
+from bpy.props import EnumProperty
 
 from ..preferences import get_prefs
 from ..core import boolean
+
+
+# Persistent Boolean draw operation for the N-panel: pick the operation once
+# (it sticks on the scene), then click any shape to draw with it -- so every
+# mode x shape combo is one click instead of a fixed CUT-only shape row. Kept in
+# panel.py (its owner) and registered on the Scene by register() below.
+DRAW_MODE_ITEMS = [
+    ('CUT', "Cut", "Boolean DIFFERENCE -- carve the drawn shape out"),
+    ('SLICE', "Slice", "Slice the object in two along the drawn shape"),
+    ('MAKE', "Make", "Add geometry (UNION)"),
+    ('INTERSECT', "Intersect", "Keep only what's inside the drawn volume"),
+    ('JOIN', "Join", "Add the drawn shape as a separate solid (no boolean)"),
+    ('KNIFE', "Knife", "Score the surface only (zero-depth cut)"),
+]
+
+# Shape launchers for the Boolean draw grid: (shape id, label, icon).
+DRAW_SHAPE_ITEMS = [
+    ('BOX', "Box", 'MESH_PLANE'),
+    ('CIRCLE', "Circle", 'MESH_CIRCLE'),
+    ('NGON', "N-gon", 'MESH_CYLINDER'),
+    ('SLOT', "Slot", 'MESH_CAPSULE'),
+    ('STAR', "Star", 'SOLO_ON'),
+    ('ARC', "Arc", 'MOD_SIMPLEDEFORM'),
+]
 
 
 # Single-slot cache for the pre-cut health summary. `mesh_health` rebuilds a
@@ -40,41 +65,37 @@ class HARDFLOW_PT_tools(Panel):
         if getattr(prefs, "show_quickstart", False):
             self._draw_quickstart(layout, prefs)
 
-        # 1. Boolean -- the signature draw-to-cut workflow.
+        # Contextual hint: the draw / edit operators poll on an active mesh, so
+        # Blender already greys their buttons out -- this says WHY (Build tools
+        # below still work, so scope the wording to Boolean/Edit).
+        obj = context.active_object
+        if obj is None or obj.type != 'MESH':
+            layout.label(text="Boolean & Edit need an active mesh", icon='INFO')
+
+        # 1. Boolean -- the signature draw-to-cut workflow. Pick the operation
+        # once (it sticks on the scene), then click any shape to draw with it, so
+        # every mode x shape combo is one click.
+        scene = context.scene
+        mode = getattr(scene, "hardflow_draw_mode", 'CUT')
         col = layout.column(align=True)
         col.label(text="Boolean Draw", icon='MOD_BOOLEAN')
-        row = col.row(align=True)
-        row.operator("mesh.hardflow_draw", text="Cut").mode = 'CUT'
-        row.operator("mesh.hardflow_draw", text="Slice").mode = 'SLICE'
-        row.operator("mesh.hardflow_draw", text="Make").mode = 'MAKE'
-        row = col.row(align=True)
-        row.operator("mesh.hardflow_draw", text="Intersect").mode = 'INTERSECT'
-        row.operator("mesh.hardflow_draw", text="Join").mode = 'JOIN'
-        row.operator("mesh.hardflow_draw", text="Knife").mode = 'KNIFE'
-        # Cutter shape: each draws a CUT by default; the mode buttons above set
-        # the operation, the shape buttons set the outline.
-        col.label(text="Shape (cut)")
-        row = col.row(align=True)
-        circle = row.operator("mesh.hardflow_draw", text="Circle",
-                              icon='MESH_CIRCLE')
-        circle.shape = 'CIRCLE'
-        circle.mode = 'CUT'
-        ngon = row.operator("mesh.hardflow_draw", text="N-gon",
-                            icon='MESH_CYLINDER')
-        ngon.shape = 'NGON'
-        ngon.mode = 'CUT'
-        row = col.row(align=True)
-        slot = row.operator("mesh.hardflow_draw", text="Slot",
-                            icon='MESH_CAPSULE')
-        slot.shape = 'SLOT'
-        slot.mode = 'CUT'
-        star = row.operator("mesh.hardflow_draw", text="Star", icon='SOLO_ON')
-        star.shape = 'STAR'
-        star.mode = 'CUT'
-        arc = row.operator("mesh.hardflow_draw", text="Arc",
-                           icon='MOD_SIMPLEDEFORM')
-        arc.shape = 'ARC'
-        arc.mode = 'CUT'
+        if hasattr(scene, "hardflow_draw_mode"):
+            col.prop(scene, "hardflow_draw_mode", text="Mode")
+        # Hero launch button: the current mode with the default Box shape.
+        hero = col.row(align=True)
+        hero.scale_y = 1.5
+        op = hero.operator("mesh.hardflow_draw",
+                           text="Draw  (%s)" % mode.title(), icon='GREASEPENCIL')
+        op.mode = mode
+        op.shape = 'BOX'
+        # Shape launchers -- each draws with the CURRENT mode (compact icon grid).
+        col.label(text="Shape")
+        grid = col.grid_flow(row_major=True, columns=3, align=True)
+        for shp, label, icon in DRAW_SHAPE_ITEMS:
+            o = grid.operator("mesh.hardflow_draw", text=label, icon=icon)
+            o.mode = mode
+            o.shape = shp
+        col.separator()
         col.operator("object.hardflow_boolean", text="Boolean (Selected)",
                      icon='MOD_BOOLEAN')
         col.operator("object.hardflow_apply_cutters", text="Apply Cutters",
@@ -497,3 +518,18 @@ class HARDFLOW_PT_cutters(Panel):
                      emboss=False)
             row.operator("object.hardflow_remove_cutter", text="",
                          icon='X', emboss=False).name = ob.name
+
+
+# The panel PropertyGroups/Panels register through __init__'s _classes tuple;
+# these add the panel-owned Scene state (the persistent Boolean draw mode) and
+# are called from __init__.register()/unregister().
+def register():
+    bpy.types.Scene.hardflow_draw_mode = EnumProperty(
+        name="Draw Mode", description="Boolean operation the Draw tool performs; "
+        "pick it once here, then click any shape to draw with it",
+        items=DRAW_MODE_ITEMS, default='CUT')
+
+
+def unregister():
+    if hasattr(bpy.types.Scene, "hardflow_draw_mode"):
+        del bpy.types.Scene.hardflow_draw_mode
