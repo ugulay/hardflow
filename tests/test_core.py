@@ -1471,6 +1471,32 @@ def test_dedup_ring_keeps_distinct_and_short_rings():
     assert transform.dedup_ring([(0, 0, 0)]) == [(0, 0, 0)]  # too short: as-is
 
 
+def test_order_edge_paths_loop_strip_junction():
+    # a closed square loop -> one chain that returns to its start vertex
+    loops = transform.order_edge_paths([(0, 1), (1, 2), (2, 3), (3, 0)])
+    assert len(loops) == 1
+    c = loops[0]
+    assert c[0] == c[-1] and len(c) == 5 and set(c) == {0, 1, 2, 3}
+    # a shuffled open run -> one ordered strip from the lowest endpoint
+    assert transform.order_edge_paths([(7, 4), (2, 9), (9, 7)]) == [[2, 9, 7, 4]]
+    # a T junction splits into clean strips, each stopping at the junction vert
+    tee = transform.order_edge_paths([(0, 1), (1, 2), (1, 3)])
+    assert sorted(len(c) for c in tee) == [2, 2, 2]
+    assert all(c[0] == 1 or c[-1] == 1 for c in tee)
+    assert {v for c in tee for v in c} == {0, 1, 2, 3}
+    # duplicate + self edges are ignored; empty input stays empty
+    assert transform.order_edge_paths([(0, 1), (1, 0), (2, 2)]) == [[0, 1]]
+    assert transform.order_edge_paths([]) == []
+
+
+def test_order_edge_paths_two_disjoint_loops():
+    chains = transform.order_edge_paths(
+        [(0, 1), (1, 2), (2, 0), (10, 11), (11, 12), (12, 10)])
+    assert len(chains) == 2
+    for c in chains:
+        assert c[0] == c[-1] and len(c) == 4
+
+
 def _run_all():
     """Standalone run: find test_* functions, run them, print a summary."""
     fns = sorted((n, f) for n, f in globals().items()

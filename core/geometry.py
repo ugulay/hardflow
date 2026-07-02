@@ -508,23 +508,43 @@ def profile_points(profile, radius):
     return None
 
 
-def build_pipe_mesh(points, profile_pts, name="Hardflow_Pipe"):
+def round_profile(radius, segments=12):
+    """Circular cross-section outline for build_pipe_mesh -- the round groove /
+    weld-bead profile the curve-bevel path can't provide when the pipe must be
+    a MESH cutter (Panel Lines, v1.20). Returns `segments` (u, v) points traced
+    once around. Pure arithmetic."""
+    seg = max(3, int(segments))
+    return [(radius * math.cos(k * math.tau / seg),
+             radius * math.sin(k * math.tau / seg)) for k in range(seg)]
+
+
+def build_pipe_mesh(points, profile_pts, name="Hardflow_Pipe", closed=False):
     """Sweep a closed 2D `profile_pts` cross-section along the 3D poly-line
     `points` to make a solid tube mesh -- the square / rectangular / custom pipe
     cross-sections (v1.6) the round curve bevel can't do. Frames are built with a
-    stable up reference (parallel-ish transport). At least 2 points and a 3-point
-    profile. Returns mesh data, or None when degenerate."""
+    stable up reference (parallel-ish transport). `closed` bridges the last ring
+    back to the first instead of capping the ends -- a cyclic loop swept as one
+    solid ring (the Panel Line loop cutter, v1.20); a repeated seam point is
+    dropped. At least 2 points (3 distinct for closed) and a 3-point profile.
+    Returns mesh data, or None when degenerate."""
     from mathutils import Vector
     pts = [Vector(p) for p in points]
+    if closed and len(pts) > 2 and (pts[0] - pts[-1]).length < 1e-9:
+        pts = pts[:-1]                 # the loop is implicit, not a seam point
     if len(pts) < 2 or len(profile_pts) < 3:
         return None
+    if closed and len(pts) < 3:
+        closed = False
 
-    # Per-point tangents (averaged at interior joints).
+    # Per-point tangents (averaged at interior joints; wrapped when closed).
+    n = len(pts)
     tans = []
-    for i in range(len(pts)):
-        if i == 0:
+    for i in range(n):
+        if closed:
+            t = pts[(i + 1) % n] - pts[(i - 1) % n]
+        elif i == 0:
             t = pts[1] - pts[0]
-        elif i == len(pts) - 1:
+        elif i == n - 1:
             t = pts[-1] - pts[-2]
         else:
             t = (pts[i + 1] - pts[i - 1])
@@ -552,7 +572,10 @@ def build_pipe_mesh(points, profile_pts, name="Hardflow_Pipe"):
 
     m = len(profile_pts)
     built = 0
-    for a, b in zip(rings[:-1], rings[1:]):
+    pairs = list(zip(rings[:-1], rings[1:]))
+    if closed:
+        pairs.append((rings[-1], rings[0]))   # bridge the seam instead of caps
+    for a, b in pairs:
         for k in range(m):
             j = (k + 1) % m
             try:
@@ -563,11 +586,12 @@ def build_pipe_mesh(points, profile_pts, name="Hardflow_Pipe"):
     if built == 0:                 # every side quad was degenerate -> no solid
         bm.free()
         return None
-    for cap in (list(reversed(rings[0])), rings[-1]):
-        try:                       # each cap independently: a bad start cap must
-            bm.faces.new(cap)      # not skip the end cap
-        except ValueError:
-            pass
+    if not closed:
+        for cap in (list(reversed(rings[0])), rings[-1]):
+            try:                   # each cap independently: a bad start cap must
+                bm.faces.new(cap)  # not skip the end cap
+            except ValueError:
+                pass
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)

@@ -305,6 +305,76 @@ def test_vent_radial_draw_options():
     assert len(mesh.polygons) == 18   # 3 closed slat boxes x 6 faces
 
 
+def test_closed_pipe_mesh_ring():
+    # build_pipe_mesh closed=True bridges the seam instead of capping: a square
+    # loop swept with a square profile is a solid ring -- 4 rings x 4 side quads,
+    # no caps, and every edge borders exactly 2 faces (manifold cutter).
+    profile = geometry.profile_points('SQUARE', 0.1)
+    loop = [(0, 0, 0), (4, 0, 0), (4, 4, 0), (0, 4, 0)]
+    mesh = geometry.build_pipe_mesh(loop, profile, closed=True)
+    assert mesh is not None
+    assert len(mesh.polygons) == 16   # 4 spans x 4 profile sides, capless
+    # a repeated seam point collapses into the same ring
+    seamed = geometry.build_pipe_mesh(loop + [loop[0]], profile, closed=True)
+    assert seamed is not None and len(seamed.polygons) == 16
+    # open sweep unchanged: 3 spans x 4 sides + 2 caps
+    open_mesh = geometry.build_pipe_mesh(loop, profile)
+    assert open_mesh is not None and len(open_mesh.polygons) == 14
+    # the round profile helper feeds the same sweep
+    ring = geometry.build_pipe_mesh(loop, geometry.round_profile(0.1, 8),
+                                    closed=True)
+    assert ring is not None and len(ring.polygons) == 32
+
+
+def test_panel_line_groove_and_bead():
+    # v1.20 Competitive Edge: selected edges -> ordered chains -> swept tube
+    # cutter -> boolean. The cube's top rim (a closed loop) grooves a ring seam
+    # destructively; a single edge raises a bead as a live (non-destructive)
+    # stashed cutter.
+    _reset()
+    hardflow.register()
+    try:
+        import bmesh as _bmesh
+        cube = _add_cube("Panelled", size=2.0)
+        bpy.context.view_layer.objects.active = cube
+        cube.select_set(True)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.context.tool_settings.mesh_select_mode = (False, True, False)
+        bm = _bmesh.from_edit_mesh(cube.data)
+        for e in bm.edges:
+            e.select_set(all(v.co.z > 0.99 for v in e.verts))   # top rim: 4 edges
+        _bmesh.update_edit_mesh(cube.data)
+        res = bpy.ops.mesh.hardflow_panel_line(style='GROOVE', radius=0.08)
+        assert res == {'FINISHED'}
+        assert bpy.context.mode == 'EDIT_MESH'   # returned to Edit Mode
+        bpy.ops.object.mode_set(mode='OBJECT')
+        assert len(cube.data.polygons) > 6       # the rim groove added geometry
+        assert bpy.data.objects.get("HF_PanelLine") is None  # cutter cleaned up
+
+        cube2 = _add_cube("Beaded", size=2.0)
+        bpy.context.view_layer.objects.active = cube2
+        cube2.select_set(True)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bm = _bmesh.from_edit_mesh(cube2.data)
+        done = False
+        for e in bm.edges:
+            pick = not done and all(v.co.z > 0.99 for v in e.verts)
+            e.select_set(pick)
+            done = done or pick
+        _bmesh.update_edit_mesh(cube2.data)
+        res = bpy.ops.mesh.hardflow_panel_line(style='BEAD', radius=0.1,
+                                               non_destructive=True)
+        assert res == {'FINISHED'}
+        bpy.ops.object.mode_set(mode='OBJECT')
+        mods = [m for m in cube2.modifiers if m.type == 'BOOLEAN']
+        assert mods and mods[0].operation == 'UNION'
+        stash = mods[0].object
+        assert stash is not None and stash.name.startswith("HF_PanelLine")
+        assert stash.display_type == 'WIRE'      # stashed like any HF cutter
+    finally:
+        hardflow.unregister()
+
+
 def test_live_preview_world_aabb_culling():
     # The high-poly live-preview guard: draw_cut._world_aabb builds a target's
     # world bounding box, and core.preview_cache.boxes_overlap decides whether the

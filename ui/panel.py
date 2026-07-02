@@ -221,8 +221,11 @@ class HARDFLOW_PT_edit(Panel):
                      icon='NODE_MATERIAL')
         row.operator("object.hardflow_sort_modifiers", text="Sort Stack",
                      icon='SORTSIZE')
-        # Extract selected faces into a reusable cutter (Edit Mode).
-        col.operator("mesh.hardflow_extract_cutter", text="Extract Cutter",
+        # Edit-Mode edge-flow tools: panel lines + reusable cutters.
+        row = col.row(align=True)
+        row.operator("mesh.hardflow_panel_line", text="Panel Line",
+                     icon='MOD_SCREW')
+        row.operator("mesh.hardflow_extract_cutter", text="Extract Cutter",
                      icon='MOD_BOOLEAN')
 
 

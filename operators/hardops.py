@@ -8,10 +8,11 @@ import math
 import random
 
 import bpy
+import bmesh
 from bpy.types import Operator
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty
 
-from ..core import geometry, boolean, hardsurface, modifiers
+from ..core import geometry, boolean, hardsurface, modifiers, transform
 
 
 def sort_modifier_stack(obj, mirror_after_boolean=True):
@@ -534,3 +535,103 @@ class HARDFLOW_OT_recalc_normals(Operator):
         else:
             self.report({'INFO'}, "Normals recalculated; mesh looks boolean-ready")
         return {'FINISHED'}
+
+
+class HARDFLOW_OT_panel_line(Operator):
+    bl_idname = "mesh.hardflow_panel_line"
+    bl_label = "Panel Line"
+    bl_description = ("Route a recessed groove or a raised weld bead along the "
+                      "selected edges -- the mesh's own edge flow becomes real "
+                      "panel-line geometry (closed loops sweep as one solid "
+                      "ring; T / X junctions split into clean strips)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    style: EnumProperty(
+        name="Style",
+        items=[('GROOVE', "Groove",
+                "Cut a recessed seam into the surface (DIFFERENCE)"),
+               ('BEAD', "Bead",
+                "Raise a weld bead proud of the surface (UNION)")],
+        default='GROOVE',
+    )
+    radius: FloatProperty(
+        name="Radius",
+        description="Sweep radius: the groove's bite depth / the bead's height",
+        default=0.02, min=0.0001, max=1.0, subtype='DISTANCE',
+    )
+    segments: IntProperty(
+        name="Profile Segments",
+        description="Points around the swept cross-section",
+        default=12, min=3, max=64,
+    )
+    non_destructive: BoolProperty(
+        name="Non-Destructive",
+        description="Keep the swept line as a live boolean modifier (the "
+                    "cutter is stashed like any other Hardflow cutter)",
+        default=False,
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (obj is not None and obj.type == 'MESH'
+                and context.mode == 'EDIT_MESH')
+
+    def execute(self, context):
+        obj = context.active_object
+        bm = bmesh.from_edit_mesh(obj.data)
+        edges = [(e.verts[0].index, e.verts[1].index)
+                 for e in bm.edges if e.select]
+        if not edges:
+            self.report({'WARNING'}, "Select the edges to route along first")
+            return {'CANCELLED'}
+        bm.verts.ensure_lookup_table()
+        used = {i for pair in edges for i in pair}
+        world = obj.matrix_world
+        coords = {i: (world @ bm.verts[i].co).copy() for i in used}
+
+        # Pure core does the thinking: unordered selection -> ordered chains,
+        # then each chain is swept into a solid tube (closed loops ringed).
+        chains = transform.order_edge_paths(edges)
+        profile = geometry.round_profile(self.radius, self.segments)
+        pipe_bm = bmesh.new()
+        swept = 0
+        for chain in chains:
+            closed = len(chain) > 3 and chain[0] == chain[-1]
+            pts = [coords[i] for i in chain]
+            mesh = geometry.build_pipe_mesh(pts, profile, closed=closed)
+            if mesh is None:
+                continue
+            pipe_bm.from_mesh(mesh)
+            bpy.data.meshes.remove(mesh)
+            swept += 1
+        if swept == 0:
+            pipe_bm.free()
+            self.report({'WARNING'}, "Selected edges gave no sweepable path")
+            return {'CANCELLED'}
+        cutter_mesh = bpy.data.meshes.new("HF_PanelLine")
+        pipe_bm.to_mesh(cutter_mesh)
+        pipe_bm.free()
+        cutter = bpy.data.objects.new("HF_PanelLine", cutter_mesh)
+        context.collection.objects.link(cutter)
+
+        op = 'DIFFERENCE' if self.style == 'GROOVE' else 'UNION'
+        bpy.ops.object.mode_set(mode='OBJECT')
+        try:
+            if self.non_destructive:
+                boolean.add_boolean(obj, cutter, op)
+                boolean.stash_cutter(context, cutter, obj)
+                self.report({'INFO'},
+                            "Panel line: %d path(s) as a live cutter" % swept)
+                return {'FINISHED'}
+            ok, _solver, msg = boolean.robust_boolean(context, obj, cutter, op)
+            bpy.data.objects.remove(cutter, do_unlink=True)
+            bpy.data.meshes.remove(cutter_mesh)
+            if not ok:
+                self.report({'ERROR'}, "Panel line failed: %s" % msg)
+                return {'CANCELLED'}
+            self.report({'INFO'}, "Panel line: %d path(s) %s" %
+                        (swept, "cut" if op == 'DIFFERENCE' else "raised"))
+            return {'FINISHED'}
+        finally:
+            bpy.ops.object.mode_set(mode='EDIT')

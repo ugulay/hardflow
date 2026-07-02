@@ -37,6 +37,7 @@ _classes = (
     hardops.HARDFLOW_OT_smart_sharpen,
     hardops.HARDFLOW_OT_sort_modifiers,
     hardops.HARDFLOW_OT_fix_shading,
+    hardops.HARDFLOW_OT_panel_line,
     hardops.HARDFLOW_OT_recalc_normals,
     cutters.HARDFLOW_OT_apply_cutters,
     cutters.HARDFLOW_OT_select_cutter,

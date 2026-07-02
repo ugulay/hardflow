@@ -88,3 +88,64 @@ def cable_chain(points, segments=12, sag=0.0, axis=2):
     for a, b in zip(points[:-1], points[1:]):
         out.extend(cable_points(a, b, segments, sag, axis)[1:])
     return out
+
+
+def order_edge_paths(edges):
+    """Order an unordered edge set (vertex-index pairs) into connected vertex
+    chains -- the selected-edges -> Panel Line path builder (v1.20). An open run
+    comes back as [v0, v1, ..., vn]; a closed loop repeats its first index at
+    the end. Verts where more than two edges meet are junctions: chains stop
+    there (several chains may share the junction vert), so a T / X selection
+    becomes clean strips instead of one zig-zag. Duplicate and self edges are
+    ignored. Deterministic: walks start from the lowest vertex index and prefer
+    the lowest-index neighbour. Pure stdlib, unit-tested."""
+    adj = {}
+    unused = set()
+    for a, b in edges:
+        if a == b:
+            continue
+        key = (a, b) if a < b else (b, a)
+        if key in unused:
+            continue
+        unused.add(key)
+        adj.setdefault(a, []).append(b)
+        adj.setdefault(b, []).append(a)
+    for v in adj:
+        adj[v].sort()
+
+    def take(a, b):
+        key = (a, b) if a < b else (b, a)
+        if key in unused:
+            unused.remove(key)
+            return True
+        return False
+
+    def walk(start, nxt):
+        chain = [start, nxt]
+        cur = nxt
+        while len(adj[cur]) == 2:      # junctions / endpoints stop the walk
+            step = None
+            for n in adj[cur]:
+                if take(cur, n):
+                    step = n
+                    break
+            if step is None:
+                break                  # closed back onto consumed edges
+            chain.append(step)
+            cur = step
+        return chain
+
+    chains = []
+    # Open runs first: start at every vert that is not mid-path (degree != 2).
+    for v in sorted(adj):
+        if len(adj[v]) == 2:
+            continue
+        for n in adj[v]:
+            if take(v, n):
+                chains.append(walk(v, n))
+    # Whatever is left is pure cycles; the walk returns to its start vertex.
+    while unused:
+        a, b = min(unused)
+        take(a, b)
+        chains.append(walk(a, b))
+    return chains

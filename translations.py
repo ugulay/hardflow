@@ -53,6 +53,7 @@ _TR = {
     "Slot": "Yuva",
     "Star": "Yıldız",
     "Arc": "Yay",
+    "Vent": "Menfez",
 
     # --- hero / edit tools ---
     "Push/Pull": "İt/Çek",
@@ -63,6 +64,10 @@ _TR = {
     "Fix Shading": "Gölgelemeyi Düzelt",
     "Sort Stack": "Yığını Sırala",
     "Extract Cutter": "Kesici Çıkar",
+    "Panel Line": "Panel Çizgisi",
+    "Groove": "Oluk",
+    "Bead": "Kaynak Dikişi",
+    "Radial": "Radyal",
 
     # --- curves ---
     "Pipe": "Boru",

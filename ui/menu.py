@@ -65,6 +65,7 @@ _EDIT_ITEMS = (
     None,
     ("mesh.hardflow_edge_bevel", "Edge Bevel", 'MOD_BEVEL', {}),
     ("mesh.hardflow_loop_cut", "Loop Cut", 'MOD_MULTIRES', {}),
+    ("mesh.hardflow_panel_line", "Panel Line (Edit)", 'MOD_SCREW', {}),
     ("mesh.hardflow_extract_cutter", "Extract Cutter (Edit)", 'MOD_BOOLEAN', {}),
     None,
     ("object.hardflow_smart_sharpen", "Smart Sharpen", 'MOD_BEVEL', {}),
