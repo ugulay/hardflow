@@ -17,6 +17,15 @@ Everything here is what's left: **the interactive tools.**
 - [ ] No errors in the System Console on enable (`Window ▸ Toggle System Console`).
 - [ ] N-panel shows a **Hardflow** tab; the 3D-View header shows a **Hardflow** menu.
 - [ ] `Alt+Q` opens the pie; `Ctrl+Shift+D` starts a draw.
+- [ ] **Preferences (P1)** — Edit ▸ Preferences ▸ Add-ons ▸ Hardflow: the settings
+      are grouped into **foldable boxed sections** (Snapping & Grid, Boolean &
+      Cutters, Curves, Decals, Assets, Appearance, Shortcuts) with a disclosure
+      triangle each — not one flat wall. Folding one persists. Every old setting is
+      still present in exactly one section.
+- [ ] **N-panel ▸ Snapping & Settings (P1)** — reorganized into boxed groups (Snap
+      toggle row / Boolean / Curves / Preview Colors); the **Grid / Vertex /
+      Surface** snap toggles read as a 3-button row. Cutter Options shows a readable
+      live-keys legend (not the old `-/= , . A D B C J` string).
 
 > Suspect spots flagged in `CLAUDE.md`: the `temp_override` + `modifier_apply`
 > in `core/boolean.py`, and the projection math in `_build_and_apply`

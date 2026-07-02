@@ -230,35 +230,53 @@ class HARDFLOW_PT_snap(Panel):
     def draw(self, context):
         layout = self.layout
         prefs = get_prefs(context)
-        col = layout.column()
-        col.label(text="Snap (shared by all draw tools)")
-        col.prop(prefs, "snap_enabled", text="Grid")
-        col.prop(prefs, "geo_snap", text="Vertex/Edge")
-        col.prop(prefs, "surface_snap", text="Surface/Face")
-        col.prop(prefs, "snap_target")
-        col.separator()
+
+        # Snap: a compact toggle row (shared by every draw tool) + tuning.
+        box = layout.box()
+        box.label(text="Snap (all draw tools)", icon='SNAP_ON')
+        row = box.row(align=True)
+        row.prop(prefs, "snap_enabled", text="Grid", toggle=True,
+                 icon='SNAP_GRID')
+        row.prop(prefs, "geo_snap", text="Vertex", toggle=True,
+                 icon='SNAP_VERTEX')
+        row.prop(prefs, "surface_snap", text="Surface", toggle=True,
+                 icon='SNAP_FACE')
+        box.prop(prefs, "snap_target", text="")
+        col = box.column(align=True)
         col.prop(prefs, "grid_world")
         col.prop(prefs, "build_grid_extent")
         col.prop(prefs, "snap_pixels")
         col.prop(prefs, "angle_step")
-        col.separator()
+
+        # Boolean defaults.
+        box = layout.box()
+        box.label(text="Boolean", icon='MOD_BOOLEAN')
+        col = box.column(align=True)
         col.prop(prefs, "non_destructive")
         col.prop(prefs, "multi_object")
         col.prop(prefs, "cleanup_after_cut")
-        col.prop(prefs, "default_solver")
-        col.separator()
+        box.prop(prefs, "default_solver", text="Solver")
+
+        # Curves (pipe / cable).
+        box = layout.box()
+        box.label(text="Curves", icon='MOD_SCREW')
+        col = box.column(align=True)
         col.prop(prefs, "pipe_radius")
         col.prop(prefs, "pipe_offset")
-        col.prop(prefs, "pipe_profile")
+        col.prop(prefs, "pipe_profile", text="")
         col.prop(prefs, "pipe_follow_surface")
         col.prop(prefs, "pipe_follow_segments")
+        col = box.column(align=True)
         col.prop(prefs, "cable_radius")
         col.prop(prefs, "cable_sag")
         col.prop(prefs, "cable_segments")
-        col.separator()
-        col.label(text="Colors (live preview)")
-        row = col.row(align=True)
+
+        # Live-preview colors.
+        box = layout.box()
+        box.label(text="Preview Colors", icon='COLOR')
+        row = box.row(align=True)
         row.prop(prefs, "line_color", text="")
+        row.prop(prefs, "fill_color", text="")
         row.prop(prefs, "grid_color", text="")
 
 
@@ -283,8 +301,10 @@ class HARDFLOW_PT_cutter_options(Panel):
         row = col.row(align=True)
         row.prop(prefs, "draw_array_count")
         row.prop(prefs, "draw_array_axis", text="")
-        col.label(text="Live keys while drawing: -/= , . A D B C J",
-                  icon='INFO')
+        legend = col.box().column(align=True)
+        legend.label(text="Live keys while drawing", icon='INFO')
+        legend.label(text="−/=  inset       ,/.  rotate")
+        legend.label(text="A/D  array       B/C  bevel       J  preview")
         col.separator()
         col.label(text="Topology & Shading")
         col.prop(prefs, "cut_dissolve_ngons")

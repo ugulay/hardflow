@@ -43,6 +43,17 @@ def _default_prefs():
 class HARDFLOW_Preferences(AddonPreferences):
     bl_idname = __package__
 
+    # Collapse state for the preference sections (the flat ~60-prop list is
+    # grouped into boxed, foldable sections; core sections open, the heavy /
+    # occasional ones folded so the page opens compact). UI-only booleans.
+    ui_show_snapping: BoolProperty(default=True)
+    ui_show_boolean: BoolProperty(default=True)
+    ui_show_curves: BoolProperty(default=False)
+    ui_show_decals: BoolProperty(default=False)
+    ui_show_assets: BoolProperty(default=False)
+    ui_show_appearance: BoolProperty(default=True)
+    ui_show_shortcuts: BoolProperty(default=True)
+
     snap_enabled: BoolProperty(
         name="Grid Snap",
         description="Lock drawing points to the grid",
@@ -462,74 +473,125 @@ class HARDFLOW_Preferences(AddonPreferences):
         default=2.0, min=1.0, soft_max=8.0,
     )
 
+    def _section(self, layout, key, title, icon):
+        """Draw a foldable, boxed preference section. Returns the body column when
+        the section is expanded, else None (so the caller skips its props). Keeps
+        the long preference list scannable instead of one flat wall of ~60 rows."""
+        box = layout.box()
+        header = box.row(align=True)
+        expanded = getattr(self, key)
+        header.prop(self, key, text="", emboss=False,
+                    icon='DISCLOSURE_TRI_DOWN' if expanded
+                    else 'DISCLOSURE_TRI_RIGHT')
+        header.label(text=title, icon=icon)
+        return box.column() if expanded else None
+
     def draw(self, context):
-        col = self.layout.column()
-        col.prop(self, "snap_enabled")
-        col.prop(self, "grid_world")
-        col.prop(self, "geo_snap")
-        col.prop(self, "surface_snap")
-        col.prop(self, "default_plane")
-        col.prop(self, "snap_target")
-        col.prop(self, "snap_pixels")
-        col.prop(self, "angle_step")
-        col.prop(self, "ngon_sides")
-        col.prop(self, "build_grid_extent")
-        col.prop(self, "pipe_radius")
-        col.prop(self, "pipe_offset")
-        col.prop(self, "pipe_profile")
-        col.prop(self, "pipe_follow_surface")
-        col.prop(self, "pipe_follow_segments")
-        col.prop(self, "cable_radius")
-        col.prop(self, "cable_sag")
-        col.prop(self, "cable_segments")
-        col.prop(self, "decal_size")
-        col.prop(self, "decal_offset")
-        col.prop(self, "decal_resolution")
-        col.prop(self, "decal_parallax")
-        col.prop(self, "decal_parallax_depth")
-        col.prop(self, "decal_parallax_layers")
-        col.prop(self, "decal_bump_strength")
-        col.prop_search(self, "decal_height_image", bpy.data, "images")
-        col.prop(self, "decal_height_invert")
-        col.prop(self, "decal_normal_transfer")
-        col.prop(self, "bake_size")
-        col.prop(self, "decal_library_path")
-        col.prop(self, "atlas_max_width")
-        col.prop(self, "asset_library_path")
-        col.prop(self, "asset_as_cutter")
-        col.prop(self, "asset_boolean")
-        col.prop(self, "asset_auto_scale")
-        col.prop(self, "asset_fit_fraction")
-        col.prop(self, "asset_grid_snap")
-        col.prop(self, "asset_grid_spacing")
-        col.prop(self, "asset_conform")
-        col.prop(self, "asset_transfer_shading")
-        col.prop(self, "non_destructive")
-        col.prop(self, "multi_object")
-        col.prop(self, "cleanup_after_cut")
-        col.prop(self, "cut_dissolve_ngons")
-        col.prop(self, "fix_shading_after_cut")
-        col.prop(self, "sort_modifiers_after_cut")
-        col.prop(self, "auto_trim_after_cut")
-        col.prop(self, "auto_trim_radius")
-        col.prop(self, "auto_trim_lift")
-        col.prop(self, "live_boolean_preview")
-        col.prop(self, "live_preview_max_verts")
-        col.prop(self, "draw_inset")
-        col.prop(self, "draw_bevel_cut")
-        col.prop(self, "draw_cutter_bevel")
-        col.prop(self, "smart_bevel_default")
-        row = col.row(align=True)
-        row.prop(self, "draw_array_count")
-        row.prop(self, "draw_array_axis", text="")
-        col.prop(self, "default_solver")
-        row = col.row(align=True)
-        row.prop(self, "line_color")
-        row.prop(self, "fill_color")
-        row.prop(self, "grid_color")
-        col.prop(self, "line_width")
-        col.separator()
-        box = col.box()
-        box.label(text="Shortcuts", icon='KEYINGSET')
-        from . import keymaps
-        keymaps.draw_keymap_prefs(box, context)
+        layout = self.layout
+
+        col = self._section(layout, "ui_show_snapping", "Snapping & Grid",
+                            'SNAP_ON')
+        if col:
+            col.prop(self, "snap_enabled")
+            col.prop(self, "geo_snap")
+            col.prop(self, "surface_snap")
+            col.prop(self, "snap_target")
+            col.separator()
+            col.prop(self, "grid_world")
+            col.prop(self, "snap_pixels")
+            col.prop(self, "angle_step")
+            col.prop(self, "ngon_sides")
+            col.prop(self, "build_grid_extent")
+            col.prop(self, "default_plane")
+
+        col = self._section(layout, "ui_show_boolean", "Boolean & Cutters",
+                            'MOD_BOOLEAN')
+        if col:
+            col.prop(self, "default_solver")
+            col.prop(self, "non_destructive")
+            col.prop(self, "multi_object")
+            col.prop(self, "cleanup_after_cut")
+            col.separator()
+            col.label(text="Live preview", icon='HIDE_OFF')
+            col.prop(self, "live_boolean_preview")
+            col.prop(self, "live_preview_max_verts")
+            col.separator()
+            col.label(text="Cutter defaults (seed the next draw)", icon='MOD_BOOLEAN')
+            col.prop(self, "draw_inset")
+            col.prop(self, "draw_bevel_cut")
+            col.prop(self, "draw_cutter_bevel")
+            row = col.row(align=True)
+            row.prop(self, "draw_array_count")
+            row.prop(self, "draw_array_axis", text="")
+            col.separator()
+            col.label(text="Topology & shading", icon='MOD_DATA_TRANSFER')
+            col.prop(self, "cut_dissolve_ngons")
+            col.prop(self, "fix_shading_after_cut")
+            col.prop(self, "sort_modifiers_after_cut")
+            col.prop(self, "smart_bevel_default")
+            col.separator()
+            col.label(text="Cut-to-Trim (Decal bridge)", icon='UV_DATA')
+            col.prop(self, "auto_trim_after_cut")
+            if self.auto_trim_after_cut != 'OFF':
+                col.prop(self, "auto_trim_radius")
+                col.prop(self, "auto_trim_lift")
+
+        col = self._section(layout, "ui_show_curves", "Curves (Pipe / Cable / Sweep)",
+                            'MOD_SCREW')
+        if col:
+            col.prop(self, "pipe_radius")
+            col.prop(self, "pipe_offset")
+            col.prop(self, "pipe_profile")
+            col.prop(self, "pipe_follow_surface")
+            col.prop(self, "pipe_follow_segments")
+            col.separator()
+            col.prop(self, "cable_radius")
+            col.prop(self, "cable_sag")
+            col.prop(self, "cable_segments")
+
+        col = self._section(layout, "ui_show_decals", "Decals", 'TEXTURE')
+        if col:
+            col.prop(self, "decal_size")
+            col.prop(self, "decal_offset")
+            col.prop(self, "decal_resolution")
+            col.prop(self, "decal_normal_transfer")
+            col.separator()
+            col.label(text="Depth (image decals)", icon='MOD_DISPLACE')
+            col.prop(self, "decal_parallax")
+            col.prop(self, "decal_parallax_depth")
+            col.prop(self, "decal_parallax_layers")
+            col.prop(self, "decal_bump_strength")
+            col.prop_search(self, "decal_height_image", bpy.data, "images")
+            col.prop(self, "decal_height_invert")
+            col.separator()
+            col.prop(self, "bake_size")
+            col.prop(self, "decal_library_path")
+            col.prop(self, "atlas_max_width")
+
+        col = self._section(layout, "ui_show_assets", "Assets / INSERTs",
+                            'FILE_BLEND')
+        if col:
+            col.prop(self, "asset_library_path")
+            col.prop(self, "asset_as_cutter")
+            col.prop(self, "asset_boolean")
+            col.separator()
+            col.prop(self, "asset_auto_scale")
+            col.prop(self, "asset_fit_fraction")
+            col.prop(self, "asset_grid_snap")
+            col.prop(self, "asset_grid_spacing")
+            col.prop(self, "asset_conform")
+            col.prop(self, "asset_transfer_shading")
+
+        col = self._section(layout, "ui_show_appearance", "Appearance", 'COLOR')
+        if col:
+            col.label(text="Live-preview colors")
+            row = col.row(align=True)
+            row.prop(self, "line_color", text="")
+            row.prop(self, "fill_color", text="")
+            row.prop(self, "grid_color", text="")
+            col.prop(self, "line_width")
+
+        col = self._section(layout, "ui_show_shortcuts", "Shortcuts", 'KEYINGSET')
+        if col:
+            from . import keymaps
+            keymaps.draw_keymap_prefs(col, context)
