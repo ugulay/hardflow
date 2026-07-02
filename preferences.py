@@ -188,6 +188,28 @@ class HARDFLOW_Preferences(AddonPreferences):
         description="Sub-divisions per cable span; more = smoother sag",
         default=12, min=1, max=128,
     )
+    cable_gravity: BoolProperty(
+        name="Cable Gravity Settle",
+        description="Hang the cable by relaxing a pinned particle chain under "
+                    "gravity (position-based physics) instead of the analytic "
+                    "sag -- the rope drapes over obstacles and rests on scene "
+                    "geometry. Toggle live with G while drawing",
+        default=False,
+    )
+    cable_slack: FloatProperty(
+        name="Cable Slack",
+        description="Extra rope length for the gravity settle, as a multiple "
+                    "of the straight span (1.0 = taut, 1.15 = 15% extra). "
+                    "Live-adjust with Shift+Wheel while gravity is on",
+        default=1.15, min=1.0, soft_max=3.0,
+    )
+    cable_collision: BoolProperty(
+        name="Cable Scene Collision",
+        description="Let the gravity-settled cable collide with (rest on) the "
+                    "visible scene meshes; turn off in heavy scenes if the "
+                    "live preview gets slow",
+        default=True,
+    )
     ngon_sides: IntProperty(
         name="N-gon Sides",
         description="Default side count for the N-gon draw shape; adjust live "
@@ -576,6 +598,9 @@ class HARDFLOW_Preferences(AddonPreferences):
             col.prop(self, "cable_radius")
             col.prop(self, "cable_sag")
             col.prop(self, "cable_segments")
+            col.prop(self, "cable_gravity")
+            col.prop(self, "cable_slack")
+            col.prop(self, "cable_collision")
 
         col = self._section(layout, "ui_show_decals", "Decals", 'TEXTURE')
         if col:

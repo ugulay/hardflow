@@ -25,16 +25,22 @@
 # through the anchors -- and when the profile is ROUND with Follow off, a light
 # AUTO-handle Bezier curve you can keep editing after commit.
 #
+# The cable additionally has a GRAVITY settle (`G`, v1.20): instead of the
+# analytic parabola, the rope is relaxed as a pinned particle chain
+# (core/physics.settle_chain) that collides with the scene -- it drapes over
+# obstacles and rests on geometry; Shift+Wheel then feeds it slack (rope
+# length) rather than a sag depth.
+#
 # Shortcuts (modal): LMB click add point / drag freehand, Enter create,
 #   Backspace undo, Esc/RMB cancel, Wheel radius, Ctrl+Wheel clearance,
 #   Tab/S toggle surface snap, V vertex/edge snap, X grid snap,
-#   F follow-surface (pipe), C smooth path, (cable only) Shift+Wheel sag,
-#   MMB navigation.
+#   F follow-surface (pipe), C smooth path, (cable only) G gravity settle +
+#   Shift+Wheel sag/slack, MMB navigation.
 import bpy
 from bpy.types import Operator
 from mathutils import Vector
 
-from ..core import raycast, geometry, transform, snapping, path
+from ..core import raycast, geometry, transform, snapping, path, physics
 from ..preferences import get_prefs
 from ..ui import draw as hud
 
@@ -100,6 +106,10 @@ class _CurveDraw:
         self._smooth = self._can_smooth and prefs.pipe_smooth
         self._profile = prefs.pipe_profile if self._has_profile else 'ROUND'
         self._geo = snapping.collect_geo(context, prefs.snap_target)
+        # Gravity settle (cable only; _init_params seeds these from prefs).
+        self._gravity = False
+        self._slack = 1.15
+        self._collide_scene = False
 
         self._init_params(prefs)
 
@@ -169,12 +179,15 @@ class _CurveDraw:
         return point
 
     def _adjust(self, event, sign):
-        """Wheel live-tuning: bare = radius, Ctrl = clearance, Shift = sag
-        (cable only)."""
+        """Wheel live-tuning: bare = radius, Ctrl = clearance, Shift = sag --
+        or rope slack when the cable's gravity settle is on."""
         if event.ctrl:
             self._offset = max(0.0, self._offset + sign * 0.005)
         elif event.shift and self._has_sag:
-            self._sag = max(0.0, self._sag + sign * 0.02)
+            if self._gravity:
+                self._slack = max(1.0, self._slack + sign * 0.02)
+            else:
+                self._sag = max(0.0, self._sag + sign * 0.02)
         else:
             self._radius = max(0.001, self._radius + sign * 0.005)
 
@@ -344,6 +357,10 @@ class _CurveDraw:
             self._smooth = not self._smooth
             dirty = True
 
+        elif event.type == 'G' and event.value == 'PRESS' and self._has_sag:
+            self._gravity = not self._gravity
+            dirty = True
+
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             if self._cursor3d is not None:
                 # Click or stroke? Decided by drag distance; resolved on RELEASE.
@@ -405,8 +422,10 @@ class _CurveDraw:
             controls += " · P profile"
             params += " · Profile %s" % self._profile
         if self._has_sag:
-            controls += " · Shift+Wheel sag"
-            params += " · Sag %.3f m" % self._sag
+            controls += " · G gravity · Shift+Wheel %s" % (
+                "slack" if self._gravity else "sag")
+            params += (" · Slack %.2fx" % self._slack) if self._gravity \
+                else (" · Sag %.3f m" % self._sag)
         return [
             "%s — LMB click / drag freehand · Enter create · Backspace undo "
             "· Esc cancel" % self._title,
@@ -456,7 +475,8 @@ class _CurveDraw:
         if self._has_profile:
             chips.append(("P", self._profile))
         if self._has_sag:
-            chips.append(("Sh+Wheel", "Sag"))
+            chips.append(("G", "Gravity", self._gravity))
+            chips.append(("Sh+Wheel", "Slack" if self._gravity else "Sag"))
         return chips + [("Enter", "Create"), ("Esc", "Cancel")]
 
     # --- commit / cleanup ------------------------------------------------
@@ -531,11 +551,44 @@ class HARDFLOW_OT_cable(_CurveDraw, Operator):
         self._offset = prefs.pipe_offset
         self._sag = prefs.cable_sag
         self._segments = prefs.cable_segments
+        self._gravity = prefs.cable_gravity
+        self._slack = prefs.cable_slack
+        self._collide_scene = prefs.cable_collision
+
+    def _surface_collider(self, context):
+        """Push-out collider for the gravity settle: a particle inside -- or
+        hovering closer to -- the nearest surface than the tube's lift is moved
+        onto that surface + lift, so the rope drapes over obstacles and rests
+        on geometry. None when scene collision is off (pref)."""
+        if not self._collide_scene:
+            return None
+        lift = self._lift()
+
+        def collide(p):
+            near = snapping.nearest_surface_point(context, p, 'VISIBLE')
+            if near is None:
+                return None
+            loc, nrm = near
+            side = (Vector(p) - loc).dot(nrm)   # signed height over the surface
+            if side < lift:
+                out = loc + nrm * lift
+                return (out[0], out[1], out[2])
+            return None
+
+        return collide
 
     def _route_points(self, context, anchors):
+        pts = [(p[0], p[1], p[2]) for p in anchors]
+        if self._gravity and len(anchors) >= 2:
+            # Particles: every span sub-divided straight, anchors pinned.
+            chain = transform.cable_chain(pts, segments=self._segments, sag=0.0)
+            pinned = range(0, len(chain), self._segments)
+            settled = physics.settle_chain(
+                chain, pinned=pinned, slack=self._slack,
+                collide=self._surface_collider(context))
+            return [Vector(p) for p in settled]
         return transform.cable_chain(
-            [(p[0], p[1], p[2]) for p in anchors],
-            segments=self._segments, sag=self._sag, axis=2)
+            pts, segments=self._segments, sag=self._sag, axis=2)
 
 
 class HARDFLOW_OT_sweep(_CurveDraw, Operator):

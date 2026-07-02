@@ -277,6 +277,25 @@ surface and straight segments cut through corners (see the v1.2 screenshot).
       profile (mesh sweep follows the smoothed path). Cable has no `C` chip
       (sag defines its shape).
 
+**Cable gravity settle ⭐ (v1.20):**
+
+- [ ] In Cable, press **`G`** → the chip lights up and the rope re-hangs as a
+      **settled particle chain** (a true catenary-like droop) instead of the
+      parabola; `Shift+Wheel` now reads **Slack** in the HUD and feeds the rope
+      extra length (deeper hang) instead of a sag depth. `G` again returns to
+      the analytic sag.
+- [ ] **Obstacle draping:** place a cube between two anchor points spanning
+      over it (anchors higher than the cube, slack generous) → the settled
+      rope **rests ON the cube** (lifted by its radius, not sunken), draping
+      over the edges instead of passing through. Move the cursor (the live
+      endpoint) around → the settle updates live.
+- [ ] **Floor rest:** span two anchors low over the ground plane object with
+      lots of slack → the middle of the rope **lies along the floor** instead
+      of hanging through it.
+- [ ] With **Cable Scene Collision** off in the add-on prefs, the same rope
+      ignores the cube (hangs freely through it) — the escape hatch for heavy
+      scenes.
+
 ---
 
 ---

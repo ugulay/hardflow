@@ -41,6 +41,7 @@ hardsurface = _load("hardsurface")
 topology = _load("topology")
 modifiers = _load("modifiers")
 path = _load("path")
+physics = _load("physics")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1597,6 +1598,74 @@ def test_resample_path_closed_no_seam_duplicate():
     # spans cross corners: spacing along the perimeter stays the step
     out = path.resample_path(sq, 0.5, closed=True)
     assert len(out) == 8
+
+
+# --- physics: cable gravity settle ---------------------------------------------
+
+def _chain9():
+    return [(i * 0.5, 0.0, 0.0) for i in range(9)]       # 4 m horizontal span
+
+
+def _polyline_length(pts):
+    return sum(math.dist(a, b) for a, b in zip(pts[:-1], pts[1:]))
+
+
+def test_settle_chain_pins_sag_and_length():
+    out = physics.settle_chain(_chain9(), pinned=(0, 8), slack=1.2)
+    assert out[0] == (0.0, 0.0, 0.0) and out[8] == (4.0, 0.0, 0.0)  # pins exact
+    assert out[4][2] < -1.0                    # mid-span hangs well below
+    assert abs(out[2][2] - out[6][2]) < 0.05   # roughly symmetric
+    # the rope keeps (about) its rest length: slack * straight span
+    assert abs(_polyline_length(out) - 4.0 * 1.2) < 4.0 * 1.2 * 0.05
+    # negative pin indices work like list indices
+    same = physics.settle_chain(_chain9(), pinned=(0, -1), slack=1.2)
+    assert same == out
+
+
+def test_settle_chain_slack_deepens_and_gravity_direction():
+    shallow = physics.settle_chain(_chain9(), pinned=(0, 8), slack=1.05)
+    deep = physics.settle_chain(_chain9(), pinned=(0, 8), slack=1.4)
+    assert deep[4][2] < shallow[4][2] < -0.3
+    # gravity is a direction: +Z hangs the rope upward, mirrored
+    up = physics.settle_chain(_chain9(), pinned=(0, 8), slack=1.2,
+                              gravity=(0.0, 0.0, 1.0))
+    down = physics.settle_chain(_chain9(), pinned=(0, 8), slack=1.2)
+    assert abs(up[4][2] + down[4][2]) < 1e-9
+
+
+def test_settle_chain_collider_rests_on_floor():
+    floor = -0.3
+
+    def clamp(p):
+        return (p[0], p[1], floor) if p[2] < floor else None
+
+    out = physics.settle_chain(_chain9(), pinned=(0, 8), slack=1.4,
+                               collide=clamp)
+    assert min(p[2] for p in out) >= floor - 1e-9   # never below the floor
+    assert any(abs(p[2] - floor) < 1e-6 for p in out)   # actually rests on it
+    # without the floor the same rope would sag far deeper
+    free = physics.settle_chain(_chain9(), pinned=(0, 8), slack=1.4)
+    assert free[4][2] < floor
+
+
+def test_settle_chain_deterministic_and_guards():
+    a = physics.settle_chain(_chain9(), pinned=(0, 8))
+    b = physics.settle_chain(_chain9(), pinned=(0, 8))
+    assert a == b                                    # no time, no randomness
+    # guards: tiny chains, all-pinned chains and zero gravity are no-ops
+    two = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+    assert physics.settle_chain(two, pinned=(0, 1)) == two
+    assert physics.settle_chain([(1.0, 2.0, 3.0)]) == [(1.0, 2.0, 3.0)]
+    pts = _chain9()
+    assert physics.settle_chain(pts, pinned=range(9)) == pts
+    assert physics.settle_chain(pts, pinned=(0, 8),
+                                gravity=(0.0, 0.0, 0.0)) == pts
+
+
+def test_chain_rest_lengths():
+    pts = [(0, 0, 0), (1, 0, 0), (1, 2, 0)]
+    assert physics.chain_rest_lengths(pts) == [1.0, 2.0]
+    assert physics.chain_rest_lengths(pts, slack=1.5) == [1.5, 3.0]
 
 
 def _run_all():
