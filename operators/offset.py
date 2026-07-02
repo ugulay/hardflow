@@ -200,6 +200,11 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         return [("E", "Extrude", self.phase == 'EXTRUDE'), ("R", "Repeat"),
                 ("X", "Snap", self.snap)]
 
+    def _cursor_label(self):
+        if self.phase == 'EXTRUDE':
+            return "%+.3f m" % self.distance
+        return "%.3f m" % self.thickness
+
     def _remember_last(self):
         if self.thickness > 1e-6:
             HARDFLOW_OT_offset._LAST_THICKNESS = self.thickness

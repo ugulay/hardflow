@@ -121,6 +121,9 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
         return [("C", "Copy", self.copy), ("R", "Repeat"),
                 ("X", "Snap", self.snap)]
 
+    def _cursor_label(self):
+        return "%.3f m" % self.distance
+
     # --- HUD -------------------------------------------------------------
 
     def _hud_lines(self, context, prefs):

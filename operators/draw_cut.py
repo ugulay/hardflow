@@ -904,6 +904,9 @@ class HARDFLOW_OT_draw(Operator):
         measure = self._measure(context)
         if measure:
             lines.insert(0, (measure, accent))  # measurement line accented, on top
+            # ...and again as a pill at the cursor, so the size reads where the
+            # eyes already are instead of only in the bottom-left panel.
+            hud.draw_cursor_label(self.cursor, measure, accent=accent)
         hud.draw_hud(region, lines, title="Draw Cut", accent=accent)
 
         # Premium shortcut bar along the bottom: the pressable toggles/cycles with
@@ -920,7 +923,7 @@ class HARDFLOW_OT_draw(Operator):
             ("N", "Non-Destr", self.nd),
             ("Enter", "Apply"),
             ("Esc", "Cancel"),
-        ])
+        ], accent=accent)
 
     def _measure(self, context):
         """Return the world-scale size of the shape being drawn, in meters."""

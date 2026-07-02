@@ -224,9 +224,14 @@ class _FaceDragModal:
         # snapped onto an inferred feature (the shared "snapped here" hint).
         if self.locked and self._infer_hit and self._cursor_px is not None:
             hud.draw_snap_marker(self._cursor_px, color=hud.SNAP_COLORS['MID'])
+        # Live value at the cursor (distance / thickness) -- eyes stay on the mesh.
+        if self.locked and self._cursor_px is not None:
+            label = self._cursor_label()
+            if label:
+                hud.draw_cursor_label(self._cursor_px, label, accent=accent)
         hud.draw_hud(context.region, self._hud_lines(context, prefs),
                      title=self._hud_title, accent=accent)
-        hud.draw_shortcut_bar(context.region, self._shortcut_chips())
+        hud.draw_shortcut_bar(context.region, self._shortcut_chips(), accent=accent)
 
     # --- shortcut bar (shared) -------------------------------------------
 
@@ -239,6 +244,11 @@ class _FaceDragModal:
     def _tool_chips(self):
         """Tool-specific shortcut chips (override), prepended to the shared tail."""
         return []
+
+    def _cursor_label(self):
+        """Short live-value string shown in a pill at the cursor (override) --
+        the tool's current distance / thickness. Empty string = no cursor label."""
+        return ""
 
     # --- shared live edit (Command Pattern) ------------------------------
 

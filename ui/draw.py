@@ -1,6 +1,7 @@
 # GPU drawing over the viewport and blf text HUD.
 import math
 
+import bpy
 import gpu
 import blf
 from gpu_extras.batch import batch_for_shader
@@ -234,6 +235,68 @@ _HUD_BORDER = (1.0, 1.0, 1.0, 0.14)
 _HUD_ACCENT = (0.15, 0.8, 1.0, 1.0)
 
 
+def _ui_scale():
+    """Blender's resolved UI scale (DPI x pixel size x user preference) so the
+    HUD, shortcut bar and snap markers keep a constant physical size on hiDPI /
+    4K displays instead of shrinking to a few pixels. 1.0 when there is no
+    context yet (headless import), so nothing here breaks a background run."""
+    try:
+        return bpy.context.preferences.system.ui_scale
+    except Exception:
+        return 1.0
+
+
+def _luminance(color):
+    """Rec.709 luminance of an RGB(A) color, 0..1 -- to pick a readable glyph
+    against an arbitrary accent."""
+    return 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2]
+
+
+def _contrast_text(color):
+    """Near-black or near-white, whichever reads on `color` -- keeps the active
+    key glyph legible whatever accent (line color) the user picked."""
+    if _luminance(color) > 0.5:
+        return (0.02, 0.02, 0.03, 1.0)
+    return (0.98, 0.98, 0.98, 1.0)
+
+
+def _theme_hud_colors():
+    """(background, text, border) for the framed HUD, read from the active
+    Blender theme's menu colors so the overlay blends with a light OR dark theme
+    instead of always being a hardcoded dark box. Falls back to the built-in dark
+    constants when the theme can't be read (headless / unexpected layout)."""
+    try:
+        wcol = bpy.context.preferences.themes[0].user_interface.wcol_menu_back
+        inner = tuple(wcol.inner)
+        text = tuple(wcol.text)
+        bg = (inner[0], inner[1], inner[2], max(0.80, inner[3]))
+        txt = (text[0], text[1], text[2], 1.0)
+        border = (txt[0], txt[1], txt[2], 0.16)
+        return bg, txt, border
+    except Exception:
+        return _HUD_BG, _HUD_TEXT, _HUD_BORDER
+
+
+def _theme_bar_colors():
+    """(bar_bg, chip_bg, key_resting, text) for the shortcut bar, derived from the
+    active theme so the chips stay legible on any theme. The active key box uses
+    the caller's accent (the user's line color). Falls back to the built-in bar
+    palette headless / on an unexpected theme layout."""
+    try:
+        wcol = bpy.context.preferences.themes[0].user_interface.wcol_menu_back
+        inner = tuple(wcol.inner)
+        text = tuple(wcol.text)
+        bar_bg = (inner[0], inner[1], inner[2], 0.62)
+        chip_bg = (min(1.0, inner[0] + 0.06), min(1.0, inner[1] + 0.06),
+                   min(1.0, inner[2] + 0.07), 0.86)
+        resting = (min(1.0, inner[0] + 0.14), min(1.0, inner[1] + 0.14),
+                   min(1.0, inner[2] + 0.16), 0.94)
+        txt = (text[0], text[1], text[2], 1.0)
+        return bar_bg, chip_bg, resting, txt
+    except Exception:
+        return _BAR_BG, _CHIP_BG, _KEY_RESTING, _HUD_TEXT
+
+
 def draw_text(x, y, text, color=_HUD_TEXT, size=13):
     """A single blf label at screen (x, y) -- used for per-region names in the
     trim editor. Kept tiny so callers don't touch blf directly."""
@@ -252,28 +315,35 @@ def draw_snap_marker(center, kind=None, color=None, fallback=None, radius=7.0):
     inference snap reads the same in every modal tool."""
     col = color if color is not None else SNAP_COLORS.get(
         kind, fallback if fallback is not None else _HUD_ACCENT)
-    draw_snap_ring(center, radius, col, width=1.75)
-    draw_points([center], fade_color(col, 0.9), size=4.0)
+    scale = _ui_scale()
+    draw_snap_ring(center, radius * scale, col, width=1.75 * scale)
+    draw_points([center], fade_color(col, 0.9), size=4.0 * scale)
 
 
-def draw_hud(region, lines, color=_HUD_TEXT, title=None, accent=None):
+def draw_hud(region, lines, color=None, title=None, accent=None):
     """Multi-line status text in the bottom left, over a framed background panel
     (fill + subtle border). When `title` is given, a header row is drawn with a
     short accent bar and the title in `accent` (defaulting to the brand blue) --
     a consistent, premium HUD frame every tool gets for free.
 
-    `lines` items can be either a plain str or a (text, rgba) pair; a line given
-    as a pair is drawn in its own color (e.g. to highlight the measurement
-    line)."""
+    Sizes and paddings are multiplied by the resolved UI scale so the panel keeps
+    a constant physical size on hiDPI displays; the background/text/border colors
+    come from the active theme so it blends with a light or dark theme. `lines`
+    items can be either a plain str or a (text, rgba) pair; a pair is drawn in its
+    own color (e.g. to highlight the measurement line)."""
     if not lines and not title:
         return
+    scale = _ui_scale()
+    bg, txt, border = _theme_hud_colors()
+    if color is None:
+        color = txt
     font_id = 0
-    size = 14
-    title_size = 13
-    pad = 12        # panel padding
-    line_h = 24     # line height
-    header_h = (title_size + 10) if title else 0
-    margin = 16     # distance from the screen edge
+    size = int(round(14 * scale))
+    title_size = int(round(13 * scale))
+    pad = 12 * scale          # panel padding
+    line_h = 24 * scale       # line height
+    header_h = (title_size + 10 * scale) if title else 0
+    margin = 16 * scale       # distance from the screen edge
     accent = tuple(accent) if accent is not None else _HUD_ACCENT
 
     blf.size(font_id, size)
@@ -281,22 +351,22 @@ def draw_hud(region, lines, color=_HUD_TEXT, title=None, accent=None):
     widths = [blf.dimensions(font_id, t)[0] for t in texts]
     if title:
         blf.size(font_id, title_size)
-        widths.append(blf.dimensions(font_id, title)[0] + 14)  # room for the bar
+        widths.append(blf.dimensions(font_id, title)[0] + 14 * scale)  # bar room
         blf.size(font_id, size)
     box_w = (max(widths) if widths else 0) + pad * 2
     box_h = line_h * len(lines) + pad * 2 + header_h
 
     x0, y0 = margin, margin
-    _draw_rect(x0, y0, box_w, box_h, _HUD_BG)
-    draw_rect_outline(x0, y0, box_w, box_h, _HUD_BORDER)
+    _draw_rect(x0, y0, box_w, box_h, bg)
+    draw_rect_outline(x0, y0, box_w, box_h, border)
 
     ty = y0 + box_h - pad
     if title:
         bar_h = title_size
-        _draw_rect(x0 + pad, ty - bar_h, 3, bar_h, accent)     # left accent bar
+        _draw_rect(x0 + pad, ty - bar_h, 3 * scale, bar_h, accent)  # accent bar
         blf.size(font_id, title_size)
         blf.color(font_id, *accent)
-        blf.position(font_id, x0 + pad + 10, ty - bar_h + 1, 0)
+        blf.position(font_id, x0 + pad + 10 * scale, ty - bar_h + 1, 0)
         blf.draw(font_id, title)
         blf.size(font_id, size)
         ty -= header_h
@@ -312,16 +382,48 @@ def draw_hud(region, lines, color=_HUD_TEXT, title=None, accent=None):
         ty -= line_h
 
 
+def draw_cursor_label(pos, text, color=None, bg=None, accent=None):
+    """A compact framed pill just up-and-right of a screen point (the cursor):
+    the live dimension / distance readout, so the measurement reads where the
+    eyes already are instead of only in the bottom-left HUD. Scales with the UI
+    scale and takes its colors from the theme. No-op for an empty string or a
+    missing position."""
+    if not text or pos is None:
+        return
+    scale = _ui_scale()
+    theme_bg, theme_txt, border = _theme_hud_colors()
+    bg = bg if bg is not None else theme_bg
+    color = color if color is not None else theme_txt
+    accent = tuple(accent) if accent is not None else _HUD_ACCENT
+    font_id = 0
+    size = int(round(13 * scale))
+    padx = 8 * scale
+    pady = 5 * scale
+    off = 16 * scale
+    blf.size(font_id, size)
+    tw, th = blf.dimensions(font_id, text)
+    x = pos[0] + off
+    y = pos[1] + off
+    w = tw + padx * 2
+    h = th + pady * 2
+    _draw_rect(x, y, w, h, bg)
+    draw_rect_outline(x, y, w, h, border)
+    _draw_rect(x, y, w, max(1.0, 2 * scale), accent)   # thin accent underline
+    blf.color(font_id, *color)
+    blf.position(font_id, x + padx, y + pady, 0)
+    blf.draw(font_id, text)
+
+
 # --- Module 2: dynamic alignment guides + premium shortcut bar ---------------
 
-# Chip palette for the shortcut bar. A resting chip is a dark translucent pill; an
-# active one (the current mode / an engaged toggle) gets the brand-blue key box so
-# the pressed state reads at a glance.
+# Fallback chip palette for the shortcut bar (used headless / when the theme can't
+# be read; _theme_bar_colors supplies the live values). A resting chip is a dark
+# translucent pill; an active one gets the accent key box so the pressed state
+# reads at a glance. The active glyph color is derived per-accent by _contrast_text.
 _BAR_BG = (0.02, 0.02, 0.04, 0.60)
 _CHIP_BG = (0.10, 0.11, 0.14, 0.82)
 _KEY_RESTING = (0.20, 0.21, 0.26, 0.92)
 _KEY_ACTIVE = _HUD_ACCENT
-_KEY_GLYPH_ACTIVE = (0.02, 0.03, 0.05, 1.0)
 
 
 def draw_alignment_guides(region, anchors, cursor, color=None, tol=6.0):
@@ -338,22 +440,27 @@ def draw_alignment_guides(region, anchors, cursor, color=None, tol=6.0):
         draw_dashed_line(p1, p2, col, dash=10.0, gap=8.0, width=1.2)
 
 
-def draw_shortcut_bar(region, items):
+def draw_shortcut_bar(region, items, accent=None):
     """A premium, translucent shortcut bar centered along the bottom of the
     viewport: each item renders as a pressable-looking chip ``[KEY] Label``.
 
     `items` is a list of ``(key, label)`` or ``(key, label, active)``; an active
-    chip gets the accent key box (the current cut mode, an engaged toggle) so the
-    live state is legible without reading the HUD. Text is measured here; the row
-    packing is core.hud.shortcut_bar_layout (pure + unit-tested). No-op for an
-    empty list."""
+    chip gets the `accent` key box (the current cut mode, an engaged toggle) so the
+    live state is legible without reading the HUD -- `accent` defaults to the brand
+    blue but callers pass the user's line color to match the HUD. Sizes scale with
+    the UI scale and the chip/text colors come from the theme. Text is measured
+    here; the row packing is core.hud.shortcut_bar_layout (pure + unit-tested).
+    No-op for an empty list."""
     if not items:
         return
+    scale = _ui_scale()
+    bar_bg, chip_bg, key_resting, text_col = _theme_bar_colors()
+    key_active = tuple(accent) if accent is not None else _KEY_ACTIVE
     font_id = 0
-    key_size = label_size = 12
-    pad = 9.0          # inner chip padding (left of key box / right of label)
-    key_gap = 6.0      # gap between the key box and its label
-    kb_pad = 10.0      # key-box horizontal padding around the glyph
+    key_size = label_size = int(round(12 * scale))
+    pad = 9.0 * scale        # inner chip padding (left of key box / right of label)
+    key_gap = 6.0 * scale    # gap between the key box and its label
+    kb_pad = 10.0 * scale    # key-box horizontal padding around the glyph
 
     norm, widths = [], []
     for it in items:
@@ -368,29 +475,34 @@ def draw_shortcut_bar(region, items):
         norm.append((key, label, active, keybox_w, kw, lw))
         widths.append(chip_w)
 
-    layout = _layout.shortcut_bar_layout(widths, region.width)
+    # Scale the pure layout's own constants (height / gaps / margins) too, so the
+    # bar height and vertical position track the UI scale with the chip widths.
+    layout = _layout.shortcut_bar_layout(
+        widths, region.width, margin=24.0 * scale, gap=8.0 * scale,
+        height=26.0 * scale, bottom=14.0 * scale)
     bx, by, bw, bh = layout['bar']
     if not layout['chips']:
         return
-    _draw_rect(bx - 9, by - 5, bw + 18, bh + 10, _BAR_BG)   # bar backdrop
+    _draw_rect(bx - 9 * scale, by - 5 * scale, bw + 18 * scale, bh + 10 * scale,
+               bar_bg)   # bar backdrop
 
     for (cx, cw), (key, label, active, keybox_w, kw, lw) in zip(
             layout['chips'], norm):
-        _draw_rect(cx, by, cw, bh, _CHIP_BG)
+        _draw_rect(cx, by, cw, bh, chip_bg)
         # key box
-        kbx, kby = cx + pad, by + 4
-        kbh = bh - 8
-        _draw_rect(kbx, kby, keybox_w, kbh, _KEY_ACTIVE if active else _KEY_RESTING)
+        kbx, kby = cx + pad, by + 4 * scale
+        kbh = bh - 8 * scale
+        _draw_rect(kbx, kby, keybox_w, kbh, key_active if active else key_resting)
         draw_rect_outline(kbx, kby, keybox_w, kbh, _HUD_BORDER)
-        # key glyph -- dark on the accent when active, else light
+        # key glyph -- contrasting on the accent when active, else theme text
         blf.size(font_id, key_size)
-        blf.color(font_id, *(_KEY_GLYPH_ACTIVE if active else _HUD_TEXT))
+        blf.color(font_id, *(_contrast_text(key_active) if active else text_col))
         blf.position(font_id, kbx + (keybox_w - kw) / 2.0,
                      by + (bh - key_size) / 2.0 + 1, 0)
         blf.draw(font_id, key)
         # label
         blf.size(font_id, label_size)
-        blf.color(font_id, *_HUD_TEXT)
+        blf.color(font_id, *text_col)
         blf.position(font_id, kbx + keybox_w + key_gap,
                      by + (bh - label_size) / 2.0 + 1, 0)
         blf.draw(font_id, label)
