@@ -13,11 +13,12 @@ converts far better than a still.
 ## 🐦 X / Twitter (≤ 280 chars)
 
 ```
-Hardflow {{1.18.0}} is out — a FREE, open-source hard-surface boolean modeling
+Hardflow {{1.19.0}} is out — a FREE, open-source hard-surface boolean modeling
 toolkit for Blender 4.2+.
 
-Now with heightmap decals: a real height-map channel drives parallax + normal
-relief. Plus draw-to-cut booleans, snapping, kitbash assets & sweeps. GPLv3.
+New: Smart Bevel now drops support loops that survive Subdivision — validated
+against a live subdivision pass. Plus heightmap decals, draw-to-cut booleans,
+snapping, kitbash assets & sweeps. GPLv3.
 
 ⬇️ {{repo link}}
 #b3d #blender #gamedev #hardsurface
@@ -40,6 +41,7 @@ What's inside 👇
 • Kitbash INSERT assets w/ live preview, auto-scale, asset-pack export
 • Super Modeling Mode: SketchUp-fluid Ghost-Grid shell + atomic per-session undo,
   now with draw-to-cut Cut / Add / Slice / Intersect verbs
+• Smart Bevel: support loops that survive Subdivision — validated, fillet ≈ bevel width
 ```
 
 ---
@@ -94,8 +96,8 @@ hard-surface loop:
 - **Kitbash assets** — INSERTs from a .blend library with a live preview,
   auto-scale, insert-grid snap, material inserts, and asset-pack export.
 
-The pure-logic core is unit-tested (122/122, no Blender needed) and every bpy path
-is verified headless in Blender 5.1.2 (127 tests); the modal tools' interactive
+The pure-logic core is unit-tested (124/124, no Blender needed) and every bpy path
+is verified headless in Blender 5.1.2 (135 tests); the modal tools' interactive
 feel is checked via a manual checklist, so bug reports are very welcome.
 
 Repo / install: {{repo link}}
@@ -108,7 +110,7 @@ features stay isolated.
 
 ## 🎨 BlenderArtists forum
 
-**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.18.0}})`
+**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.19.0}})`
 
 **Body:** same as the Reddit body above. BlenderArtists supports embedded video —
 lead with a GIF/clip and put the install link near the top.
@@ -118,17 +120,17 @@ lead with a GIF/clip and put the install link near the top.
 ## 💼 LinkedIn
 
 ```
-Excited to share Hardflow {{1.18.0}} — a free, open-source hard-surface modeling
+Excited to share Hardflow {{1.19.0}} — a free, open-source hard-surface modeling
 toolkit for Blender 4.2+. 🛠️
 
 One GPLv3 add-on for the whole loop: draw-to-cut booleans, world-scale snapping,
 direct modeling (Push/Pull, Offset, edge tools), profile sweeps, a full decal
 pipeline (now with heightmap decals — parallax + normal relief), kitbash INSERT
-assets, and a SketchUp-fluid "Super Modeling Mode" with atomic per-session undo —
-no license fee.
+assets, and a SketchUp-fluid "Super Modeling Mode" with a Subdivision-safe Smart
+Bevel and atomic per-session undo — no license fee.
 
 Built with a strict, testable architecture (pure logic separated from Blender's
-API, 122/122 unit tests green). Open to contributors and feedback.
+API, 124/124 unit tests green). Open to contributors and feedback.
 
 ⬇️ {{repo link}}
 
@@ -140,11 +142,12 @@ API, 122/122 unit tests green). Open to contributors and feedback.
 ## 🐘 Mastodon (≤ 500 chars)
 
 ```
-Hardflow {{1.18.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
+Hardflow {{1.19.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
 for #Blender 4.2+.
 
-New: heightmap decals (parallax + normal relief). Plus draw-to-cut booleans,
-world-scale snapping, kitbash assets, Push/Pull, and profile sweeps — no price tag.
+New: Smart Bevel that survives Subdivision — validated. Plus heightmap decals
+(parallax + relief), draw-to-cut booleans, world-scale snapping, kitbash assets,
+and profile sweeps — no price tag.
 
 ⬇️ {{repo link}}
 #b3d #blender #gamedev #opensource #3D
@@ -155,22 +158,27 @@ world-scale snapping, kitbash assets, Push/Pull, and profile sweeps — no price
 ## 📝 GitHub Release notes (template)
 
 ```
-## Hardflow v{{1.18.0}}
+## Hardflow v{{1.19.0}}
 
-Heightmap decals — a real height-map channel driving parallax occlusion + normal
-relief.
+Smart Bevel, validated — the hard-surface bevel that drops support/holding loops so
+the edge survives Subdivision is now measured against a live Subdivision pass and
+de-experimentalised.
 
 ### Highlights
-- **Dedicated height-map channel** — an image decal can carry a separate grayscale
-  height map (or use the color image's own luminance) that drives depth
-  independently of the albedo.
-- **Parallax + Relief, combinable** — the height feeds both the Parallax Occlusion
-  UV shift (recessed panel lines slide behind their lip at grazing angles) and a
-  new normal-relief **Bump** for real shaded depth, sampled at the corrected UV so
-  the two agree. An **Invert Height** toggle flips the polarity.
-- **Reach** — a `Load Height Map` picker + an N-panel "Depth (Image Decals)"
-  section put Relief / Parallax / Height-map within reach; every depth build
-  degrades gracefully to a flatter decal on a node-API mismatch (never a break).
+- **Validated support-loop placement** — a headless Blender 5.1.2 probe bevels a
+  cube edge, adds a Catmull-Clark Subdivision modifier, and circle-fits the corner
+  cross-section: the holding loop pins the flanking flat near the bevel and the
+  subdivided fillet stays crisp at radius ≈ the bevel width. Smart Bevel is no
+  longer labelled experimental (the `S` toggle stays the opt-in).
+- **"Expected radius" HUD readout** — in Smart mode the Edge Bevel HUD shows `~r=…`,
+  the fillet radius the bevel will settle to under Subdivision, so you see the
+  outcome while you drag (`core/bevel.beveled_fillet_radius` ≈ width × (1 + 0.3/segments)).
+- **Honest fillet-radius model** — the pure `subdiv_fillet_radius` /
+  `support_offset_for_radius` pair is now documented as the distinct *lone-loop-
+  against-a-sharp-edge* case (radius ≈ offset), separate from a beveled fillet whose
+  radius is set by the width.
+
+Pure core: 124/124. Headless (Blender 5.1.2): 135/135.
 
 ### Install
 Blender 4.2+: Edit → Preferences → Get Extensions → ⌄ → Install from Disk →
@@ -184,8 +192,8 @@ select the hardflow zip.
 ## ✅ Launch checklist
 
 - [ ] Tag the release and write GitHub Release notes (template above)
-- [ ] Attach the built `hardflow-{{1.18.0}}.zip` to the release
-- [ ] Record fresh clips (cut, Push/Pull, decal/asset, sweep, heightmap decal)
+- [ ] Attach the built `hardflow-{{1.19.0}}.zip` to the release
+- [ ] Record fresh clips (cut, Push/Pull, decal/asset, sweep, Smart Bevel + Subdivision)
 - [ ] Post to X, Reddit, BlenderArtists, LinkedIn, Mastodon
 - [ ] Pin the announcement in GitHub Discussions
 - [ ] (Optional) Submit / update on the Blender Extensions Platform

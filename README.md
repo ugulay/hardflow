@@ -13,12 +13,12 @@ price tag.
 [![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-EA7600?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Extension](https://img.shields.io/badge/Blender-Extension-orange?logo=blender&logoColor=white)](https://extensions.blender.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.18.0-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.19.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 </div>
 
-> **Status — under active development.** **Every roadmap feature through v1.18 is
+> **Status — under active development.** **Every roadmap feature through v1.19 is
 > implemented** — the boolean cut loop (Cut / Slice / Make / Join / Intersect /
 > Knife) with Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes,
 > world-scale + vertex/edge snapping, the non-destructive flow, the full decal
@@ -51,8 +51,12 @@ price tag.
 > **v1.18 Heightmap decals** (an image decal can carry a **dedicated grayscale
 > height map** that drives depth independently of the color — feeding both the
 > Parallax Occlusion UV shift and a new normal-relief **Bump**, with an invert
-> polarity toggle). The pure-logic core is unit-tested
-> (`122/122`, no Blender required) and bpy paths add headless coverage (run live
+> polarity toggle), and the **v1.19 Smart Bevel validation** (the last experimental
+> item closed — the support/holding-loop placement measured against a live
+> Catmull-Clark Subdivision pass, with an "expected fillet radius" (`~r=…`) HUD
+> readout while you drag; the loop pins the flat and the subdivided fillet stays
+> crisp at radius ≈ the bevel width). The pure-logic core is unit-tested
+> (`124/124`, no Blender required) and bpy paths add headless coverage (run live
 > against a standalone `bpy` build + verified in Blender 5.1.2); the modal
 > tools' interactive feel is checked via
 > [tests/manual_checklist.md](tests/manual_checklist.md). See
@@ -165,10 +169,10 @@ own boolean, shape and curve functions, rendered in Blender's Workbench.</sub>
 
 ## Feature matrix
 
-Every roadmap feature through **v1.13**, grouped by the paid tool whose workflow
+Every roadmap feature through **v1.19**, grouped by the paid tool whose workflow
 it brings to Blender for free. The right column points at the implementing module.
 
-> **Super Modeling Mode (Unreleased)** — a SketchUp-fluidity / pro-pipeline
+> **Super Modeling Mode (v1.14+)** — a SketchUp-fluidity / pro-pipeline
 > evolution on three new layers: the **Shadowing Engine** (HardFlow Mode verbs,
 > now with a SURFACE plane + `Tab` verb cycle + keymap/pie entry), a **per-modal
 > atomic macro** (Command-Pattern undo, now driving the direct-modeling tools and

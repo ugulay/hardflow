@@ -3,7 +3,14 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic: minor versions add features, patch versions fix bugs.
 
-## [Unreleased]
+## [1.19.0] — 2026-07-02
+
+Smart Bevel validated + de-experimentalised — the last item left EXPERIMENTAL from
+the Super Modeling Mode work is now measured against a live Catmull-Clark
+Subdivision pass (Blender 5.1.2) and settled, with an "expected fillet radius" HUD
+readout while you drag. The pure suite grows to 124 tests
+(`python tests/test_core.py`); the headless suite is 135
+(`blender --background --python tests/test_blender.py`), verified in Blender 5.1.2.
 
 ### Changed
 - **Smart Bevel — support-loop placement validated + de-experimentalised.** The
@@ -284,7 +291,7 @@ behaviour change; verified against a standalone `bpy` build (Blender 5.0.1).
     (triangulate + re-quad the n-gons a boolean/bevel leaves). Object-Mode Edge
     Bevel gains an **`S` Smart** toggle with `-`/`=` tightness (EXPERIMENTAL at the
     time — exact holding-loop placement wanted a live cube→Subdivision tuning pass;
-    **since validated, see [Unreleased]**). Pure tests for the placement math +
+    **since validated, see [1.19.0]**). Pure tests for the placement math +
     headless `test_smart_bevel_edges` / `test_dissolve_boolean_ngons`.
     - **Wired into the boolean pipeline (opt-in).** A new **Re-quad Cut N-gons**
       preference (`cut_dissolve_ngons`, default off) runs `dissolve_boolean_ngons`

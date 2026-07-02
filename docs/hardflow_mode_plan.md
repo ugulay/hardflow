@@ -289,9 +289,9 @@ stabilized before re-quadding: `dissolve_boolean_ngons(clean_slivers=True)` runs
 near-zero-area faces/edges → dissolve redundant collinear valence-2 verts via the
 pure `core/topology` predicates), removing the garbage that pinches a Subdivision
 surface. The one remaining item — the *live subdivision pass* on the loop position
-— is closed by the Unreleased update below.
+— is closed by the v1.19 update below.
 
-**Update (Unreleased) — live subdivision pass done, placement validated.** The
+**Update (v1.19) — live subdivision pass done, placement validated.** The
 "tune the exact holding-loop position against a live cube→Subdivision" item — the
 last thing keeping Smart Bevel `EXPERIMENTAL` — is complete. A headless probe
 (Blender 5.1.2) bevels a cube edge, hangs a Catmull-Clark Subdivision modifier,
@@ -356,7 +356,7 @@ single Blender undo step.
 | **0 (done)** | Command core + Knife prototype + tests | `core/command.py`, `operators/hardflow_mode.py`, `tests/test_core.py` | pure tests green; live smoke test pending |
 | **1 (done)** | Extract `_HardflowModeModal` shell (Knife moved onto it) | `operators/hardflow_mode.py` | headless + manual checklist |
 | **2 (done)** | Extrude verb + VIEW/SURFACE/X/Y/Z plane cycle + `Tab` verb cycle + keymap/pie entry on the shell | `operators/hardflow_mode.py`, `keymaps.py`, `ui/pie.py` | headless (`test_mode_shell_verb_and_plane_cycle`) + manual checklist |
-| **3 (done, validated)** | `support_loop_positions` (pure) + `smart_bevel_edges` / `dissolve_boolean_ngons` (bmesh) + `S` toggle; **v1.15** non-quad-safe flanks + `flank_can_support` / `safe_support_fraction` barrier + `skipped` HUD readout; **Unreleased** live subdivision pass → placement validated + `beveled_fillet_radius` HUD | `core/bevel.py`, `core/geometry.py`, `operators/edge_tool.py` | pure tests + headless (`test_smart_bevel_subdivision_quality`) |
+| **3 (done, validated)** | `support_loop_positions` (pure) + `smart_bevel_edges` / `dissolve_boolean_ngons` (bmesh) + `S` toggle; **v1.15** non-quad-safe flanks + `flank_can_support` / `safe_support_fraction` barrier + `skipped` HUD readout; **v1.19** live subdivision pass → placement validated + `beveled_fillet_radius` HUD | `core/bevel.py`, `core/geometry.py`, `operators/edge_tool.py` | pure tests + headless (`test_smart_bevel_subdivision_quality`) |
 | **4 (done)** | Boolean chain → `MacroCommand` (`base.BooleanCutCommand` / `boolean_chain`, atomic rollback), adopted in `draw_cut._apply_destructive` + the `_FaceDragModal` live preview | `operators/base.py`, `operators/draw_cut.py`, `operators/face_tool.py` (+ push_pull/offset/edge_tool) | headless (`test_boolean_chain_command_atomic`, `test_draw_cut_apply_destructive_atomic_chain`, `test_facetool_*`) |
 
 Each phase is independently shippable and leaves the tree green.
@@ -411,7 +411,7 @@ the `live_preview_max_verts` preference).
 
 Previously pending, now closed:
 
-- **Smart Bevel live tuning — done (Unreleased).** The support-loop placement was
+- **Smart Bevel live tuning — done (v1.19).** The support-loop placement was
   the last deferred item; a headless live cube→Catmull-Clark Subdivision pass
   (Blender 5.1.2) *validated* it — the loop pins the flanking flat near the bevel
   and the subdivided fillet stays crisp at radius ≈ the bevel width, across the
@@ -440,7 +440,7 @@ Previously pending, now closed:
 |---|---|---|
 | Trying to wrap native modal operators | — | Ruled out; we shadow, not wrap (§1.1). |
 | CommandManager desyncs with Blender undo | Med | Journal is per-session only; one undo push at commit; never `undo_push` per sub-step (§5.2). |
-| Smart Bevel support loops land wrong post-bevel | Closed (was High) | Pure math + skeleton shipped; v1.15 added non-quad-safe flanks + a `flank_can_support` skip barrier; v1.16 (Module 4) made the offset **bevel-exact** (`seg_factor`, segment-aware) + added the `_clean_boolean_slivers` SubD-stabilizing pass; **Unreleased** the live cube→Subdivision pass *validated* the placement (loop pins the flat, fillet radius ≈ width) and de-experimentalised it (§6.4). |
+| Smart Bevel support loops land wrong post-bevel | Closed (was High) | Pure math + skeleton shipped; v1.15 added non-quad-safe flanks + a `flank_can_support` skip barrier; v1.16 (Module 4) made the offset **bevel-exact** (`seg_factor`, segment-aware) + added the `_clean_boolean_slivers` SubD-stabilizing pass; **v1.19** the live cube→Subdivision pass *validated* the placement (loop pins the flat, fillet radius ≈ width) and de-experimentalised it (§6.4). |
 | Feature creep bloats `draw_cut` | Med | New `hardflow_mode.py` stays lean; share via mixin/core, don't grow the monolith (§4.2). |
 | Core layer violation creeps in | Low | Table in §3; `command.py`/`bevel.py` stay bpy-free and unit-tested. |
 
