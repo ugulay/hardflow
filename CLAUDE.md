@@ -55,9 +55,13 @@ flips the polarity (pinned in the pure `core/parallax.surface_depth`), with a
 `HARDFLOW_OT_load_height_map` loader + an N-panel "Depth (Image Decals)" section;
 and the **v1.20 Competitive Edge** — radial (bolt-circle) in-draw array, the
 **VENT/grill** draw shape, and **Panel Lines** from selected edges (groove /
-weld bead), described below.
+weld bead), described below; and the **v1.21 Curves upgrade** — freehand
+click-or-stroke drawing + `C` Smooth Path splines (pure `core/path.py`), the
+cable's `G` **gravity settle** with scene collision (pure `core/physics.py`),
+**CUSTOM profiles** (mesh outline or curve bevel-object) and the
+**Detail Along Path** operator, described below.
 Code is syntax-verified with pure +
-headless tests (129 pure + 138 headless, run live against a standalone `bpy`
+headless tests (144 pure + 142 headless, run live against a standalone `bpy`
 build); the new bpy paths are also live-verified in Blender 5.1.2, and full GUI
 verification of the modal interactions is tracked in `tests/manual_checklist.md`.
 Roadmap: `ROADMAP.md`.
@@ -198,6 +202,31 @@ GROOVE recesses a seam, BEAD raises a weld line; F9-redoable, and
 Non-Destructive stashes the swept line as a live HF cutter (DecalMachine's
 signature workflow with real geometry). Tests: +5 pure / +3 headless.
 
+**Curves Upgrade (v1.21).** The Pipe/Cable/Sweep fluidity + physics pass,
+one-directional as ever (three commits): (1) **Freehand + Smooth Path** —
+`_CurveDraw` input is implicit click-or-stroke (LMB drag past a px gate =
+freehand stroke sampled through the snap chain, so drawn ink hugs the surface;
+reduced to clean anchors on release by the pure `path.rdp_simplify`; Backspace
+undoes a whole stroke), and `C` interpolates the anchors with a centripetal
+Catmull-Rom (`path.catmull_rom`) — ROUND profile + Follow-off commits an
+editable AUTO-handle **Bezier** (`build_pipe(spline_type='BEZIER')`); new pure
+`core/path.py` (RDP / Chaikin / Catmull-Rom / resample). (2) **Cable gravity
+settle** — `G` swaps the analytic parabola for the pure
+`core/physics.settle_chain` (deterministic damped-Verlet relaxation: pinned
+anchors, distance constraints, injected collision), wired to a
+`nearest_surface_point` push-out collider so the rope **drapes over obstacles
+and rests on scene geometry**; Shift+Wheel feeds slack (rope length); prefs
+`cable_gravity`/`cable_slack`/`cable_collision` (no competitor hangs cables
+against the scene without a cloth sim). (3) **CUSTOM profiles + Detail Along
+Path** — the P cycle gains CUSTOM fed by `Scene.hardflow_profile_object` (a
+flat mesh's boundary outline via `geometry.object_profile_points` +
+`transform.order_edge_paths`, or a curve as a native non-destructive
+`bevel_object`), mesh commits get `ensure_smooth_by_angle` polish, and
+`HARDFLOW_OT_path_detail` repeats a picked detail mesh along the active curve
+(Array FIT_CURVE + Curve deform, instanced data) — chains, cable clips,
+corrugated hoses. Tests: +14 pure / +4 headless (incl. an end-to-end settle
+over a scene cube through the production collider).
+
 ## Agent role
 
 Claude Code works on Hardflow as a **product engineer for competitive
@@ -266,7 +295,7 @@ ops ─┘
 | `core/modifiers.py` | Pure hard-surface modifier-stack ordering, stdlib only — the Sorting Engine (`modifier_priority` (Booleans top, Bevel mid, Weighted Normal/Triangulate bottom; Mirror above/below booleans by the `mirror_after_boolean` toggle), `sorted_order` (stable so re-runs are idempotent + unknown modifiers stay in the middle band), `reorder_moves` (selection-sort (from,to) plan matching bpy `modifiers.move`), `is_sorted`). Applied by `operators/hardops.sort_modifier_stack` |
 | `core/transform.py` | Pure cable-sag + sizing math, stdlib only (`cable_points`, `cable_chain`, `dice_coordinates` (split a span into equal pieces), `fit_scale`, `adaptive_dimension` (size-scaled bevel/chamfer width), `dedup_ring` (drop consecutive/closing duplicate points from a Cut-to-Trim boundary loop), `order_edge_paths` (unordered edge pairs → ordered open/closed vertex chains, T/X junctions split — the Panel Line path builder, v1.20)) |
 | `core/path.py` | Pure poly-line / freehand-stroke math, stdlib only — the Curves-upgrade anchor (v1.20) (`path_length`, `dedup_points`, `rdp_simplify` (Ramer–Douglas–Peucker stroke → clean anchors; segment-distance so doubled-back strokes survive), `chaikin_smooth` (corner cutting, open endpoints kept / closed wrap), `catmull_rom` (centripetal Catmull-Rom THROUGH the anchors, open ghost-endpoint / closed; the Smooth Path spline), `resample_path` (even arc-length re-sampling, open keeps endpoints / closed drops the seam)). Consumed by `operators/pipe.py` |
-| `core/physics.py` | Pure cable-settle physics, stdlib only — the Cable `G` gravity mode (v1.20) (`chain_rest_lengths`, `settle_chain` (deterministic Jakobsen-Verlet / position-based relaxation: damped inertia + gravity direction with a scale-free auto `strength`, `passes` distance-constraint projections per iteration with pinned anchors held exact, an injected `collide(p)` callback every `collide_every` iterations + once at the end — corrected particles lose their velocity so they REST on obstacles)). The operator wires `collide` to `snapping.nearest_surface_point` pushed out by the tube lift, so the rope drapes over scene geometry — what the analytic parabola can never do. Unit-tested with synthetic colliders |
+| `core/physics.py` | Pure cable-settle physics, stdlib only — the Cable `G` gravity mode (v1.21) (`chain_rest_lengths`, `settle_chain` (deterministic Jakobsen-Verlet / position-based relaxation: damped inertia + gravity direction with a scale-free auto `strength`, the per-iteration step capped to half the shortest segment (anti-tunneling), `passes` distance-constraint projections per iteration with pinned anchors held exact, an injected `collide(p)` callback every `collide_every` (default 2 — a nearest-surface collider ejects through the CLOSEST face, so sparse passes let a fast rope get pushed out a slab's far side) iterations + once at the end — corrected particles lose their velocity so they REST on obstacles)). The operator wires `collide` to `snapping.nearest_surface_point` pushed out by the tube lift (module-level `pipe.surface_collider`, exercised end-to-end by the headless settle-over-cube test), so the rope drapes over scene geometry — what the analytic parabola can never do |
 | `core/hardsurface.py` | Pure Smart-Sharpen decision math, stdlib only — the Module 3 (HardOps parity) anchor (`dihedral_angle` (face-normal fold, matches bmesh `calc_face_angle`), `should_sharpen`/`sharp_edges` (which edges are "hard" at a threshold), `adaptive_bevel_width` (bevel width scaled to the smallest side)). `core/geometry.mark_sharp_edges` does the bmesh marking; `operators/hardops.HARDFLOW_OT_smart_sharpen` drives it |
 | `core/decal_math.py` | Pure orientation math, no bpy/mathutils (`orientation_basis`, `base_tangent`, `dominant_tangent` (longest-edge alignment), `basis_from_edge`/`basis_from_two_edges` (grid-on-edges plane), `best_edge_pair` (deterministic longest-edge main + most-perpendicular partner for the 2-edge plane; `forced_main` overrides the main for Ctrl+Click set-main-edge), `rotate_about_axis`) |
 | `core/decal_image.py` | Pure decal-library helpers, stdlib only (`scan_library`, `is_image_file`, `aspect_size`, `safe_filename`) |

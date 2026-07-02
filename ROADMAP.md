@@ -793,6 +793,46 @@ machinery; verified with 129 pure + 138 headless tests, live in Blender 5.1.2.
       seam, BEAD raises a weld line. F9-redoable (style/radius/segments);
       Non-Destructive stashes the swept line as a live HF cutter.
 
+## v1.21 — Curves upgrade (freehand · physics · custom profiles)
+The Pipe/Cable/Sweep fluidity pass: draw curves instead of clicking them, hang
+cables with real (deterministic) physics, sweep any cross-section, and dress a
+path with repeated detail meshes. All pure-core + thin-operator; verified with
+144 pure + 142 headless tests in Blender 5.1.2.
+- [x] **Freehand click-or-stroke drawing** — LMB press-drag past a pixel gate
+      records a freehand stroke through the same snap chain (the ink hugs the
+      surface), reduced to clean anchors on release via the pure
+      `path.rdp_simplify`; a plain click still places one anchor, both mix in
+      one tube, and Backspace undoes a whole stroke. New pure `core/path.py`
+      (RDP / Chaikin / centripetal Catmull-Rom / arc-length resample).
+- [x] **`C` Smooth Path** — a Catmull-Rom spline THROUGH the placed anchors;
+      with a ROUND profile and Follow off the committed object is an editable
+      AUTO-handle **Bezier** curve (`build_pipe(spline_type='BEZIER')`), not a
+      baked poly-line. Smoothed / stroke paths drape with `segments=1` (they
+      are already dense) so the live preview stays fast.
+- [x] **Cable `G` gravity settle** (the differentiator) — the pure
+      `core/physics.settle_chain` relaxes the anchor-pinned particle chain
+      (damped Verlet + distance constraints + injected collision callback,
+      deterministic, no timeline) and the operator wires the collider to
+      `snapping.nearest_surface_point` pushed out by the tube's lift: the rope
+      **drapes over obstacles and rests on scene geometry**, which the
+      analytic catenary/parabola can never do. Shift+Wheel becomes slack
+      (rope length); prefs `cable_gravity`/`cable_slack`/`cable_collision`.
+- [x] **CUSTOM cross-sections** — the P profile cycle gains CUSTOM fed by a
+      `Scene.hardflow_profile_object` picker: a flat mesh contributes its
+      boundary outline (`geometry.object_profile_points`: boundary edges →
+      `transform.order_edge_paths` loop, bbox-centered, scaled to the radius
+      envelope) to the mesh sweep; a curve object rides the native
+      `bevel_object` instead — fully non-destructive, editing the profile
+      updates every pipe using it. The cycle skips CUSTOM while unset.
+- [x] **Detail Along Path** — `HARDFLOW_OT_path_detail` instances a picked
+      detail mesh along the active curve with Array (Fit Curve) + Curve deform
+      (chain links, cable clips, corrugated hoses; F9 axis + merge). A
+      better-scoped return of the capability lost when `HARDFLOW_OT_curve_array`
+      was removed with the v1.13 modifier-tool cleanup.
+- [x] **Commit polish** — swept mesh tubes get angle-based smooth shading on
+      commit (`ensure_smooth_by_angle`): curved custom profiles shade round,
+      structural hard corners stay crisp.
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock

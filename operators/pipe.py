@@ -54,6 +54,26 @@ def _px_dist2(a, b):
     return dx * dx + dy * dy
 
 
+def surface_collider(context, lift):
+    """Push-out collider for the cable gravity settle: a particle inside -- or
+    hovering closer to -- the nearest visible surface than `lift` is moved onto
+    that surface + lift, so the settled rope drapes over obstacles and rests on
+    geometry instead of passing through. Module-level so the headless suite
+    exercises the exact production collider."""
+    def collide(p):
+        near = snapping.nearest_surface_point(context, p, 'VISIBLE')
+        if near is None:
+            return None
+        loc, nrm = near
+        side = (Vector(p) - loc).dot(nrm)   # signed height over the surface
+        if side < lift:
+            out = loc + nrm * lift
+            return (out[0], out[1], out[2])
+        return None
+
+    return collide
+
+
 class _CurveDraw:
     """Shared modal logic for drawing a poly-line on surfaces. Subclasses set
     `_title`, `_has_sag`, override `_init_params`, `_route_points` and `_commit`.
@@ -608,26 +628,11 @@ class HARDFLOW_OT_cable(_CurveDraw, Operator):
         self._collide_scene = prefs.cable_collision
 
     def _surface_collider(self, context):
-        """Push-out collider for the gravity settle: a particle inside -- or
-        hovering closer to -- the nearest surface than the tube's lift is moved
-        onto that surface + lift, so the rope drapes over obstacles and rests
-        on geometry. None when scene collision is off (pref)."""
+        """The module-level surface_collider at the tube's lift, or None when
+        scene collision is off (pref)."""
         if not self._collide_scene:
             return None
-        lift = self._lift()
-
-        def collide(p):
-            near = snapping.nearest_surface_point(context, p, 'VISIBLE')
-            if near is None:
-                return None
-            loc, nrm = near
-            side = (Vector(p) - loc).dot(nrm)   # signed height over the surface
-            if side < lift:
-                out = loc + nrm * lift
-                return (out[0], out[1], out[2])
-            return None
-
-        return collide
+        return surface_collider(context, self._lift())
 
     def _route_points(self, context, anchors):
         pts = [(p[0], p[1], p[2]) for p in anchors]

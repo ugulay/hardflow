@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "hardflow"
-version = "1.19.0"
+version = "1.21.0"
 name = "Hardflow"
 tagline = "Open source hard surface boolean modeling toolkit"
 maintainer = "Ugur Gulay <ugurgulay@gmail.com>"

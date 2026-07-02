@@ -529,6 +529,34 @@ def test_path_detail_operator():
         hardflow.unregister()
 
 
+def test_cable_settle_rests_on_scene_cube():
+    """End-to-end gravity settle against a real scene: the production
+    surface_collider + physics.settle_chain drape a rope over a cube."""
+    _reset()
+    from hardflow.core import physics, transform
+    from hardflow.operators import pipe as pipe_ops
+    _add_cube("Obstacle", size=1.0)                    # spans +/- 0.5
+    anchors = [(-2.0, 0.0, 0.8), (2.0, 0.0, 0.8)]
+    chain = transform.cable_chain(anchors, segments=24, sag=0.0)
+    lift = 0.05
+    settled = physics.settle_chain(
+        chain, pinned=(0, len(chain) - 1), slack=1.3,
+        collide=pipe_ops.surface_collider(bpy.context, lift))
+    assert settled[0] == (-2.0, 0.0, 0.8)              # pins stay put
+    assert settled[-1] == (2.0, 0.0, 0.8)
+    # particles that end up over the cube rest ON its top face (+ lift), never
+    # inside it; particles resting on a side face end up pushed past +/- 0.5
+    over = [p for p in settled if abs(p[0]) < 0.4 and abs(p[1]) < 0.4]
+    assert over, "no rope over the obstacle"
+    for p in over:
+        assert p[2] >= 0.5 + lift - 0.02, "rope sank into the cube: %r" % (p,)
+    # ... while the flanks droop well below (the rope really settled)
+    assert min(p[2] for p in settled) < 0.45
+    # without the collider the same rope falls straight through the cube
+    free = physics.settle_chain(chain, pinned=(0, len(chain) - 1), slack=1.3)
+    assert min(p[2] for p in free) < 0.0
+
+
 def test_apply_cutters_operator():
     _reset()
     hardflow.register()

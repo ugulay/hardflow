@@ -3,6 +3,54 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic: minor versions add features, patch versions fix bugs.
 
+## [1.21.0] — 2026-07-02
+
+The Curves upgrade — Pipe/Cable/Sweep grow from click-by-click placement into a
+drawing/physics toolset. Pure suite 144 tests, headless 142, verified in
+Blender 5.1.2 (`ROADMAP.md` §v1.21 for the full list).
+
+### Added
+- **Freehand click-or-stroke drawing** (Pipe/Cable/Sweep): LMB press-drag past
+  a pixel gate records a freehand stroke through the same snap chain — the ink
+  hugs the surface — and is reduced to clean anchors on release
+  (Ramer–Douglas–Peucker); a plain click still places a single anchor, both mix
+  in one tube, Backspace removes a whole stroke. New pure `core/path.py`
+  (`rdp_simplify`, `chaikin_smooth`, centripetal `catmull_rom`,
+  `resample_path`).
+- **`C` Smooth Path**: interpolate the anchors with a centripetal Catmull-Rom;
+  with a ROUND profile and Follow off the commit is an editable AUTO-handle
+  **Bezier curve** (`build_pipe(spline_type='BEZIER')`). Pref `pipe_smooth`.
+- **Cable `G` gravity settle**: the rope relaxes as an anchor-pinned particle
+  chain (new pure `core/physics.settle_chain`, deterministic damped Verlet +
+  distance constraints) with a nearest-surface push-out collider — it **drapes
+  over obstacles and rests on scene geometry**, which the analytic sag cannot.
+  Shift+Wheel feeds slack (rope length) while gravity is on. Prefs
+  `cable_gravity` / `cable_slack` / `cable_collision`.
+- **CUSTOM cross-sections**: the P profile cycle gains CUSTOM fed by a scene
+  Profile picker — a flat mesh's boundary outline is swept
+  (`geometry.object_profile_points`), a curve object becomes a native
+  non-destructive `bevel_object` profile. The cycle skips CUSTOM while unset.
+- **Detail Along Path** (`HARDFLOW_OT_path_detail`): repeat a picked detail
+  mesh along the active curve with Array (Fit Curve) + Curve deform — chain
+  links, cable clips, corrugated hoses; instanced data, F9 axis + merge.
+  Curves panel gains the Profile/Detail pickers + button; header menu entry.
+
+### Changed
+- Swept mesh tubes get angle-based smooth shading on commit
+  (`ensure_smooth_by_angle`): curved custom profiles shade round, structural
+  hard corners stay crisp.
+
+## [1.20.0] — 2026-07-02
+
+The Competitive Edge pass — the marquee features the paid incumbents are bought
+for (`ROADMAP.md` §v1.20): the **radial (bolt-circle) in-draw array** (`D`'s
+axis cycle gains a RADIAL stop about the grid origin, pure `grid.radial_sets`),
+the **VENT/grill draw shape** (key `I`; a rectangle expands into N louvre slots
+via the pure `grid.vent_slats`, riding the whole multi-prism cutter path), and
+**Panel Lines from edge selection** (`HARDFLOW_OT_panel_line`: selected edges →
+ordered chains via the pure `transform.order_edge_paths` → swept GROOVE seams /
+BEAD weld lines, destructive or stashed as live cutters).
+
 ## [1.19.0] — 2026-07-02
 
 Smart Bevel validated + de-experimentalised — the last item left EXPERIMENTAL from

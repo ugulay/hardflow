@@ -25,7 +25,7 @@ def chain_rest_lengths(points, slack=1.0):
 
 def settle_chain(points, pinned=(), gravity=(0.0, 0.0, -1.0), strength=None,
                  slack=1.15, iterations=48, passes=4, damping=0.94,
-                 collide=None, collide_every=4):
+                 collide=None, collide_every=2):
     """Relax a particle chain into its hanging shape and return the settled
     points (tuples). `points` are the initial particles IN ORDER (build them by
     sub-dividing the anchor spans); `pinned` are indices held exactly fixed --
@@ -33,12 +33,17 @@ def settle_chain(points, pinned=(), gravity=(0.0, 0.0, -1.0), strength=None,
     (normalized here); `strength` is the per-iteration pull in metres, default
     0.3% of the rope's rest length (scale-free). `slack` scales the segment
     rest lengths (1.0 = taut, 1.15 = 15% extra rope). Each of the `iterations`
-    steps applies inertia (damped Verlet) + gravity, then `passes` sweeps of
-    distance-constraint projection; every `collide_every` iterations (and once
-    at the end) free particles are passed through `collide(p) -> corrected
-    point or None`, so the rope comes to rest on obstacles instead of passing
-    through them. Deterministic: no time step, no randomness. Fewer than 2
-    points, or no free particles, come back unchanged."""
+    steps applies inertia (damped Verlet) + gravity -- the step capped to half
+    the shortest segment so a falling rope cannot overshoot geometry its own
+    resolution can see -- then `passes` sweeps of distance-constraint
+    projection; every `collide_every` iterations (and once at the end) free
+    particles are passed through `collide(p) -> corrected point or None`, so
+    the rope comes to rest on obstacles instead of passing through them (a
+    nearest-surface collider ejects through the CLOSEST face, so keep
+    `collide_every` low or a fast particle can cross a slab's midplane between
+    passes and be pushed out the far side). Deterministic: no time step, no
+    randomness. Fewer than 2 points, or no free particles, come back
+    unchanged."""
     cur = [tuple(p) for p in points]
     n = len(cur)
     pins = {i for i in pinned if -n <= i < n}
@@ -56,19 +61,25 @@ def settle_chain(points, pinned=(), gravity=(0.0, 0.0, -1.0), strength=None,
     if strength is None:
         strength = total * 0.003
     g = tuple(gravity[k] / g_len * strength for k in range(3))
+    max_step = 0.5 * min((r for r in rest if r > 1e-12), default=total)
 
     prev = list(cur)
     for it in range(int(iterations)):
-        # Inertia + gravity (pins never move).
+        # Inertia + gravity (pins never move), the step speed-capped.
         for i in range(n):
             if i in pins:
                 continue
             px, py, pz = prev[i]
             x, y, z = cur[i]
+            dx = (x - px) * damping + g[0]
+            dy = (y - py) * damping + g[1]
+            dz = (z - pz) * damping + g[2]
+            step = math.sqrt(dx * dx + dy * dy + dz * dz)
+            if step > max_step:
+                k = max_step / step
+                dx, dy, dz = dx * k, dy * k, dz * k
             prev[i] = cur[i]
-            cur[i] = (x + (x - px) * damping + g[0],
-                      y + (y - py) * damping + g[1],
-                      z + (z - pz) * damping + g[2])
+            cur[i] = (x + dx, y + dy, z + dz)
         # Project the segment length constraints.
         for _ in range(max(1, int(passes))):
             for s in range(n - 1):
