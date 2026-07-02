@@ -767,6 +767,32 @@ is in `tests/manual_checklist.md`.
       Parallax / Height-map without opening add-on preferences; every depth build
       is wrapped so a node-API mismatch degrades to a flatter decal.
 
+## v1.20 — Competitive Edge (vs. the paid incumbents)
+A competitive-gap pass: the features the paid competition is bought for that
+Hardflow lacked. Fluent Power Trip's marquee tools (grills, circular arrays)
+and DecalMachine's signature edge panel lines, free. All ride existing
+machinery; verified with 129 pure + 138 headless tests, live in Blender 5.1.2.
+- [x] **Radial (bolt-circle) array in-draw** — `D`'s axis cycle gains a RADIAL
+      stop: the array copies spin about the construction-plane / grid origin
+      (re-anchor it live with `H`) in plane (u, v) space via the pure
+      `grid.radial_sets`. Draw one hole at the radius, get the whole bolt
+      circle; works with every shape, mode, mirror and the live preview.
+- [x] **VENT / grill draw shape** (key `I`, panel grid icon) — the drawn
+      rectangle expands into N parallel louvre slots via the pure
+      `grid.vent_slats` (pitch chosen so border ribs equal interior ribs; slat
+      count from `[ ]`, open fraction from the `draw_vent_ratio` pref). The
+      expansion feeds the multi-prism cutter path, so CUT/SLICE/MAKE/JOIN/
+      INTERSECT/FACE/KNIFE, arrays, mirror and the live boolean preview all
+      work on vents unchanged. `_processed_corner_sets` now processes a LIST
+      of uv outlines — the door future multi-outline shapes walk through.
+- [x] **Panel Lines from edge selection** — `HARDFLOW_OT_panel_line` (Edit
+      Mode): selected edges are ordered into chains by the pure
+      `transform.order_edge_paths` (open strips, closed loops, T/X junctions
+      split cleanly), swept into solid tubes (`build_pipe_mesh` gains `closed`
+      seam-bridging + `round_profile`), and booleaned — GROOVE recesses a
+      seam, BEAD raises a weld line. F9-redoable (style/radius/segments);
+      Non-Destructive stashes the swept line as a live HF cutter.
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock

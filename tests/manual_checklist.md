@@ -877,5 +877,35 @@ behaviour (keys, drag, commit) is unchanged, so this is also the regression chec
 
 ---
 
+## 23. Competitive Edge (v1.20 — radial array, Vent, Panel Lines)
+
+- [ ] **Radial array**: on a cube's top face (SURFACE plane), press `H` near the
+      face centre to set the grid origin, draw a small Circle off-centre, press
+      `A` until `array x6`, then `D` until the HUD reads `array x6 RADIAL`: the
+      cage shows 6 holes on a bolt circle around the `H` pivot. Enter cuts all
+      six; Backspace/undo restores in ONE step.
+- [ ] Radial works with Mirror (`M`) on top: 12 cages, no console error; the
+      shortcut bar shows the `A/D Array` chip accented while count > 1.
+- [ ] **Vent**: press `I` (or the panel's Vent grid button), drag a wide box:
+      the cage shows N horizontal slat slots (count follows `[ ]` down to 1,
+      up to 64); a taller-than-wide box flips the slats vertical. Enter cuts a
+      grill through; `Tab` to MAKE/JOIN builds louvre bars instead.
+- [ ] Vent respects rotation (`,/.` spins the whole pattern rigidly), inset
+      (`-/=` widens the gaps), KNIFE mode scores every slot outline, and the
+      live boolean preview (`J`) shows the real grill.
+- [ ] The Cutter Options panel + add-on prefs show **Vent Slot Ratio**; changing
+      it changes the next draw's slot/rib balance.
+- [ ] **Panel Line**: Edit Mode on a cube, select the 4 top-rim edges, run
+      Edit ▸ Panel Line (GROOVE, radius ~0.05): a recessed seam rings the rim,
+      you are back in Edit Mode, no `HF_PanelLine` object remains. F9 changes
+      radius/style in place.
+- [ ] Panel Line **BEAD** on an open edge run raises a weld line; with
+      **Non-Destructive** on, the swept tube lands stashed (wire) in the
+      Hardflow Cutters collection with a live UNION modifier on the mesh.
+- [ ] A T-shaped edge selection produces clean strips (no zig-zag through the
+      junction); a loop + a separate strip in one selection both sweep.
+
+---
+
 When every box is ticked, update the live-verification note in `CLAUDE.md`
 (FIRST TASK) and the smoke-test memory.
