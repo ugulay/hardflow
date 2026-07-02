@@ -13,12 +13,12 @@ price tag.
 [![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-EA7600?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Extension](https://img.shields.io/badge/Blender-Extension-orange?logo=blender&logoColor=white)](https://extensions.blender.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.19.0-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.21.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 </div>
 
-> **Status — under active development.** **Every roadmap feature through v1.19 is
+> **Status — under active development.** **Every roadmap feature through v1.21 is
 > implemented** — the boolean cut loop (Cut / Slice / Make / Join / Intersect /
 > Knife) with Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes,
 > world-scale + vertex/edge snapping, the non-destructive flow, the full decal
@@ -55,10 +55,20 @@ price tag.
 > item closed — the support/holding-loop placement measured against a live
 > Catmull-Clark Subdivision pass, with an "expected fillet radius" (`~r=…`) HUD
 > readout while you drag; the loop pins the flat and the subdivided fillet stays
-> crisp at radius ≈ the bevel width). The pure-logic core is unit-tested
-> (`124/124`, no Blender required) and bpy paths add headless coverage (run live
-> against a standalone `bpy` build + verified in Blender 5.1.2); the modal
-> tools' interactive feel is checked via
+> crisp at radius ≈ the bevel width), and the **v1.20 Competitive Edge** (the
+> marquee features the paid incumbents are bought for — a **radial / bolt-circle
+> in-draw array** spun about the grid origin, a **Vent/grill draw shape** that
+> expands the drawn rectangle into N louvre slots, and **Panel Lines** that sweep
+> selected edges into groove seams or raised weld beads), and the **v1.21 Curves
+> upgrade** (Pipe/Cable/Sweep gain **freehand click-or-stroke drawing** + a `C`
+> **Smooth Path** Catmull-Rom spline that can commit an editable Bezier, the
+> cable gains a `G` **gravity settle** with real scene collision so the rope
+> drapes over obstacles, the profile cycle gains **CUSTOM cross-sections** from a
+> mesh outline or a curve bevel-object, and **Detail Along Path** repeats a
+> detail mesh along the active curve). The pure-logic core is unit-tested
+> (`144/144`, no Blender required) and bpy paths add headless coverage
+> (`142/142`, run live against a standalone `bpy` build + verified in Blender
+> 5.1.2); the modal tools' interactive feel is checked via
 > [tests/manual_checklist.md](tests/manual_checklist.md). See
 > [ROADMAP.md](ROADMAP.md) for the full roadmap and [CHANGELOG.md](CHANGELOG.md)
 > for the per-version history.
@@ -91,10 +101,12 @@ own boolean, shape and curve functions, rendered in Blender's Workbench.</sub>
 <img align="right" width="240" src="docs/tools.png" alt="The Hardflow N-panel">
 
 - **Boolean via modal drawing** — Box / Circle / Polygon / N-gon / Slot / Star /
-  Arc shapes; Cut, Slice (split in two), Make (add), Join (add as a separate
-  solid), Intersect (keep the overlap), Face (create a surface), and Knife
-  (score) modes (`Tab` cycles mode). Toggle `J` for a **live boolean preview** of
-  the real result while you draw.
+  Arc / **Vent** (grill) shapes; Cut, Slice (split in two), Make (add), Join (add
+  as a separate solid), Intersect (keep the overlap), Face (create a surface),
+  and Knife (score) modes (`Tab` cycles mode). Toggle `J` for a **live boolean
+  preview** of the real result while you draw. The in-draw array (`A` / `D`)
+  includes a **radial (bolt-circle)** axis that spins the copies about the grid
+  origin.
 - **Numeric precision** — type an exact dimension while drawing to lock the
   shape's size (radius / extent / segment) for precise drawing.
 - **World-scale grid snap** — a camera-independent grid that stays consistent in
@@ -103,7 +115,15 @@ own boolean, shape and curve functions, rendered in Blender's Workbench.</sub>
 - **Multi-object** — apply CUT/MAKE to all selected meshes with a single cutter.
 - **Pipe, Cable & Sweep** — a round-profile pipe from a drawn line, a sagging
   cable/rope that drapes between its points, or a **Sweep / Follow-Me** that
-  pushes an L / U / T / I / box structural section along the drawn path.
+  pushes an L / U / T / I / box structural section along the drawn path. All
+  three take **freehand strokes** (click *or* draw — the ink hugs the surface and
+  reduces to clean anchors) and `C` smooths the path into a **Catmull-Rom
+  spline** (an editable Bezier on commit). The cable's `G` **gravity settle**
+  relaxes the rope with real scene collision so it drapes over obstacles;
+  Shift+Wheel feeds slack. The `P` profile cycle includes **CUSTOM
+  cross-sections** from a flat mesh's outline or a curve bevel-object, and
+  **Detail Along Path** repeats a picked detail mesh along the active curve
+  (chain links, cable clips, corrugated hoses).
 - **Vertex / edge snap** — lock the drawing point to the corner / edge / edge
   midpoint of existing geometry; colored cursor feedback.
 - **Angle lock** — hold Shift to lock the drawing direction to 15° (adjustable)
@@ -122,6 +142,9 @@ own boolean, shape and curve functions, rendered in Blender's Workbench.</sub>
 - **Offset** — raycast a face and drag to inset its border
   inward by a measured distance (grid-snapped, numeric entry); `E` continues into
   **extruding the inner face** for an instant recess or raised panel; `R` repeats.
+- **Panel Lines** — select edges in Edit Mode and sweep them into a **groove**
+  seam or a raised **weld bead** in one click; open strips, closed loops and T/X
+  junctions all resolve cleanly, destructively or stashed as live cutters.
 - **Edge tools (Object Mode)** — **Edge Bevel** (pick an edge or its whole loop,
   drag a width, `[ ]` segments; `S` toggles **Smart Bevel** — support/holding
   loops + n-gon cleanup so the bevel survives Subdivision, `-`/`=` tightness) and
@@ -169,7 +192,7 @@ own boolean, shape and curve functions, rendered in Blender's Workbench.</sub>
 
 ## Feature matrix
 
-Every roadmap feature through **v1.19**, grouped by the paid tool whose workflow
+Every roadmap feature through **v1.21**, grouped by the paid tool whose workflow
 it brings to Blender for free. The right column points at the implementing module.
 
 > **Super Modeling Mode (v1.14+)** — a SketchUp-fluidity / pro-pipeline
@@ -183,8 +206,9 @@ it brings to Blender for free. The right column points at the implementing modul
 
 | Feature | What it does | Where |
 |---------|--------------|-------|
-| Modal draw-to-cut | Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes (Slot/Star/Arc v1.13), drawn directly in the viewport; keys `Q/W/E/R/T/Y/U` | `operators/draw_cut.py`, `core/grid.py slot_points/star_points/arc_points` |
+| Modal draw-to-cut | Box / Circle / Polygon / N-gon / Slot / Star / Arc / Vent shapes (Slot/Star/Arc v1.13, Vent v1.20), drawn directly in the viewport; keys `Q/W/E/R/T/Y/U/I` | `operators/draw_cut.py`, `core/grid.py slot_points/star_points/arc_points/vent_slats` |
 | Cut / Slice / Make / Join / Intersect / Face | DIFFERENCE · split-in-two · UNION · add-as-separate-solid (v1.11) · keep-overlap · create an n-gon surface; `Tab` cycles mode | `operators/draw_cut.py` |
+| Vent / grill shape (v1.20) | The drawn rectangle expands into N parallel louvre slots (border ribs = interior ribs; `[ ]` slat count) — works with every mode, array, mirror and the live preview | `core/grid.py vent_slats`, `operators/draw_cut.py` |
 | Polyline Trim parity (v1.11) | Point-to-point polygon → boolean: **double-click** closes; per-cut **Solver** (Exact / Fast / Manifold); **Project / Fixed** extrude orientation (`O`, perspective taper) | `operators/draw_cut.py`, `core/geometry.py build_prism` |
 | Numeric size entry (v1.10) | Type an exact dimension while drawing to lock the shape's size (radius / extent / segment) | `core/grid.py lock_distance` |
 | Knife / zero-depth cut (v1.4) | Score the surface without extruding; restricted to the drawn footprint, not the whole mesh (v1.9) | `core/geometry.py knife_polygon` |
@@ -204,7 +228,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Feature | What it does | Where |
 |---------|--------------|-------|
 | Inset / extract cut | Offset the drawn loop inward/outward before commit (`-`/`=`) | `core/offset.py offset_polygon` |
-| Array during draw | Stamp the in-progress cutter N times along an axis (`A` / `D`) | `operators/draw_cut.py _processed_corner_sets` |
+| Array during draw | Stamp the in-progress cutter N times along an axis, or spin a **radial (bolt-circle)** set about the grid origin — v1.20 (`A` / `D`) | `operators/draw_cut.py _processed_corner_sets`, `core/grid.py radial_sets` |
 | Mirror during draw | Live mirror of the cutter across a world axis (`M`) | `operators/draw_cut.py _processed_corner_sets` |
 | Bevel-on-cut | Add an angle-limited bevel to the cut edge at commit (`B`) | `operators/draw_cut.py` |
 | Bevelled cutter (v1.10) | Chamfer the cutter so the cut leaves bevelled recess walls (`C`) | `core/geometry.py bevel_cutter` |
@@ -235,6 +259,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Display toggles | Wireframe / sharp-edge / cutter-visibility viewport toggles | `operators/hardops.py` |
 | Material helpers | Random viewport colors, copy active material to selection | `operators/hardops.py` |
 | Recalculate normals | One-click outward-normal fix for booleans that won't cut | `operators/hardops.py recalc_normals` |
+| Panel Lines (v1.20) | Selected edges → ordered chains swept into a **groove** seam or a raised **weld bead** (Edit Mode); open strips / closed loops / T-X junctions resolve cleanly; destructive or stashed as a live cutter | `operators/hardops.py HARDFLOW_OT_panel_line`, `core/transform.py order_edge_paths` |
 | Modifier-stack manager | N-panel list with move / toggle / apply / remove | `ui/panel.py` |
 
 ### Decals (v0.7–v0.9 / v1.7)
@@ -271,7 +296,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Material INSERTs (v1.8) | Apply a material-only INSERT from a `.blend` | `core/asset.py load_blend_materials` |
 | Asset-pack export (v1.8) | Write a selection to a `.blend` in the library with a preview | `operators/assets.py`, `core/asset.py write_objects_blend` |
 
-### Direct modeling (v1.2 / v1.3 / v1.6 / v1.11)
+### Direct modeling & curves (v1.2 / v1.3 / v1.6 / v1.11 / v1.21)
 
 | Feature | What it does | Where |
 |---------|--------------|-------|
@@ -287,7 +312,11 @@ it brings to Blender for free. The right column points at the implementing modul
 | Loft / bridge (v1.6) | Bridge two drawn profiles into a solid | `core/geometry.py build_loft` |
 | Pipe + profiles (v1.6) | Surface-draping pipe; round / square / rect cross-section (`P`) | `operators/pipe.py`, `core/geometry.py build_pipe` |
 | Sweep / Follow-Me (v1.13) | Draw a path and sweep an L / U / T / I / box structural section along it (`P` cycles) | `operators/pipe.py HARDFLOW_OT_sweep`, `core/geometry.py profile_points` |
+| Freehand + Smooth Path (v1.21) | Click *or* stroke-draw the path (the ink hugs the surface, reduced to clean anchors on release); `C` interpolates a Catmull-Rom spline through the anchors — a ROUND pipe commits an editable AUTO-handle Bezier | `operators/pipe.py`, `core/path.py rdp_simplify/catmull_rom` |
+| CUSTOM cross-sections (v1.21) | The `P` cycle sweeps a flat mesh's boundary outline, or rides a curve object as a native non-destructive bevel profile | `core/geometry.py object_profile_points`, `operators/pipe.py` |
 | Sagging cable / rope | A cable that drapes between its points (catenary sag) | `core/transform.py cable_points` |
+| Cable gravity settle (v1.21) | `G` relaxes the rope as an anchor-pinned particle chain with real scene collision — it drapes over obstacles and rests on geometry; Shift+Wheel feeds slack | `core/physics.py settle_chain`, `operators/pipe.py` |
+| Detail Along Path (v1.21) | Repeat a picked detail mesh along the active curve (Array Fit-Curve + Curve deform) — chain links, cable clips, corrugated hoses | `operators/pipe.py HARDFLOW_OT_path_detail` |
 
 ### Edit Mode (v1.3)
 
@@ -362,8 +391,8 @@ In drawing mode:
 | Left click | Place point / start-finish shape |
 | Enter / double-click | Close the POLY shape and apply |
 | Backspace | Delete the last POLY point |
-| Q / W / E / R / T / Y / U | Shape: Box / Circle / Polygon / N-gon / Slot / Star / Arc |
-| [ / ] | N-gon / star / slot segment count (ARC: sweep angle) |
+| Q / W / E / R / T / Y / U / I | Shape: Box / Circle / Polygon / N-gon / Slot / Star / Arc / Vent |
+| [ / ] | N-gon / star / slot segment count (ARC: sweep angle; VENT: slat count) |
 | **Tab / Shift+Tab** | Cycle mode (Cut / Slice / Make / Join / Intersect / Face / Knife) |
 | 0–9 / . / - | Type an exact size (radius / extent / segment) |
 | ← / → | Drawing plane: VIEW / SURFACE / EDGES / X / Y / Z |
@@ -374,7 +403,8 @@ In drawing mode:
 | N | Toggle non-destructive (live modifier) |
 | **- / =** | In-draw inset / extract (offset the loop) |
 | **, / .** | In-draw in-plane rotation |
-| **A / D** | In-draw array count / array axis |
+| **A / D** | In-draw array count / array axis (X / Y / Z / **radial** bolt-circle) |
+| **H** | Set / move the grid origin (snap anchor + radial pivot) |
 | **M** | In-draw mirror across a world axis |
 | **B** / **C** | Toggle bevel-on-cut / bevelled cutter |
 | **J** | Toggle live boolean preview (real result on the target) |
@@ -391,10 +421,13 @@ add geometry (UNION) · Join = add the drawn shape as a separate solid (no boole
 **Other tools:** **Build primitives** (Cube / Plane / Cylinder / Cone / Sphere /
 Tube) · **Boolean (Selected)** · **Edge Weights** · **Display Toggles** ·
 **Random Colors / Copy Material** · **Recalculate Normals** · **Push/Pull** ·
-**Offset** · **Edge Bevel** · **Loop Cut** · **Construction Grid** · **Loft** ·
-**Pipe** (round/square/rect) / **Cable** / **Sweep** (L/U/T/I/box sections) ·
-**Apply Cutters** · a **modifier-stack manager** — all in the N-panel. Push/Pull,
-Offset, the draw tool, and snapping also work in **Edit Mode** (v1.3).
+**Offset** · **Edge Bevel** · **Loop Cut** · **Panel Lines** (groove / weld bead
+from selected edges) · **Construction Grid** · **Loft** · **Pipe**
+(round/square/rect/**custom**) / **Cable** (`G` gravity settle) / **Sweep**
+(L/U/T/I/box/custom sections) — all three draw freehand strokes and `C` smooths
+the path · **Detail Along Path** · **Apply Cutters** · a **modifier-stack
+manager** — all in the N-panel. Push/Pull, Offset, the draw tool, and snapping
+also work in **Edit Mode** (v1.3).
 
 > **v1.13** removed the bevel / mirror / array / radial / symmetrize / sharpen /
 > dice / clean modifier tools and the step / taper / knurl greeble; use the
@@ -447,6 +480,8 @@ hardflow/
 │   ├── boolean.py          # destructive + non-destructive boolean + fallbacks
 │   ├── command.py          # pure Command-Pattern journal (per-modal atomic undo)
 │   ├── transform.py        # cable-sag / fit / adaptive sizing math (pure)
+│   ├── path.py             # freehand-stroke / spline math — RDP, Catmull-Rom (pure)
+│   ├── physics.py          # cable gravity-settle relaxation + collision (pure)
 │   ├── decal*.py / atlas.py# decal orientation, image library, trim/atlas math
 │   ├── asset_lib.py        # .blend kit-library scan (pure)
 │   └── asset.py            # append / orient / bind INSERTs + asset extras
@@ -457,7 +492,7 @@ hardflow/
 │   ├── hardops.py          # edge-weight / display / material / recalc-normals helpers
 │   ├── boolean_ops.py      # boolean from selected objects
 │   ├── cutters.py          # non-destructive cutter management (apply/select/remove)
-│   ├── pipe.py             # pipe (round/square/rect) + cable/rope + sweep (L/U/T/I)
+│   ├── pipe.py             # pipe/cable/sweep — freehand strokes, smooth path, gravity settle, custom profiles, detail along path
 │   ├── face_tool.py        # shared modal base for the face-drag tools (_FaceDragModal, command-backed preview)
 │   ├── push_pull.py        # Push/Pull — copy/repeat/inference (Object + Edit)
 │   ├── offset.py           # Offset — repeat + recess/panel chain (Object + Edit)
