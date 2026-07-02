@@ -2410,6 +2410,64 @@ def test_mesh_snapshot_command_in_macro_rolls_back():
     bad.free()
 
 
+def test_push_pull_operator_execute_extrudes():
+    # F9 redo / scripting path: execute() re-applies the extrude from the stored
+    # face + distance without the modal loop, so "Adjust Last Operation" is
+    # adjustable and the tool is callable from Python.
+    _reset()
+    hardflow.register()
+    try:
+        ob = _add_cube("PP", size=2.0)
+        _activate(ob)
+        top = max(range(len(ob.data.polygons)),
+                  key=lambda i: ob.data.polygons[i].center.z)
+        v0 = len(ob.data.vertices)
+        z0 = max(v.co.z for v in ob.data.vertices)
+        res = bpy.ops.mesh.hardflow_push_pull('EXEC_DEFAULT', face_index=top,
+                                              distance=0.5)
+        assert res == {'FINISHED'}, res
+        assert len(ob.data.vertices) > v0                 # extrude added geometry
+        assert max(v.co.z for v in ob.data.vertices) > z0 + 0.4   # +Z pull landed
+        # a zero distance is a no-op cancel (nothing to extrude)
+        assert bpy.ops.mesh.hardflow_push_pull('EXEC_DEFAULT', face_index=top,
+                                               distance=0.0) == {'CANCELLED'}
+    finally:
+        hardflow.unregister()
+
+
+def test_offset_operator_execute_insets():
+    # F9 redo / scripting path for Offset: inset the stored face by the thickness,
+    # and (with extrude on) also push the inner face in for a recess.
+    _reset()
+    hardflow.register()
+    try:
+        ob = _add_cube("OF", size=2.0)
+        _activate(ob)
+        top = max(range(len(ob.data.polygons)),
+                  key=lambda i: ob.data.polygons[i].center.z)
+        p0 = len(ob.data.polygons)
+        res = bpy.ops.mesh.hardflow_offset('EXEC_DEFAULT', face_index=top,
+                                           thickness=0.2)
+        assert res == {'FINISHED'}, res
+        assert len(ob.data.polygons) > p0                 # inset added faces
+        # inset + inner recess extrude runs and adds even more geometry
+        ob2 = _add_cube("OF2", size=2.0, location=(4, 0, 0))
+        _activate(ob2)
+        top2 = max(range(len(ob2.data.polygons)),
+                   key=lambda i: ob2.data.polygons[i].center.z)
+        p2 = len(ob2.data.polygons)
+        res2 = bpy.ops.mesh.hardflow_offset('EXEC_DEFAULT', face_index=top2,
+                                            thickness=0.2, extrude=True,
+                                            distance=-0.3)
+        assert res2 == {'FINISHED'}, res2
+        assert len(ob2.data.polygons) > p2                # inset + recess walls
+        # a zero thickness is a no-op cancel
+        assert bpy.ops.mesh.hardflow_offset('EXEC_DEFAULT', face_index=top2,
+                                            thickness=0.0) == {'CANCELLED'}
+    finally:
+        hardflow.unregister()
+
+
 def test_boolean_chain_command_atomic():
     # base.boolean_chain: N cutters applied to one target as an atomic macro.
     _reset()

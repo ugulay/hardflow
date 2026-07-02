@@ -82,6 +82,13 @@ class _CurveDraw:
         except Exception:  # never orphan the draw handler if the modal won't start
             self._cleanup(context)
             raise
+        try:
+            chips = self._shortcut_chips()
+            context.workspace.status_text_set(
+                "%s    " % self._title
+                + "    ".join("%s: %s" % (c[0], c[1]) for c in chips))
+        except Exception:
+            pass
         return {'RUNNING_MODAL'}
 
     def _init_params(self, prefs):
@@ -342,7 +349,7 @@ class _CurveDraw:
             hud.draw_snap_marker(cursor_px, kind=self._snap_kind, fallback=accent)
 
         hud.draw_hud(region, self._hud_lines(), title=self._title, accent=accent)
-        hud.draw_shortcut_bar(region, self._shortcut_chips())
+        hud.draw_shortcut_bar(region, self._shortcut_chips(), accent=accent)
 
     def _shortcut_chips(self):
         """Bottom shortcut-bar chips with the live engaged state -- the pressable,
@@ -390,6 +397,10 @@ class _CurveDraw:
     def _cleanup(self, context):
         if not self._finalized:
             self._clear_preview()
+        try:
+            context.workspace.status_text_set(None)   # restore default hints
+        except Exception:
+            pass
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):

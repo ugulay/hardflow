@@ -101,7 +101,19 @@ class _FaceDragModal:
         except Exception:  # never orphan the draw handler if the modal won't start
             self._cleanup(context)
             raise
+        self._set_status(context)
         return {'RUNNING_MODAL'}
+
+    def _set_status(self, context):
+        """Native bottom status-bar key hint (in addition to the premium shortcut
+        bar), so a user who looks where Blender normally prints modal controls
+        still sees them. Built from the tool's own chips; cleared in _cleanup."""
+        try:
+            chips = self._shortcut_chips()
+            text = "    ".join("%s: %s" % (c[0], c[1]) for c in chips)
+            context.workspace.status_text_set(text)
+        except Exception:
+            pass
 
     def modal(self, context, event):
         context.area.tag_redraw()
@@ -307,6 +319,10 @@ class _FaceDragModal:
             try:
                 bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
             except (ValueError, AttributeError):
+                pass
+            try:
+                context.workspace.status_text_set(None)   # restore default hints
+            except Exception:
                 pass
             if context.area is not None:
                 context.area.tag_redraw()

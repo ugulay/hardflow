@@ -9,6 +9,7 @@
 # a hit past the base mesh (a generative modifier added it) is mapped back to the
 # nearest base face by the shared base -- best-effort for topology-changing mods.
 from bpy.types import Operator
+from bpy.props import FloatProperty, IntProperty, BoolProperty
 
 from .face_tool import _FaceDragModal
 from ..core import raycast, geometry, grid, snap
@@ -21,6 +22,24 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
     bl_label = "Hardflow Offset"
     bl_description = "Inset a face's border inward by a measured distance (Offset)"
     bl_options = {'REGISTER', 'UNDO'}
+
+    # Redo (F9 "Adjust Last Operation") + scripting properties. The modal drag
+    # writes these; on commit Blender can re-run execute() non-modally so the
+    # inset thickness (and recess depth) stay adjustable after the fact.
+    thickness: FloatProperty(
+        name="Thickness", description="Inset distance of the face border",
+        default=0.0, min=0.0, unit='LENGTH')
+    distance: FloatProperty(
+        name="Depth",
+        description="Recess (-) / raise (+) depth of the inner face when Extrude "
+                    "is on",
+        default=0.0, unit='LENGTH')
+    extrude: BoolProperty(
+        name="Extrude Inner",
+        description="Also push/pull the inset face (recess / raised panel)",
+        default=False)
+    face_index: IntProperty(
+        name="Face Index", default=-1, options={'HIDDEN'})
 
     _HOVER_FILL = (0.15, 0.8, 1.0, 0.18)
     _LOCK_FILL = (0.2, 1.0, 0.5, 0.20)     # green-tinted lock fill
@@ -206,6 +225,9 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         return "%.3f m" % self.thickness
 
     def _remember_last(self):
+        # Snapshot the committed phase into the redo flag before the journal is
+        # cleared, so F9 reproduces an inset-only vs inset+extrude correctly.
+        self.extrude = (self.phase == 'EXTRUDE')
         if self.thickness > 1e-6:
             HARDFLOW_OT_offset._LAST_THICKNESS = self.thickness
 
@@ -238,3 +260,45 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
             line2,
             ("Enter / click apply%s    Esc cancel" % repeat, dim),
         ]
+
+    # --- non-modal apply (F9 redo / scripting) ---------------------------
+
+    def execute(self, context):
+        """Re-apply the inset (and optional inner extrude) from the stored face +
+        values, without the modal loop -- the F9 redo and scripted entry point."""
+        obj = context.active_object
+        if obj is None or obj.type != 'MESH' or self.thickness <= 1e-6:
+            return {'CANCELLED'}
+        mw = obj.matrix_world
+        if context.mode == 'EDIT_MESH':
+            geometry.flush_edit_mesh(obj)
+            if self.extrude:
+                basis = geometry.selected_face_basis(obj)
+                if basis is None:
+                    return {'CANCELLED'}
+                _center, normal = basis
+                world = (mw.to_3x3() @ normal).normalized() * self.distance
+                vec = mw.inverted_safe().to_3x3() @ world
+                geometry.edit_inset_extrude_faces(obj, self.thickness, vec)
+            else:
+                geometry.edit_inset_faces(obj, self.thickness)
+            return {'FINISHED'}
+        if not (0 <= self.face_index < len(obj.data.polygons)):
+            return {'CANCELLED'}
+        if self.extrude:
+            poly = obj.data.polygons[self.face_index]
+            world = (mw.to_3x3() @ poly.normal).normalized() * self.distance
+            vec = mw.inverted_safe().to_3x3() @ world
+            geometry.inset_extrude_faces(obj, [self.face_index], self.thickness,
+                                         vec)
+        else:
+            geometry.inset_faces(obj, [self.face_index], self.thickness)
+        return {'FINISHED'}
+
+    def draw(self, context):
+        """Compact redo panel: adjust the inset thickness / extrude depth."""
+        col = self.layout.column()
+        col.prop(self, "thickness")
+        col.prop(self, "extrude")
+        if self.extrude:
+            col.prop(self, "distance")

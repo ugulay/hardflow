@@ -11,6 +11,7 @@
 # back to the nearest base face by the shared base (geometry.nearest_face_to_point)
 # -- exact for deform-only modifiers, best-effort for topology-changing ones.
 from bpy.types import Operator
+from bpy.props import FloatProperty, IntProperty, BoolProperty
 
 from .face_tool import _FaceDragModal
 from ..core import raycast, geometry
@@ -21,6 +22,19 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
     bl_label = "Hardflow Push/Pull"
     bl_description = "Extrude a face along its normal by dragging (Push/Pull)"
     bl_options = {'REGISTER', 'UNDO'}
+
+    # Redo (F9 "Adjust Last Operation") + scripting properties. The modal drag
+    # writes distance/copy/face_index as it runs, so on commit Blender can re-run
+    # execute() non-modally with an adjustable distance -- and the tool becomes
+    # callable from Python. The interactive path still goes through invoke().
+    distance: FloatProperty(
+        name="Distance", description="Extrude distance along the face normal",
+        default=0.0, unit='LENGTH')
+    copy: BoolProperty(
+        name="Copy", description="Keep the starting face and stack a new volume",
+        default=False)
+    face_index: IntProperty(
+        name="Face Index", default=-1, options={'HIDDEN'})
 
     _HOVER_FILL = (0.15, 0.8, 1.0, 0.18)   # hovered (loose) face tint
     _LOCK_FILL = (1.0, 0.6, 0.1, 0.22)     # locked (committed) face tint
@@ -146,3 +160,39 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
                                          'ON' if self.copy else 'OFF'), dim),
             ("Enter / click apply%s    Esc cancel" % repeat, dim),
         ]
+
+    # --- non-modal apply (F9 redo / scripting) ---------------------------
+
+    def execute(self, context):
+        """Re-apply the extrude from the stored face + distance, without the modal
+        loop -- the "Adjust Last Operation" (F9) redo and the scripted entry point.
+        Reproduces exactly what the drag committed (same world->local normal
+        conversion), so tweaking the distance in the redo panel just re-extrudes."""
+        obj = context.active_object
+        if obj is None or obj.type != 'MESH' or abs(self.distance) <= 1e-6:
+            return {'CANCELLED'}
+        mw = obj.matrix_world
+        if context.mode == 'EDIT_MESH':
+            basis = geometry.selected_face_basis(obj)
+            if basis is None:
+                return {'CANCELLED'}
+            _center, normal = basis
+            world = (mw.to_3x3() @ normal).normalized() * self.distance
+            disp = mw.inverted_safe().to_3x3() @ world
+            geometry.flush_edit_mesh(obj)
+            geometry.edit_extrude_faces(obj, disp, keep_original=self.copy)
+            return {'FINISHED'}
+        if not (0 <= self.face_index < len(obj.data.polygons)):
+            return {'CANCELLED'}
+        poly = obj.data.polygons[self.face_index]
+        world = (mw.to_3x3() @ poly.normal).normalized() * self.distance
+        disp = mw.inverted_safe().to_3x3() @ world
+        geometry.extrude_faces(obj, [self.face_index], disp,
+                               keep_original=self.copy)
+        return {'FINISHED'}
+
+    def draw(self, context):
+        """Compact redo panel: adjust the extrude distance / copy after the fact."""
+        col = self.layout.column()
+        col.prop(self, "distance")
+        col.prop(self, "copy")

@@ -154,6 +154,13 @@ class HARDFLOW_OT_draw(Operator):
         except Exception:  # never orphan the draw handler if the modal won't start
             self._cleanup(context)
             raise
+        # Native status-bar hint (mirrors the premium bar for discoverability).
+        try:
+            context.workspace.status_text_set(
+                "Draw Cut    LMB place    Tab mode    Q/W/E/R/T/Y/U shape    "
+                "type exact size    Enter apply    Esc cancel")
+        except Exception:
+            pass
         return {'RUNNING_MODAL'}
 
     # --- event loop ------------------------------------------------------
@@ -1735,6 +1742,10 @@ class HARDFLOW_OT_draw(Operator):
         # Blender undo step); on cancel the placements only touched the in-memory
         # point lists, which die with the operator -- so clear(), never undo_all().
         self._commands.clear()
+        try:
+            context.workspace.status_text_set(None)   # restore default hints
+        except Exception:
+            pass
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):

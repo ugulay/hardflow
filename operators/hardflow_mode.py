@@ -100,6 +100,12 @@ class _HardflowModeModal:
         except Exception:   # never orphan the draw handler if modal won't start
             self._cleanup(context)
             raise
+        try:
+            context.workspace.status_text_set(
+                "HardFlow Mode    LMB place    Tab verb    "
+                "Plane cycle    PgUp/Dn depth    Enter apply    Esc cancel")
+        except Exception:
+            pass
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
@@ -285,6 +291,10 @@ class _HardflowModeModal:
         for cmd in self._mesh_cmds:
             cmd.free()
         self._mesh_cmds = []
+        try:
+            context.workspace.status_text_set(None)   # restore default hints
+        except Exception:
+            pass
         try:
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
