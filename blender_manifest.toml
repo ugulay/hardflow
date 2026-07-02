@@ -12,4 +12,4 @@ website = "https://github.com/ugulay/hardflow"
 blender_version_min = "4.2.0"
 license = ["SPDX:GPL-3.0-or-later"]
 
-tags = ["Modeling", "Mesh", "Geometry"]
+tags = ["Modeling", "Mesh", "Object"]
