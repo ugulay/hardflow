@@ -77,8 +77,9 @@ hard-surface loop:
   booleans), with a per-tool undo journal so a whole tool session commits as
   **one** atomic Blender undo step.
 - **Smart Bevel** — a hard-surface bevel that drops support/holding loops so the
-  edge survives Subdivision, now topology-safe on irregular post-boolean n-gons
-  (experimental).
+  edge survives Subdivision, topology-safe on irregular post-boolean n-gons and
+  validated against a live Subdivision pass (the loop pins the flat, fillet radius
+  ≈ the bevel width).
 - **Curves & sweeps** — surface-draping pipe (round/square/rect), sagging cable,
   and a Follow-Me sweep that runs an L/U/T/I/box section along a drawn path.
 - **Decals & trim sheets** — place, PBR material, bake, image library, a

@@ -321,8 +321,10 @@ it brings to Blender for free. The right column points at the implementing modul
 *A SketchUp-fluidity / pro hard-surface-pipeline evolution on three foundation
 layers, all landed (syntax + pure + headless verified — the headless suite runs
 live against a standalone `bpy` build; the modal GUI is in the manual checklist).
-Only Smart Bevel's exact support-loop placement is still EXPERIMENTAL, pending a
-live subdivision-tuning pass — see `docs/hardflow_mode_plan.md`.*
+Smart Bevel's support-loop placement is **validated** against a live Catmull-Clark
+Subdivision pass (Blender 5.1.2, headless) — the holding loop pins the flanking
+flat near the bevel and the subdivided fillet stays crisp at radius ≈ the bevel
+width — see `docs/hardflow_mode_plan.md`.*
 
 | Feature | What it does | Where |
 |---------|--------------|-------|
@@ -333,7 +335,7 @@ live subdivision-tuning pass — see `docs/hardflow_mode_plan.md`.*
 | Mode plane + verb cycle | The shell cycles VIEW / **SURFACE** (aligned to the face under the first click) / X / Y / Z, and `Tab` cycles the active verb (Knife → Extrude → **Cut → Add → Slice → Intersect**) in-session; enter it from **Ctrl+Shift+X** or the **Edit pie / menu** | `operators/hardflow_mode.py _surface_basis_at/_cycle_verb`, `keymaps.py`, `ui/pie.py` |
 | Per-modal atomic macro | A tool session's edits live in a Command journal and commit as **one** Blender undo step; `Backspace` steps back, `Esc` rolls the session back. Now drives the direct-modeling tools' live preview (Push/Pull, Offset, Edge Bevel, Loop Cut) | `core/command.py`, `operators/base.py MeshSnapshotCommand`, `operators/face_tool.py` |
 | Atomic boolean chain | N cutters applied as an all-or-nothing MacroCommand — a mid-chain failure rolls the whole chain back (no half-baked cutters, no orphaned slice piece). Wired into the draw-cut destructive apply | `operators/base.py BooleanCutCommand/boolean_chain`, `operators/draw_cut.py _apply_destructive` |
-| Smart Bevel & support loops | Bevel + support/holding loops so the edge survives Subdivision (`S` on Edge Bevel, `-`/`=` tightness) — EXPERIMENTAL | `core/bevel.py support_loop_positions`, `core/geometry.py smart_bevel_edges` |
+| Smart Bevel & support loops | Bevel + support/holding loops so the edge survives Subdivision (`S` on Edge Bevel, `-`/`=` tightness); a `~r=…` HUD readout shows the fillet radius the bevel settles to. Placement validated against a live Subdivision pass | `core/bevel.py support_loop_positions/beveled_fillet_radius`, `core/geometry.py smart_bevel_edges` |
 | Boolean n-gon cleanup | Opt-in: re-quad the n-gons a boolean cut / Apply Cutters leaves (N-panel ▸ Cutter Options ▸ Topology) | `core/geometry.py dissolve_boolean_ngons`, `preferences.py cut_dissolve_ngons` |
 
 ## Installation
@@ -406,10 +408,13 @@ whole session is one undo step.
 
 **Smart Bevel & topology (Super Modeling Mode):** in **Edge Bevel** press `S` to
 add support/holding loops so the bevel survives Subdivision (`-` / `=` adjust how
-tightly they hug the bevel). Enable **N-panel ▸ Cutter Options ▸ Topology ▸
-Re-quad Cut N-gons** to auto-clean the n-gons a boolean cut / Apply Cutters leaves,
-and **Smart Edge Bevel** to start Edge Bevel in Smart mode. (Both default off;
-Smart Bevel is EXPERIMENTAL.)
+tightly they hug the bevel; the HUD's `~r=…` shows the fillet radius the bevel
+will settle to). The placement is validated against a live Catmull-Clark
+Subdivision pass — the loop pins the flanking flat near the bevel and the
+subdivided fillet stays crisp at radius ≈ the bevel width. Enable **N-panel ▸
+Cutter Options ▸ Topology ▸ Re-quad Cut N-gons** to auto-clean the n-gons a
+boolean cut / Apply Cutters leaves, and **Smart Edge Bevel** to start Edge Bevel
+in Smart mode. (Both default off.)
 
 **Assets:** N-panel "Assets" → "Asset from .blend" (or the "Asset Library" grid)
 starts the placement tool: wheel = scale, `[ ]` = roll, left click = place, Esc =

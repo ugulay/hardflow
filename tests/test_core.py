@@ -1312,6 +1312,24 @@ def test_subdiv_fillet_radius_roundtrip():
     assert bevel.support_offset_for_radius(-1.0) == 0.0
 
 
+def test_beveled_fillet_radius():
+    # Beveled fillet radius tracks the WIDTH (not the loop offset). Measured
+    # anchors (Blender 5.1.2 headless subdivision): r/width ~1.3 (chamfer),
+    # ~1.2 (2 seg), ~1.05 (3 seg), trending to ~1.0 as the bevel rounds itself.
+    assert bevel.beveled_fillet_radius(0.0) == 0.0
+    assert bevel.beveled_fillet_radius(-1.0) == 0.0
+    # radius scales linearly with width for a fixed segment count
+    assert abs(bevel.beveled_fillet_radius(0.2, 1) - 0.26) < 1e-9   # 1.3 * 0.2
+    assert abs(bevel.beveled_fillet_radius(0.4, 1)
+               - 2.0 * bevel.beveled_fillet_radius(0.2, 1)) < 1e-9
+    # more segments -> tighter fillet, monotonically toward ~= width
+    r1 = bevel.beveled_fillet_radius(0.2, 1)
+    r2 = bevel.beveled_fillet_radius(0.2, 2)
+    r8 = bevel.beveled_fillet_radius(0.2, 8)
+    assert r1 > r2 > r8 > 0.2                    # always a touch over the width
+    assert abs(r8 - 0.2) < 0.2 * 0.05            # high seg -> within 5% of width
+
+
 def test_support_loop_positions_segment_aware():
     # segments=1 keeps the classic placement (backward compatible)
     assert bevel.support_loop_positions(0.1, tightness=0.5) == [0.0325]

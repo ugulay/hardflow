@@ -982,6 +982,46 @@ def test_smart_bevel_edges():
     assert geometry.smart_bevel_edges(cube, [(0, 9000)], 0.2)['beveled'] == 0
 
 
+def test_smart_bevel_subdivision_quality():
+    # The tuning that was EXPERIMENTAL, now locked: run the holding-loop
+    # placement through a live Catmull-Clark Subdivision pass and confirm the
+    # loop does its job. A support loop pins the flanking flat near the bevel, so
+    # the subdivided top face sits flatter (closer to z=1) than a plain bevel's.
+    # Measured in Blender 5.1.2: the near-shoulder height recovers ~0.02+ for a
+    # 2-segment bevel. Asserts the pinning gain + that nothing collapses.
+    def near_shoulder_z(support):
+        _reset()
+        ob = _add_cube("SB", size=2.0)
+        key = tuple(v.index for v in ob.data.vertices
+                    if v.co.x > 0.9 and v.co.z > 0.9)   # the top-+X cube edge
+        assert len(key) == 2, key
+        summ = geometry.smart_bevel_edges(ob, [key], 0.2, segments=2,
+                                          support=support, tightness=0.5,
+                                          clean_ngons=True)
+        m = ob.modifiers.new("Subd", 'SUBSURF')
+        m.levels = 3
+        m.render_levels = 3
+        dg = bpy.context.evaluated_depsgraph_get()
+        ev = ob.evaluated_get(dg)
+        me = ev.to_mesh()
+        xs = 1.0 - 0.2 - 0.12          # top surface, just inboard of the shoulder
+        zs = [v.co.z for v in me.vertices
+              if abs(v.co.y) < 0.05 and abs(v.co.x - xs) < 0.06 and v.co.z > 0.5]
+        ev.to_mesh_clear()
+        assert zs, "no top-surface samples near the shoulder"
+        return summ, sum(zs) / len(zs)
+
+    s_sup, z_sup = near_shoulder_z(True)
+    s_plain, z_plain = near_shoulder_z(False)
+    assert s_sup['supports'] >= 1, s_sup             # loops were actually added
+    assert s_plain['supports'] == 0, s_plain         # plain bevel: no loops
+    # the flat sits higher (flatter, closer to z=1) with the holding loop
+    assert z_sup > z_plain + 0.008, (z_sup, z_plain)
+    # both stay in a sane band -- subdivision rounds, but nothing exploded
+    assert 0.85 < z_sup <= 1.0001, z_sup
+    assert 0.80 < z_plain <= 1.0001, z_plain
+
+
 def test_dissolve_boolean_ngons():
     # An n-gon (single hexagon face) is triangulated and re-quadded so no face is
     # left with more than 4 sides; an all-quad cube is reported clean and unchanged.

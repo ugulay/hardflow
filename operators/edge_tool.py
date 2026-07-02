@@ -10,7 +10,7 @@ from bpy.types import Operator
 from mathutils import Vector
 
 from .face_tool import _FaceDragModal
-from ..core import raycast, geometry, grid
+from ..core import raycast, geometry, grid, bevel
 from ..preferences import get_prefs
 from ..ui import draw as hud
 
@@ -129,7 +129,8 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
             return
         if self.smart:
             # Smart Bevel: real chamfer + support/holding loops + n-gon clean,
-            # the topology-preserving hard-surface path (EXPERIMENTAL). The
+            # the topology-preserving hard-surface path (placement validated
+            # against a live Subdivision pass -- see smart_bevel_edges). The
             # summary feeds the live HUD (supports added / flanks skipped by the
             # safety barrier), so tuning tightness gives instant feedback.
             self._last_summary = geometry.smart_bevel_edges(
@@ -204,6 +205,10 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
                     if s.get('skipped'):
                         smart += ", %d clamped" % s['skipped']
                     smart += ")"
+                # Expected fillet radius the bevel settles to under Subdivision
+                # (measured relation, ~= the bevel width). Feedback for modelers.
+                smart += "  ~r=%.3f m" % bevel.beveled_fillet_radius(
+                    self.width, self.segments)
             else:
                 smart = ""
             top = ("Width:  %.3f m%s    Segments %d%s%s"

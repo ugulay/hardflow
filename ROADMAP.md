@@ -581,10 +581,13 @@ tools instead. All pure math is unit-tested; the bpy paths add headless coverage
 ## v1.14 — Super Modeling Mode
 Evolve the toolkit toward SketchUp fluidity + a pro hard-surface pipeline on three
 foundation layers, each fitting the one-directional (ui/ops → core) architecture.
-All three layers are now landed; only Smart Bevel's exact support-loop placement
-stays EXPERIMENTAL pending a live subdivision-tuning pass. Landed items are syntax
-+ pure + headless verified (70 pure + 105 headless, run live against a standalone
-`bpy` build); the modal GUI is tracked in `tests/manual_checklist.md` §16/§20.
+All three layers are now landed, including Smart Bevel's support-loop placement,
+which was **validated** against a live Catmull-Clark Subdivision pass (Blender
+5.1.2, headless cross-section circle fit — the holding loop pins the flanking
+flat near the bevel and the subdivided fillet stays crisp at radius ≈ the bevel
+width; the `S` toggle is the opt-in). Landed items are syntax + pure + headless
+verified (run live against a standalone `bpy` build); the modal GUI is tracked in
+`tests/manual_checklist.md` §16/§20.
 Design + status: `docs/hardflow_mode_plan.md`, `docs/command_refactor.md`.
 
 **Shadowing Engine** — shadow native tools instead of wrapping them (a modal
@@ -630,8 +633,12 @@ long boolean chains":
 - [x] **Smart Bevel support loops** — `core/bevel.support_loop_positions` (pure) +
       `geometry.smart_bevel_edges` (bevel + holding loops via `_flank_support_loop`,
       topology-preserving), `S` toggle + `-`/`=` tightness on Edge Bevel.
-      EXPERIMENTAL (headless `test_smart_bevel_edges`; exact placement wants a live
-      cube→Subdivision pass).
+      Placement **validated** against a live cube→Catmull-Clark Subdivision pass
+      (Blender 5.1.2, headless: the holding loop pins the flanking flat near the
+      bevel — near-shoulder height recovers ~0.11 for a chamfer, ~0.02 for a
+      rounded bevel — and the subdivided fillet stays crisp at radius ≈ the bevel
+      width, `core/bevel.beveled_fillet_radius`). Headless
+      `test_smart_bevel_edges` + `test_smart_bevel_subdivision_quality`.
 - [x] **Boolean n-gon cleanup** — `geometry.dissolve_boolean_ngons` re-quads the
       n-gons a boolean/bevel leaves; opt-in preference `cut_dissolve_ngons` wired
       into the destructive Cut and Apply Cutters (headless

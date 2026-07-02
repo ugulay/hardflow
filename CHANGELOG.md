@@ -5,6 +5,34 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+### Changed
+- **Smart Bevel — support-loop placement validated + de-experimentalised.** The
+  one item left EXPERIMENTAL from the Super Modeling Mode work (v1.14) — the
+  *exact* holding-loop position, "pending a live cube→Subdivision tuning pass" —
+  is now measured and settled. A headless probe (Blender 5.1.2) bevels a cube
+  edge, adds a Catmull-Clark Subdivision modifier, evaluates the result and
+  circle-fits the corner cross-section. Findings: a holding loop **pins the
+  flanking flat** near the bevel (near-shoulder surface height recovers ~0.11 for
+  a chamfer, ~0.02 for a rounded bevel over a plain bevel), and the subdivided
+  **fillet radius tracks the bevel width** (r/width ≈ 1.05–1.3 by segment count),
+  essentially independent of the holding-loop offset — so the placement is sound
+  across the full `tightness` range. Smart Bevel is no longer labelled
+  experimental; the `S` toggle stays the opt-in.
+- **Honest fillet-radius model.** The pure `core/bevel.subdiv_fillet_radius` /
+  `support_offset_for_radius` pair models a *lone* holding loop against a sharp
+  edge (radius ≈ offset) — a different scenario than a beveled fillet, whose
+  radius is set by the width. Their docstrings now say so, and a new
+  `core/bevel.beveled_fillet_radius(width, segments)` returns the *measured*
+  beveled-fillet radius (≈ width × (1 + 0.3/segments)).
+
+### Added
+- **Edge Bevel "expected radius" HUD readout.** In Smart mode the HUD shows
+  `~r=…` — the fillet radius the bevel will settle to under Subdivision
+  (`beveled_fillet_radius`), so the modeler sees the outcome while dragging.
+- **Regression coverage.** Pure `test_beveled_fillet_radius`; headless
+  `test_smart_bevel_subdivision_quality` (bevel → Subdivision → assert the
+  holding loop keeps the flat flatter than a plain bevel, and nothing collapses).
+
 ## [1.18.0] — 2026-07-02
 
 Heightmap decals — a dedicated grayscale height-map channel driving both Parallax
@@ -254,10 +282,10 @@ behaviour change; verified against a standalone `bpy` build (Blender 5.0.1).
     bevel) + `geometry.smart_bevel_edges` (bevel + support/holding loops via
     `_flank_support_loop`, topology-preserving) + `geometry.dissolve_boolean_ngons`
     (triangulate + re-quad the n-gons a boolean/bevel leaves). Object-Mode Edge
-    Bevel gains an **`S` Smart** toggle with `-`/`=` tightness (EXPERIMENTAL — exact
-    holding-loop placement wants a live cube→Subdivision tuning pass, tracked in
-    the manual checklist). Pure tests for the placement math + headless
-    `test_smart_bevel_edges` / `test_dissolve_boolean_ngons`.
+    Bevel gains an **`S` Smart** toggle with `-`/`=` tightness (EXPERIMENTAL at the
+    time — exact holding-loop placement wanted a live cube→Subdivision tuning pass;
+    **since validated, see [Unreleased]**). Pure tests for the placement math +
+    headless `test_smart_bevel_edges` / `test_dissolve_boolean_ngons`.
     - **Wired into the boolean pipeline (opt-in).** A new **Re-quad Cut N-gons**
       preference (`cut_dissolve_ngons`, default off) runs `dissolve_boolean_ngons`
       after a destructive draw Cut/Make/Intersect *and* after **Apply Cutters**, so

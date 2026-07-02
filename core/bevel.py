@@ -45,12 +45,20 @@ def seg_factor(segments):
 
 
 def subdiv_fillet_radius(offset, segments=1):
-    """Approximate radius of the rounded fillet a holding loop sitting `offset`
-    meters from a sharp edge produces under Catmull-Clark subdivision. The
-    limit-surface rule of thumb is radius ~= offset for a lone holding loop; a
+    """Approximate radius of the rounded fillet a *lone* holding loop sitting
+    `offset` meters from a sharp (un-beveled) edge produces under Catmull-Clark
+    subdivision -- the textbook limit-surface rule of thumb, radius ~= offset (a
     beveled band with more `segments` of its own support tightens the effective
-    radius toward ``offset * seg_factor(segments)``. Pure, monotonic in offset,
-    0 for a non-positive offset. Inverse of `support_offset_for_radius`."""
+    radius toward ``offset * seg_factor(segments)``). Pure, monotonic in offset,
+    0 for a non-positive offset. Inverse of `support_offset_for_radius`.
+
+    NOTE: this models the lone-loop-against-a-sharp-edge scenario. For a *beveled*
+    edge -- what `smart_bevel_edges` actually builds -- the realized subdivided
+    radius is governed by the bevel WIDTH, not the holding-loop offset; use
+    `beveled_fillet_radius(width, segments)` there. Headless subdivision
+    measurement (Blender 5.1.2, cube -> Catmull-Clark) confirmed the beveled
+    fillet radius tracks the width (r/width ~= 1.05..1.3 by segments) and is
+    essentially independent of the holding-loop offset."""
     if offset <= 0.0:
         return 0.0
     return offset * seg_factor(segments)
@@ -58,12 +66,41 @@ def subdiv_fillet_radius(offset, segments=1):
 
 def support_offset_for_radius(radius, segments=1):
     """The holding-loop offset needed to yield a target subdivided fillet `radius`
-    -- the inverse of `subdiv_fillet_radius`. Lets the caller place the support
-    loop so the subdivided corner matches a chosen radius instead of guessing.
-    Pure; 0 for a non-positive radius."""
+    -- the inverse of `subdiv_fillet_radius`, for the lone-loop-against-a-sharp-
+    edge scenario. Lets the caller place the support loop so the subdivided corner
+    matches a chosen radius instead of guessing. Pure; 0 for a non-positive
+    radius. (For a beveled edge, `beveled_fillet_radius` is the relevant model --
+    see its note.)"""
     if radius <= 0.0:
         return 0.0
     return radius / seg_factor(segments)
+
+
+def beveled_fillet_radius(width, segments=1):
+    """Approximate radius the rounded corner of a `width`/`segments` bevel settles
+    to under a Catmull-Clark Subdivision modifier, once Smart Bevel's holding loops
+    brace it. Unlike `subdiv_fillet_radius` (which models a lone loop and scales
+    with the loop *offset*), the realized radius of a *beveled* edge is set by the
+    bevel WIDTH and is essentially independent of the holding-loop offset -- so
+    this takes the width directly.
+
+    Empirical: fitted to headless measurement (Blender 5.1.2 -- a cube edge
+    beveled with `geometry.smart_bevel_edges`, subdivided, the corner
+    cross-section circle-fit). Measured anchors, radius/width: seg 1 ~= 1.30,
+    seg 2 ~= 1.20, seg 3 ~= 1.05, trending to ~1.0 as the bevel rounds itself.
+    Modeled as ``width * (1 + 0.3 / segments)`` (+-~15%); a chamfer rounds a touch
+    wider than its width, a many-segment bevel to about its width. Pure float,
+    0 for a non-positive width. Used for the Edge Bevel HUD's "~r under subdiv"
+    readout so the modeler sees the fillet the bevel will settle to.
+
+        >>> round(beveled_fillet_radius(0.2, 1), 4)   # chamfer
+        0.26
+        >>> round(beveled_fillet_radius(0.2, 3), 4)   # rounder bevel -> ~ width
+        0.22
+    """
+    if width <= 0.0:
+        return 0.0
+    return width * (1.0 + 0.3 / max(1, int(segments)))
 
 
 def support_loop_positions(width, tightness=0.5, count=1, segments=1):

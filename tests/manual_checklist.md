@@ -357,10 +357,17 @@ Setup: Edit Mode on a face whose edges have clearly different lengths (e.g. a
       crossing score is no longer dropped (it used to fall back to slicing every
       face).
 
-> **Pending (not yet implemented — verify in the same pass once added; see
-> `ROADMAP.md`):** `Ctrl+Click` to set the 2-edge plane's main edge manually,
-> and a pixel-accurate `knife_project` that clips the score to the exact drawn
-> outline (today a single large face still scores a full-width line).
+- [ ] **`Ctrl+Click` set main edge** ⭐ — on the EDGES plane, Ctrl+Click a selected
+      edge under the cursor to force it as the grid's main axis (overriding the
+      automatic longest-edge pick, `draw_cut._pick_selected_edge` →
+      `decal_math.best_edge_pair` `forced_main`). Core: pure `test_best_edge_pair`
+      + headless `test_capture_edges_basis_forced_main`.
+- [ ] **Pixel-accurate `knife_project`** ⭐ — in KNIFE mode the score clips to the
+      exact drawn outline (a wire cutter projected along the view via
+      `draw_cut._knife_project_object` → `bpy.ops.mesh.knife_project`); a thin score
+      on a large face no longer runs full width. Falls back to the footprint knife
+      when the viewport op can't run. (Both landed + live-verified in Blender
+      5.1.2 — see `ROADMAP.md` v1.9.)
 
 ---
 
@@ -459,14 +466,15 @@ Setup: a cube in Object Mode, selected/active.
 - [ ] **Enter / click** keeps the bevel; **Esc** rolls the mesh back to the
       original (no change). `Ctrl+Z` reverts in one step.
 - [ ] **`R` repeat** — run again on another edge, press `R` → last width.
-- [ ] **`S` Smart Bevel** ⭐ (EXPERIMENTAL) — lock an edge, drag a width, press
-      `S`: the HUD shows `SMART t=0.5` and the preview adds **support / holding
-      loops** flanking the bevel; **`-` / `=`** lower / raise **tightness** (loops
-      hug the bevel harder). Add a **Subdivision** modifier and confirm the bevel
-      stays crisp (vs. soft with Smart off). Watch for: support loops landing in
-      the wrong spot or a T-junction on a non-quad flank — this is the "tune live"
-      caveat; headless only checks that Smart never *removes* geometry
-      (`test_smart_bevel_edges`).
+- [ ] **`S` Smart Bevel** ⭐ — lock an edge, drag a width, press `S`: the HUD shows
+      `SMART t=0.5`, a `~r=…` expected-fillet-radius readout, and the preview adds
+      **support / holding loops** flanking the bevel; **`-` / `=`** lower / raise
+      **tightness** (loops hug the bevel harder). Add a **Subdivision** modifier and
+      confirm the bevel stays crisp (vs. soft with Smart off) — the placement is
+      validated headlessly (`test_smart_bevel_subdivision_quality`: the loop pins
+      the flanking flat, fillet radius ≈ the bevel width). Watch for: support loops
+      landing in the wrong spot or a T-junction on a non-quad flank (headless also
+      checks Smart never *removes* geometry — `test_smart_bevel_edges`).
 - [ ] **N-panel ▸ Cutter Options ▸ Topology** — enabling **Smart Edge Bevel**
       makes the tool start with `SMART` already on; enabling **Re-quad Cut N-gons**
       then drawing a **Cut** (§1) leaves the cut faces re-quadded (no 5+-gons) and
