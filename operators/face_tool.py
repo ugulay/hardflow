@@ -55,6 +55,7 @@ class _FaceDragModal:
     _LOCK_FILL = (1.0, 0.6, 0.1, 0.22)
     _snapshot_name = "hf_facetool_base"
     _select_warning = "Select face(s) first"
+    _hud_title = None          # framed HUD header (subclasses set their tool name)
     allow_negative = True
 
     @classmethod
@@ -77,6 +78,7 @@ class _FaceDragModal:
         self.typed = ""           # numeric entry buffer
         self._infer = []          # axis-drag inference candidates (shared)
         self._infer_hit = False   # drag currently snapped to geometry
+        self._cursor_px = None    # last cursor (region px) -> snap-marker anchor
         # Per-session undo journal + the live mesh edit it records. The command
         # owns the snapshot/restore/commit/rollback (the named form of the old
         # ad-hoc _base/_committed flow); _base mirrors the command's snapshot so
@@ -106,6 +108,7 @@ class _FaceDragModal:
         co = (event.mouse_region_x, event.mouse_region_y)
 
         if event.type == 'MOUSEMOVE':
+            self._cursor_px = co
             if self.locked:
                 self._update_drag(context, co)
                 self._refresh_preview()
@@ -211,12 +214,31 @@ class _FaceDragModal:
 
     def _draw_px(self, context):
         prefs = get_prefs(context)
+        accent = tuple(prefs.line_color)[:3] + (1.0,)
         pts = self._face_screen_points(context)
         if pts:
             fill = self._LOCK_FILL if self.locked else self._HOVER_FILL
             hud.draw_face_fill(pts, fill)
             hud.draw_shape(pts, tuple(prefs.line_color), closed=True)
-        hud.draw_hud(context.region, self._hud_lines(context, prefs))
+        # Snap-to-geometry marker: a green ring at the cursor while a locked drag is
+        # snapped onto an inferred feature (the shared "snapped here" hint).
+        if self.locked and self._infer_hit and self._cursor_px is not None:
+            hud.draw_snap_marker(self._cursor_px, color=hud.SNAP_COLORS['MID'])
+        hud.draw_hud(context.region, self._hud_lines(context, prefs),
+                     title=self._hud_title, accent=accent)
+        hud.draw_shortcut_bar(context.region, self._shortcut_chips())
+
+    # --- shortcut bar (shared) -------------------------------------------
+
+    def _shortcut_chips(self):
+        """Bottom shortcut-bar chips: the tool's own keys (`_tool_chips`) plus the
+        shared apply / cancel tail, each ``(key, label[, active])``. The premium
+        pressable bar every face-drag tool shares."""
+        return self._tool_chips() + [("Enter", "Apply"), ("Esc", "Cancel")]
+
+    def _tool_chips(self):
+        """Tool-specific shortcut chips (override), prepended to the shared tail."""
+        return []
 
     # --- shared live edit (Command Pattern) ------------------------------
 

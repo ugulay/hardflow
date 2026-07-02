@@ -321,16 +321,43 @@ class _CurveDraw:
 
     def _draw_px(self, context):
         prefs = get_prefs(context)
+        region, rv3d = context.region, context.region_data
+        accent = tuple(prefs.line_color)[:3] + (1.0,)
         pts = self._screen_points(context)
-        hud.draw_points(pts[:len(self._pts)], tuple(prefs.line_color))
-        # Color the live cursor by the active snap kind, matching the ADD tool.
-        if self._cursor3d is not None and self._snap_kind is not None:
-            s = raycast.world_to_screen(context.region, context.region_data,
-                                        self._cursor3d)
+        placed = pts[:len(self._pts)]
+        hud.draw_points(placed, tuple(prefs.line_color))
+
+        cursor_px = None
+        if self._cursor3d is not None:
+            s = raycast.world_to_screen(region, rv3d, self._cursor3d)
             if s is not None:
-                col = hud.SNAP_COLORS.get(self._snap_kind, (1.0, 1.0, 1.0, 1.0))
-                hud.draw_points([(s[0], s[1])], col, size=11.0)
-        hud.draw_hud(context.region, self._hud_lines())
+                cursor_px = (s[0], s[1])
+        # Dynamic alignment guides: a dashed full-span line when the live cursor is
+        # square with a placed point (the shared BoxCutter-style hint).
+        if placed and cursor_px is not None:
+            hud.draw_alignment_guides(region, placed, cursor_px)
+        # Premium snap marker (ring + dot) at the cursor, colored by snap kind --
+        # matching every other draw tool.
+        if cursor_px is not None and self._snap_kind is not None:
+            hud.draw_snap_marker(cursor_px, kind=self._snap_kind, fallback=accent)
+
+        hud.draw_hud(region, self._hud_lines(), title=self._title, accent=accent)
+        hud.draw_shortcut_bar(region, self._shortcut_chips())
+
+    def _shortcut_chips(self):
+        """Bottom shortcut-bar chips with the live engaged state -- the pressable,
+        glanceable form of the HUD control line."""
+        chips = [("Wheel", "Radius"),
+                 ("V", "Vertex", self._geo_snap),
+                 ("S/Tab", "Surface", self._surface_lock),
+                 ("X", "Grid", self._grid_snap)]
+        if self._can_follow:
+            chips.append(("F", "Follow", self._follow))
+        if self._has_profile:
+            chips.append(("P", self._profile))
+        if self._has_sag:
+            chips.append(("Sh+Wheel", "Sag"))
+        return chips + [("Enter", "Create"), ("Esc", "Cancel")]
 
     # --- commit / cleanup ------------------------------------------------
 

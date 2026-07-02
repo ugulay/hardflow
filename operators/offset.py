@@ -26,6 +26,7 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
     _LOCK_FILL = (0.2, 1.0, 0.5, 0.20)     # green-tinted lock fill
     _snapshot_name = "hf_offset_base"
     _select_warning = "Select face(s) to offset"
+    _hud_title = "Offset"
     allow_negative = True                  # the EXTRUDE phase can recess inward
 
     _LAST_THICKNESS = 0.0   # remembered across runs -> R repeats the last inset
@@ -194,6 +195,10 @@ class HARDFLOW_OT_offset(_FaceDragModal, Operator):
         if self.phase != 'OFFSET':
             return
         self.thickness = HARDFLOW_OT_offset._LAST_THICKNESS
+
+    def _tool_chips(self):
+        return [("E", "Extrude", self.phase == 'EXTRUDE'), ("R", "Repeat"),
+                ("X", "Snap", self.snap)]
 
     def _remember_last(self):
         if self.thickness > 1e-6:

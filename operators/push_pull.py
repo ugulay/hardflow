@@ -26,6 +26,7 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
     _LOCK_FILL = (1.0, 0.6, 0.1, 0.22)     # locked (committed) face tint
     _snapshot_name = "hf_pushpull_base"
     _select_warning = "Select face(s) to push/pull"
+    _hud_title = "Push / Pull"
     allow_negative = True                  # push (-) and pull (+) both valid
 
     _LAST_DISTANCE = 0.0   # remembered across runs -> R repeats the last amount
@@ -115,6 +116,10 @@ class HARDFLOW_OT_push_pull(_FaceDragModal, Operator):
                 self._refresh_preview()
             return True
         return False
+
+    def _tool_chips(self):
+        return [("C", "Copy", self.copy), ("R", "Repeat"),
+                ("X", "Snap", self.snap)]
 
     # --- HUD -------------------------------------------------------------
 

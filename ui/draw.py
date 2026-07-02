@@ -244,6 +244,18 @@ def draw_text(x, y, text, color=_HUD_TEXT, size=13):
     blf.draw(font_id, text)
 
 
+def draw_snap_marker(center, kind=None, color=None, fallback=None, radius=7.0):
+    """Premium snap marker at a snapped screen point: a colored ring plus a faded
+    center dot -- the shared "you snapped here" hint every draw tool uses. Color is
+    `color` when given, else SNAP_COLORS[kind] (falling back to `fallback`, or the
+    brand accent). Replaces the old bare colored dot so a vertex / edge / grid /
+    inference snap reads the same in every modal tool."""
+    col = color if color is not None else SNAP_COLORS.get(
+        kind, fallback if fallback is not None else _HUD_ACCENT)
+    draw_snap_ring(center, radius, col, width=1.75)
+    draw_points([center], fade_color(col, 0.9), size=4.0)
+
+
 def draw_hud(region, lines, color=_HUD_TEXT, title=None, accent=None):
     """Multi-line status text in the bottom left, over a framed background panel
     (fill + subtle border). When `title` is given, a header row is drawn with a

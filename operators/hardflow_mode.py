@@ -491,14 +491,7 @@ class _HardflowModeModal:
             c = raycast.world_to_screen(region, rv3d, self._cursor)
             if c is not None:
                 self._draw_plane_guides(context)
-                mark = {
-                    'VERT': (1.0, 0.9, 0.2, 1.0),   # yellow = vertex
-                    'MID': (0.2, 1.0, 0.4, 1.0),    # green  = midpoint
-                    'EDGE': (0.3, 0.6, 1.0, 1.0),   # blue   = on-edge
-                    'GRID': (1.0, 1.0, 1.0, 0.85),  # white  = grid
-                }.get(self._snap_kind, accent)
-                hud.draw_snap_ring(c, 7.0, mark, width=1.75)
-                hud.draw_points([c], hud.fade_color(mark, 0.9), size=4.0)
+                hud.draw_snap_marker(c, kind=self._snap_kind, fallback=accent)
 
         snap_txt = self._snap_kind or "free"
         plane_txt = self._plane + ("(miss)" if self._surface_miss else "")

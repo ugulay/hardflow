@@ -842,11 +842,12 @@ class HARDFLOW_OT_draw(Operator):
         hud.draw_shape(pts, tuple(prefs.line_color), closed=closed, width=width)
         hud.draw_points(self.points, tuple(prefs.line_color))
 
-        # if vertex/edge snap caught, mark the cursor colored by its kind
+        # if vertex/edge snap caught, mark the cursor with the premium ring + dot
+        # marker, colored by its kind (shared with every other draw tool).
         if self._snap_hit is not None:
             point, kind = self._snap_hit
             col = _SNAP_COLORS.get(kind, (1.0, 1.0, 1.0, 1.0))
-            hud.draw_points([point], col, size=11.0)
+            hud.draw_snap_marker(point, color=col)
 
         accent = tuple(prefs.line_color)[:3] + (1.0,)
         dim = (0.72, 0.72, 0.72, 1.0)

@@ -69,6 +69,7 @@ class _EdgePickModal(_FaceDragModal):
         accent = tuple(prefs.line_color)[:3] + (1.0,)
         hud.draw_hud(context.region, self._hud_lines(context, prefs),
                      title=getattr(self, "_hud_title", None), accent=accent)
+        hud.draw_shortcut_bar(context.region, self._shortcut_chips())
 
 
 class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
@@ -181,6 +182,11 @@ class HARDFLOW_OT_edge_bevel(_EdgePickModal, Operator):
             return True
         return False
 
+    def _tool_chips(self):
+        return [("[ ]", "Segments"), ("L", "Loop", self.loop),
+                ("S", "Smart", self.smart), ("R", "Repeat"),
+                ("X", "Snap", self.snap)]
+
     def _hud_lines(self, context, prefs):
         accent = tuple(prefs.line_color)[:3] + (1.0,)
         dim = (0.72, 0.72, 0.72, 1.0)
@@ -281,6 +287,9 @@ class HARDFLOW_OT_loop_cut(_EdgePickModal, Operator):
                 self._refresh_preview()
             return True
         return False
+
+    def _tool_chips(self):
+        return [("[ ]", "Cuts"), ("Drag", "Slide")]
 
     def _hud_lines(self, context, prefs):
         accent = tuple(prefs.line_color)[:3] + (1.0,)

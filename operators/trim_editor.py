@@ -388,6 +388,11 @@ class HARDFLOW_OT_trim_editor(Operator):
                           round(pw), round(ph)), (1.0, 0.9, 0.2, 1.0)))
         lines.append("Enter: apply · Esc: cancel")
         hud.draw_hud(region, lines, title="Trim Sheet Editor")
+        hud.draw_shortcut_bar(region, [
+            ("C", "Split │"), ("Sh+C", "Split ─"), ("X", "Delete"),
+            ("A", "Add"), ("Tab", "Next"), ("G", "Snap", self._snap),
+            ("Enter", "Apply"), ("Esc", "Cancel"),
+        ])
 
 
 # --- region management ops (N-panel) -----------------------------------------

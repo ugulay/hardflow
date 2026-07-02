@@ -758,6 +758,37 @@ Use the N-panel **Decals ▸ Depth (Image Decals)** section (mirrors the prefs).
 - [ ] At a **narrow viewport width** the bar left-anchors instead of sliding its
       first chips off-screen (never clipped on the left).
 
+### Premium overlay unification — every modal tool (P0)
+
+The shortcut bar, framed HUD header, alignment guides, and ring snap marker used
+to be wired into only **Draw Cut** and **HardFlow Mode**. This pass extends the
+same premium layer to every modal tool via the shared bases
+(`face_tool._FaceDragModal`, `pipe._CurveDraw`). Confirm each tool now shows it —
+behaviour (keys, drag, commit) is unchanged, so this is also the regression check.
+
+- [ ] **Push/Pull** and **Offset**: the top-left HUD now has a **framed header**
+      (`Push / Pull`, `Offset`) and a **bottom shortcut bar** — Push/Pull chips
+      `[C] Copy` `[R] Repeat` `[X] Snap` `[Enter] Apply` `[Esc] Cancel`; Offset
+      chips `[E] Extrude` `[R] Repeat` `[X] Snap` … The **C / E** chip key box
+      lights **accent (ON)** when engaged, and **X** tracks the snap toggle.
+- [ ] **Vertex/edge inference marker**: with snap on, drag a face until it snaps to
+      a feature (HUD `-> on geometry`) → a **green ring marker** now appears at the
+      cursor (matching the snap markers in the draw tools). Off-feature, no ring.
+- [ ] **Edge Bevel** and **Loop Cut**: same bottom bar (Edge Bevel `[[ ]] Segments`
+      `[L] Loop` `[S] Smart` `[R] Repeat` `[X] Snap`; Loop Cut `[[ ]] Cuts`
+      `[Drag] Slide`), with `L`/`S` lighting when on. The framed HUD title was
+      already present.
+- [ ] **Pipe / Cable / Sweep**: the HUD now has a framed header (`Pipe` / `Cable`
+      / `Sweep`) and a bottom shortcut bar (`[V] Vertex` `[S/Tab] Surface`
+      `[X] Grid` `[F] Follow` `[P] <profile>` `[Enter] Create` …) with the live
+      toggle states; the live cursor snap dot is now the **ring + dot** marker; and
+      **alignment guides** dash on when the cursor lines up with a placed point.
+- [ ] **Trim Sheet Editor**: gains a bottom shortcut bar (`[C] Split │`
+      `[Sh+C] Split ─` `[X] Delete` `[A] Add` `[Tab] Next` `[G] Snap` …).
+- [ ] Nothing regressed: re-run §3 (Push/Pull), §4 (Offset), §8 (Pipe/Cable),
+      §16/§17 (Edge Bevel / Loop Cut) — no console error on invoke (a bad
+      attribute in the new `_shortcut_chips` would raise the first draw frame).
+
 ---
 
 ## Topology & SubD stability (Module 4)
