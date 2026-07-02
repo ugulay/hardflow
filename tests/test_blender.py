@@ -458,6 +458,53 @@ def test_image_decal_material_and_make():
     assert d.data.materials and d.data.materials[0] is mat
 
 
+def test_image_decal_parallax_and_height_bump():
+    # Heightmap decal (POM + relief): a dedicated grayscale height map drives both
+    # the parallax UV shift and a Bump-normal relief, keyed independently of the
+    # color image, with the invert polarity honoured.
+    _reset()
+    img = bpy.data.images.new("HF_T_Color", width=64, height=64, alpha=True)
+    himg = bpy.data.images.new("HF_T_Height", width=64, height=64, alpha=False)
+
+    mat = decal.image_decal_material(img, height_image=himg, parallax=True,
+                                     parallax_layers=6, parallax_depth=0.08,
+                                     bump_strength=0.6, height_invert=True)
+    assert mat is not None and mat.use_nodes
+    tree = mat.node_tree
+
+    # The POM group is keyed to the HEIGHT image (not the color) and carries the
+    # invert suffix; the color texture samples at its parallax-corrected UV.
+    pgrp = next((n for n in tree.nodes if n.type == 'GROUP' and n.node_tree
+                 and n.node_tree.name.startswith(decal.PARALLAX_GROUP_PREFIX)), None)
+    assert pgrp is not None, "parallax group missing"
+    assert himg.name in pgrp.node_tree.name and pgrp.node_tree.name.endswith("_i")
+    ctex = next((n for n in tree.nodes
+                 if n.type == 'TEX_IMAGE' and n.image is img), None)
+    assert ctex is not None and ctex.inputs["Vector"].is_linked
+
+    # The height map drives the decal group's Bump: Height linked, Depth = strength.
+    dgrp = next((n for n in tree.nodes if n.type == 'GROUP' and n.node_tree
+                 and n.node_tree.name == decal.DECAL_NODE_GROUP), None)
+    assert dgrp is not None and dgrp.inputs["Height"].is_linked
+    assert abs(dgrp.inputs["Depth"].default_value - 0.6) < 1e-6
+    assert any(n.type == 'TEX_IMAGE' and n.image is himg for n in tree.nodes), \
+        "height texture node missing"
+
+    # A flat decal is a different (cached) material; the same depth config is reused.
+    assert decal.image_decal_material(img) is not mat
+    assert decal.image_decal_material(img, height_image=himg, parallax=True,
+                                      parallax_layers=6, parallax_depth=0.08,
+                                      bump_strength=0.6, height_invert=True) is mat
+
+    # make_image_decal stamps the height source and stays graceful end-to-end.
+    target = _add_cube("Target", size=2.0)
+    d = decal.make_image_decal(bpy.context, target, Vector((0, 0, 1)),
+                               Vector((0, 0, 1)), Vector((1, 0, 0)), img,
+                               width=0.2, height=0.2, height_image=himg,
+                               parallax=True, bump_strength=0.4)
+    assert d.get("hf_decal_height") == himg.name
+
+
 def test_decal_mesh_grid_resolution():
     # The decal is an NxN grid so the shrinkwrap can conform it to curvature; the
     # topology and the full-image UV span must hold at every resolution.

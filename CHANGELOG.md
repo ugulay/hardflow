@@ -5,6 +5,31 @@ logic: minor versions add features, patch versions fix bugs.
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-07-02
+
+Heightmap decals — a dedicated grayscale height-map channel driving both Parallax
+Occlusion Mapping and a new normal-relief Bump, independent of the decal's color.
+The pure suite grows to 122 tests (`python tests/test_core.py`); headless coverage
+adds the POM + height-bump node graph (`test_image_decal_parallax_and_height_bump`),
+verified live in Blender 5.1.2.
+
+### Added
+- **Heightmap decals — dedicated height-map channel + normal relief.** Image
+  decals could already do Parallax Occlusion Mapping, but the depth was driven
+  only by the *color* image's luminance and the shader group's Bump path was
+  dead. Now an image decal can carry a **separate grayscale height map**
+  (`decal_height_image`) that drives the depth independently of the albedo, and
+  that height feeds **two** effects, combinable: the POM UV shift (as before) and
+  a new **Relief (Bump)** normal perturbation (`decal_bump_strength`) for real
+  shaded depth — sampled at the parallax-corrected UV when POM is on so the two
+  agree. An **Invert Height** toggle (`decal_height_invert`) flips the polarity
+  (bright = deep) for maps authored the other way; the convention is pinned in
+  the pure `core.parallax.surface_depth` (tested). New
+  `object.hardflow_load_height_map` loader and an N-panel **"Depth (Image
+  Decals)"** section put Relief / Parallax / Height-map within reach without
+  opening add-on preferences. Each depth build stays wrapped so a node-API
+  mismatch degrades to a flatter decal rather than a broken material.
+
 ## [1.17.1] — 2026-07-02
 
 ### Fixed

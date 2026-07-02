@@ -301,12 +301,13 @@ def decal_material(decal_type):
     return mat
 
 
-def _parallax_uv_group(image, num_layers):
+def _parallax_uv_group(image, num_layers, invert=False):
     """Get/create a per-image Parallax Occlusion Mapping node group that shifts a
     UV along the tangent-space view ray so `image`'s luminance reads as real
     depth: recessed panel lines slide behind their lip at grazing angles instead
-    of staying a flat sticker (the Decal-Machine-class effect). Cached per
-    (image, layer count).
+    of staying a flat sticker (the Decal-Machine-class effect). `image` is the
+    HEIGHT source -- either the color image's own luminance or a dedicated
+    grayscale height map. Cached per (image, layer count, invert).
 
     Inputs:  UV (Vector), View (Vector, tangent-space, toward the camera),
              Depth (Float, recess depth in UV units).
@@ -316,15 +317,18 @@ def _parallax_uv_group(image, num_layers):
     shader graph allows, since it has neither loops nor branches. For each layer k
     it samples `image` at ``uv0 - k*deltaUV`` (offset-limiting step
     ``deltaUV = Depth * view.xy / N``), takes ``1 - luminance`` as the surface
-    depth, and tests whether the ray's running depth ``k/N`` has reached it. A
-    first-hit mask -- ``hit_k AND no-earlier-hit``, the "no-earlier-hit" tracked
-    with a running MAXIMUM accumulator -- selects exactly the first crossing layer
-    with pure Math nodes, and its offset is summed into ``selectedOffset``. The
-    result is ``finalUV = UV - selectedOffset``, so a flat field (no crossing)
-    passes the UV straight through unchanged. More layers = smoother at grazing
-    angles at the cost of more nodes; the count is clamped to [2, 24]."""
+    depth (or bare ``luminance`` when `invert` -- bright = deep; see
+    core/parallax.surface_depth), and tests whether the ray's running depth
+    ``k/N`` has reached it. A first-hit mask -- ``hit_k AND no-earlier-hit``, the
+    "no-earlier-hit" tracked with a running MAXIMUM accumulator -- selects exactly
+    the first crossing layer with pure Math nodes, and its offset is summed into
+    ``selectedOffset``. The result is ``finalUV = UV - selectedOffset``, so a flat
+    field (no crossing) passes the UV straight through unchanged. More layers =
+    smoother at grazing angles at the cost of more nodes; the count is clamped to
+    [2, 24]."""
     n = max(2, min(24, int(num_layers)))
-    name = "%s%s_%d" % (PARALLAX_GROUP_PREFIX, image.name, n)
+    name = "%s%s_%d%s" % (PARALLAX_GROUP_PREFIX, image.name, n,
+                          "_i" if invert else "")
     ng = bpy.data.node_groups.get(name)
     if ng is not None:
         return ng
@@ -390,12 +394,16 @@ def _parallax_uv_group(image, num_layers):
         bw = nodes.new('ShaderNodeRGBToBW')        # luminance
         bw.location = (-100, y)
         links.new(tex.outputs["Color"], bw.inputs["Color"])
-        depth_k = fmath('SUBTRACT', 60, y)         # depth = 1 - luminance
-        depth_k.inputs[0].default_value = 1.0
-        links.new(bw.outputs[0], depth_k.inputs[1])
+        if invert:                                 # depth = luminance (bright deep)
+            depth_out = bw.outputs[0]
+        else:                                      # depth = 1 - luminance
+            depth_k = fmath('SUBTRACT', 60, y)
+            depth_k.inputs[0].default_value = 1.0
+            links.new(bw.outputs[0], depth_k.inputs[1])
+            depth_out = depth_k.outputs[0]
         hit_k = fmath('GREATER_THAN', 220, y)      # ray depth k/N past surface?
         hit_k.inputs[0].default_value = float(k) / n
-        links.new(depth_k.outputs[0], hit_k.inputs[1])
+        links.new(depth_out, hit_k.inputs[1])
         if running_hit is None:                    # k == 0: first layer
             first_hit = hit_k.outputs[0]
             running_hit = hit_k.outputs[0]
@@ -430,13 +438,15 @@ def _parallax_uv_group(image, num_layers):
     return ng
 
 
-def _wire_parallax(tree, image, num_layers, depth):
+def _wire_parallax(tree, image, num_layers, depth, invert=False):
     """Feed a tangent-space Camera Vector + a UV source into the per-image
     parallax group and return its corrected-UV output socket (to drive the decal's
-    texture nodes). The 'camera vector' is Geometry.Incoming (surface -> camera),
-    resolved onto the surface basis (Tangent, Normal x Tangent, Normal) so the
-    group's ray-march runs in UV space. Raises on any API mismatch so the caller
-    can fall back to plain UVs -- POM is a bonus, never a hard dependency."""
+    texture nodes). `image` is the height source (the color image or a dedicated
+    height map); `invert` flips the height polarity. The 'camera vector' is
+    Geometry.Incoming (surface -> camera), resolved onto the surface basis
+    (Tangent, Normal x Tangent, Normal) so the group's ray-march runs in UV space.
+    Raises on any API mismatch so the caller can fall back to plain UVs -- POM is
+    a bonus, never a hard dependency."""
     nodes, links = tree.nodes, tree.links
     uv = nodes.new('ShaderNodeUVMap')
     uv.location = (-1000, 300)
@@ -472,41 +482,108 @@ def _wire_parallax(tree, image, num_layers, depth):
 
     grp = nodes.new('ShaderNodeGroup')
     grp.location = (-200, 300)
-    grp.node_tree = _parallax_uv_group(image, num_layers)
+    grp.node_tree = _parallax_uv_group(image, num_layers, invert=invert)
     links.new(uv.outputs["UV"], grp.inputs["UV"])
     links.new(view.outputs[0], grp.inputs["View"])
     grp.inputs["Depth"].default_value = float(depth)
     return grp.outputs["UV"]
 
 
-def image_decal_material(image, parallax=False, parallax_layers=8,
-                         parallax_depth=0.05):
+def _wire_height_bump(tree, image, group, strength, invert=False, uv_socket=None):
+    """Drive the decal shader group's Height/Depth (Bump) inputs from `image`'s
+    luminance so the height map adds real normal-relief SHADING -- the cheap,
+    always-on complement to POM, which only shifts the silhouette. `image` is the
+    height source (color image or dedicated height map).
+
+    Polarity matches the parallax march (see core/parallax.surface_depth): by
+    default a BRIGHT texel is the raised/flush surface, so the Bump Height is the
+    luminance directly (dark texels read as recesses) and `invert` flips it. When
+    `uv_socket` is given (POM on) the height is sampled at the parallax-corrected
+    UV so the relief tracks the shifted albedo; otherwise the plain UV map is used.
+    `strength` feeds the group's Depth (bump strength). Raises on any API mismatch
+    so the caller can degrade to a flat decal."""
+    nodes, links = tree.nodes, tree.links
+    tex = nodes.new('ShaderNodeTexImage')
+    tex.image = image
+    tex.location = (-320, -520)
+    if uv_socket is not None:
+        links.new(uv_socket, tex.inputs["Vector"])
+    else:
+        uv = nodes.new('ShaderNodeUVMap')
+        uv.location = (-520, -520)
+        links.new(uv.outputs["UV"], tex.inputs["Vector"])
+    bw = nodes.new('ShaderNodeRGBToBW')            # luminance = height (bright up)
+    bw.location = (-120, -520)
+    links.new(tex.outputs["Color"], bw.inputs["Color"])
+    height = bw.outputs[0]
+    if invert:                                     # 1 - luminance (bright = deep)
+        inv = nodes.new('ShaderNodeMath')
+        inv.operation = 'SUBTRACT'
+        inv.location = (40, -520)
+        inv.inputs[0].default_value = 1.0
+        links.new(bw.outputs[0], inv.inputs[1])
+        height = inv.outputs[0]
+    links.new(height, group.inputs["Height"])
+    group.inputs["Depth"].default_value = float(strength)
+
+
+def image_decal_material(image, height_image=None, parallax=False,
+                         parallax_layers=8, parallax_depth=0.05,
+                         height_invert=False, bump_strength=0.0):
     """Get/create a material that drives the shared HF_DecalShader group from an
     image: the image's Color feeds Base Color and its Alpha feeds Alpha, so a PNG
     cut-out (logo, warning mark) reads as a transparent decal on the surface. One
-    material is cached per (image, parallax settings).
+    material is cached per (image, height map, parallax + bump settings).
 
-    When `parallax` is set, a Parallax Occlusion Mapping graph (_wire_parallax +
-    _parallax_uv_group) recomputes the sampling UV per fragment from the height
-    map's luminance and the camera vector, so the decal gains true view-dependent
-    depth. The POM build is wrapped so any node-API mismatch degrades gracefully
-    to the flat (UV-unshifted) decal rather than leaving a broken material."""
-    suffix = ("_POM%d" % int(parallax_layers)) if parallax else ""
-    name = "HF_Decal_Img_%s%s" % (image.name, suffix)
+    Depth comes from a HEIGHT source -- a dedicated grayscale `height_image` when
+    given, otherwise the color image's own luminance -- and drives two effects,
+    both optional and combinable:
+
+      * `parallax`: a Parallax Occlusion Mapping graph (_wire_parallax +
+        _parallax_uv_group) recomputes the sampling UV per fragment from the
+        height + camera vector, so the decal gains true view-dependent depth (the
+        silhouette shifts and features self-occlude at grazing angles).
+      * `bump_strength` > 0: the height drives a Bump node (_wire_height_bump) for
+        real normal-relief shading, sampled at the parallax-corrected UV when POM
+        is on so the two agree.
+
+    `height_invert` flips the height polarity (bright = deep). Each depth build is
+    wrapped so any node-API mismatch degrades gracefully to a flatter decal rather
+    than leaving a broken material."""
+    # Cache key tracks the STRUCTURE (image, height source, POM on + layer count,
+    # bump on/off, invert), not the continuous scalars (parallax depth, exact bump
+    # strength) -- those are shader inputs baked at build time, matching the
+    # original per-layer-count keying. Scrubbing a slider reuses the material.
+    inv = bool(height_invert)
+    hkey = ("_H%s" % height_image.name) if height_image is not None else ""
+    pkey = ("_POM%d" % int(parallax_layers)) if parallax else ""
+    bkey = "_B" if bump_strength > 0 else ""
+    ikey = "_i" if (inv and (parallax or bump_strength > 0)) else ""
+    name = "HF_Decal_Img_%s%s%s%s%s" % (image.name, hkey, pkey, bkey, ikey)
     mat = bpy.data.materials.get(name)
     if mat is not None:
         return mat
 
+    height_src = height_image if height_image is not None else image
     mat, group, tree = _new_decal_material(name)
     tex = tree.nodes.new('ShaderNodeTexImage')
     tex.image = image
     tex.location = (-320, 0)
+    uv_out = None
     if parallax:
         try:
-            uv_out = _wire_parallax(tree, image, parallax_layers, parallax_depth)
+            uv_out = _wire_parallax(tree, height_src, parallax_layers,
+                                    parallax_depth, invert=inv)
             tree.links.new(uv_out, tex.inputs["Vector"])
         except Exception as ex:  # noqa: BLE001 -- never break a decal over POM
             print("[Hardflow] parallax wiring skipped (%s); flat decal" % ex)
+            uv_out = None
+    if bump_strength > 0:
+        try:
+            _wire_height_bump(tree, height_src, group, bump_strength,
+                              invert=inv, uv_socket=uv_out)
+        except Exception as ex:  # noqa: BLE001 -- relief is a bonus, never fatal
+            print("[Hardflow] height bump skipped (%s)" % ex)
     tree.links.new(tex.outputs["Color"], group.inputs["Base Color"])
     tree.links.new(tex.outputs["Alpha"], group.inputs["Alpha"])
     return mat
@@ -630,6 +707,7 @@ def make_image_decal(context, target, location, normal, tangent, image,
                      width=0.2, height=0.2, offset=None,
                      uv_rect=(0.0, 0.0, 1.0, 1.0), segments=12,
                      parallax=False, parallax_layers=8, parallax_depth=0.05,
+                     height_image=None, height_invert=False, bump_strength=0.0,
                      normal_transfer=False):
     """Create an image-driven decal (v0.9 library / 'decal from image') on the
     target surface and return it. The grid carries the image's color+alpha via
@@ -638,17 +716,24 @@ def make_image_decal(context, target, location, normal, tangent, image,
     the image -- pass a trim-sheet cell (core/atlas.cell_rect) for a trim decal.
     `segments` sets the grid resolution so the decal conforms to curved surfaces.
 
-    `parallax` builds a Parallax Occlusion Mapping material so the image's
-    luminance reads as real, view-dependent depth (parallax_layers/parallax_depth
-    tune it); `normal_transfer` borrows the target's surface normals."""
+    Depth: `parallax` builds a Parallax Occlusion Mapping material and
+    `bump_strength` > 0 adds normal-relief shading, both driven by the height
+    source -- a dedicated grayscale `height_image` when given, else the color
+    image's own luminance (`height_invert` flips the polarity). `normal_transfer`
+    borrows the target's surface normals. See image_decal_material."""
     mesh = build_decal_mesh(width, height, uv_rect=uv_rect, segments=segments)
-    material = image_decal_material(image, parallax=parallax,
+    material = image_decal_material(image, height_image=height_image,
+                                    parallax=parallax,
                                     parallax_layers=parallax_layers,
-                                    parallax_depth=parallax_depth)
+                                    parallax_depth=parallax_depth,
+                                    height_invert=height_invert,
+                                    bump_strength=bump_strength)
     decal = _assemble_decal(context, target, mesh, location, normal, tangent,
                             material, offset, 'IMAGE',
                             normal_transfer=normal_transfer)
     decal["hf_decal_image"] = image.name
+    if height_image is not None:
+        decal["hf_decal_height"] = height_image.name
     return decal
 
 

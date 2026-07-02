@@ -48,6 +48,7 @@ _classes = (
     decals.HARDFLOW_OT_remove_decal,
     decals.HARDFLOW_OT_bake_decal,
     decals.HARDFLOW_OT_load_decal_image,
+    decals.HARDFLOW_OT_load_height_map,
     decals.HARDFLOW_OT_library_place,
     decals.HARDFLOW_OT_load_trim_sheet,
     decals.HARDFLOW_OT_atlas_decals,

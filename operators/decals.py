@@ -253,6 +253,12 @@ class HARDFLOW_OT_place_decal(Operator):
         segments = prefs.decal_resolution
         normal_transfer = getattr(prefs, "decal_normal_transfer", False)
         if self._image is not None:
+            hname = getattr(prefs, "decal_height_image", "")
+            height_image = bpy.data.images.get(hname) if hname else None
+            # A height map is only meaningful when distinct from the color image
+            # (otherwise the color's own luminance is already the height source).
+            if height_image is self._image:
+                height_image = None
             return decal.make_image_decal(
                 context, obj, location, normal, tangent, self._image,
                 width=w, height=h, offset=offset,
@@ -260,6 +266,9 @@ class HARDFLOW_OT_place_decal(Operator):
                 parallax=getattr(prefs, "decal_parallax", False),
                 parallax_layers=getattr(prefs, "decal_parallax_layers", 8),
                 parallax_depth=getattr(prefs, "decal_parallax_depth", 0.05),
+                height_image=height_image,
+                height_invert=getattr(prefs, "decal_height_invert", False),
+                bump_strength=getattr(prefs, "decal_bump_strength", 0.0),
                 normal_transfer=normal_transfer)
         return decal.make_decal(
             context, obj, location, normal, tangent, width=w, height=h,
@@ -472,6 +481,30 @@ class HARDFLOW_OT_load_decal_image(Operator, ImportHelper):
             self.report({'ERROR'}, "Could not load image: %s" % ex)
             return {'CANCELLED'}
         return _invoke_place(context, self, image_name=img.name)
+
+
+class HARDFLOW_OT_load_height_map(Operator, ImportHelper):
+    bl_idname = "object.hardflow_load_height_map"
+    bl_label = "Load Height Map"
+    bl_description = ("Load a grayscale image as the decal height map -- drives "
+                      "Parallax + Relief depth independently of the color image. "
+                      "Clears the field if the browser is cancelled elsewhere")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filter_glob: StringProperty(
+        default="*.png;*.jpg;*.jpeg;*.tga;*.tif;*.tiff;*.bmp;*.exr;*.hdr;*.webp",
+        options={'HIDDEN'},
+    )
+
+    def execute(self, context):
+        try:
+            img = bpy.data.images.load(self.filepath, check_existing=True)
+        except RuntimeError as ex:
+            self.report({'ERROR'}, "Could not load image: %s" % ex)
+            return {'CANCELLED'}
+        get_prefs(context).decal_height_image = img.name
+        self.report({'INFO'}, "Decal height map set: %s" % img.name)
+        return {'FINISHED'}
 
 
 class HARDFLOW_OT_library_place(Operator):

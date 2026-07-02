@@ -214,6 +214,28 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "smoother at grazing angles but build a heavier node graph",
         default=8, min=2, max=24,
     )
+    decal_height_image: StringProperty(
+        name="Height Map",
+        description="Name of a loaded grayscale image to drive image-decal depth "
+                    "(Parallax + Relief) independently of the color image -- the "
+                    "dedicated height-map channel. Blank = use the color image's "
+                    "own luminance as the height field",
+        default="",
+    )
+    decal_height_invert: BoolProperty(
+        name="Invert Height",
+        description="Flip the height convention: by default a BRIGHT texel is the "
+                    "flush outer surface and a DARK texel is the deepest recess; "
+                    "enable for height maps authored the other way (bright = deep)",
+        default=False,
+    )
+    decal_bump_strength: FloatProperty(
+        name="Relief (Bump)",
+        description="Normal-relief strength driven by the height map: adds real "
+                    "shaded depth to image decals (works with or combined with "
+                    "Parallax Occlusion). 0 = off (flat shading)",
+        default=0.0, min=0.0, soft_max=2.0,
+    )
     decal_normal_transfer: BoolProperty(
         name="Decal Normal Transfer",
         description="Add a Data Transfer modifier so a placed decal borrows the "
@@ -466,6 +488,9 @@ class HARDFLOW_Preferences(AddonPreferences):
         col.prop(self, "decal_parallax")
         col.prop(self, "decal_parallax_depth")
         col.prop(self, "decal_parallax_layers")
+        col.prop(self, "decal_bump_strength")
+        col.prop_search(self, "decal_height_image", bpy.data, "images")
+        col.prop(self, "decal_height_invert")
         col.prop(self, "decal_normal_transfer")
         col.prop(self, "bake_size")
         col.prop(self, "decal_library_path")

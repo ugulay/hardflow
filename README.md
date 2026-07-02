@@ -13,12 +13,12 @@ price tag.
 [![Blender 4.2+](https://img.shields.io/badge/Blender-4.2%2B-EA7600?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Extension](https://img.shields.io/badge/Blender-Extension-orange?logo=blender&logoColor=white)](https://extensions.blender.org/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.17.1-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.18.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 </div>
 
-> **Status — under active development.** **Every roadmap feature through v1.17 is
+> **Status — under active development.** **Every roadmap feature through v1.18 is
 > implemented** — the boolean cut loop (Cut / Slice / Make / Join / Intersect /
 > Knife) with Box / Circle / Polygon / N-gon / Slot / Star / Arc shapes,
 > world-scale + vertex/edge snapping, the non-destructive flow, the full decal
@@ -47,9 +47,12 @@ price tag.
 > (HardFlow Mode gains **Cut / Add / Slice / Intersect** verbs — the footprint is
 > extruded into a cutter and boolean'd against the active mesh on the shared shell
 > — and the trim sheet gains a **chroma-key** tool that makes a picked colour
-> transparent to lift graphics off a green-screen / flat background). The
-> pure-logic core is unit-tested
-> (`114/114`, no Blender required) and bpy paths add headless coverage (run live
+> transparent to lift graphics off a green-screen / flat background), and the
+> **v1.18 Heightmap decals** (an image decal can carry a **dedicated grayscale
+> height map** that drives depth independently of the color — feeding both the
+> Parallax Occlusion UV shift and a new normal-relief **Bump**, with an invert
+> polarity toggle). The pure-logic core is unit-tested
+> (`122/122`, no Blender required) and bpy paths add headless coverage (run live
 > against a standalone `bpy` build + verified in Blender 5.1.2); the modal
 > tools' interactive feel is checked via
 > [tests/manual_checklist.md](tests/manual_checklist.md). See
@@ -119,6 +122,12 @@ price tag.
   `[ ]` roll, click places; managed from the N-panel "Decals" section. Each type
   drives a shared PBR shader (base/metallic/roughness/AO/normal/emission/alpha +
   parallax depth), and detail can be **baked** into the target's texture.
+- **Heightmap decals** — an image decal can carry a **dedicated grayscale height
+  map** (or use the color image's own luminance) that drives depth independently
+  of the albedo: it feeds both the **Parallax Occlusion** UV shift (recessed
+  panel lines slide behind their lip at grazing angles) and a **Relief (Bump)**
+  normal perturbation for real shaded depth, with an **Invert Height** polarity
+  toggle. Reachable from the N-panel "Depth (Image Decals)" section.
 - **Decal image library** — point a folder of PNG/JPG/TGA images and place any of
   them as a decal from an icon grid; images are sized to their aspect ratio.
 - **Trim sheets** — slice one sheet into a grid and place individual cells
@@ -211,6 +220,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Trim sheets | Slice a sheet into a grid; place / cycle individual cells | `core/atlas.py slice_grid` |
 | Trim sheet UV editor (v1.16) | Carve a sheet into free, unequal named UV rectangles (draw / resize / move / split) stored on the image; place any region as a decal | `operators/trim_editor.py`, `core/atlas.py`, `ui/trim_panel.py` |
 | Background removal / chroma key (v1.17) | Make a picked colour transparent on a trim sheet — knock out a green-screen / flat background so the graphics separate; eyedropper or corner-sample, tolerance + edge-softness feather, copy or in-place | `operators/trim_editor.py HARDFLOW_OT_trim_chroma_key`, `core/atlas.py chroma_key` |
+| Heightmap decals (v1.18) | A dedicated grayscale height map (or the color's own luminance) drives depth independently of the albedo — feeding both the Parallax Occlusion UV shift and a normal-relief Bump, with an invert-polarity toggle | `core/decal.py image_decal_material/_wire_height_bump`, `core/parallax.py surface_depth` |
 | Atlasing | Pack every image decal into one atlas + one shared material | `core/atlas.py pack_shelves` |
 | Create decal (v1.7) | Bake normal/height/alpha out of high-poly source into the library | `operators/decals.py`, `core/decal.py` |
 | Material match (v1.7) | Match a decal's blend to the target's active material | `core/decal.py match_decal_to_material` |

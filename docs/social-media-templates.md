@@ -13,11 +13,11 @@ converts far better than a still.
 ## 🐦 X / Twitter (≤ 280 chars)
 
 ```
-Hardflow {{1.17.0}} is out — a FREE, open-source hard-surface boolean modeling
+Hardflow {{1.18.0}} is out — a FREE, open-source hard-surface boolean modeling
 toolkit for Blender 4.2+.
 
-Draw-to-cut booleans, world-scale snapping, decals, kitbash assets, Push/Pull &
-profile sweeps — no price tag. GPLv3.
+Now with heightmap decals: a real height-map channel drives parallax + normal
+relief. Plus draw-to-cut booleans, snapping, kitbash assets & sweeps. GPLv3.
 
 ⬇️ {{repo link}}
 #b3d #blender #gamedev #hardsurface
@@ -35,6 +35,7 @@ What's inside 👇
 • Push/Pull, Offset, Object-Mode Edge Bevel + Loop Cut, construction grid, loft
 • Pipe / cable / Follow-Me sweep (L/U/T/I/box sections)
 • Full decal pipeline + bake + atlasing + create/match
+• Heightmap decals: dedicated height map → parallax occlusion + normal relief
 • Trim-sheet UV editor + background removal (chroma-key a green screen to alpha)
 • Kitbash INSERT assets w/ live preview, auto-scale, asset-pack export
 • Super Modeling Mode: SketchUp-fluid Ghost-Grid shell + atomic per-session undo,
@@ -80,15 +81,20 @@ hard-surface loop:
   (experimental).
 - **Curves & sweeps** — surface-draping pipe (round/square/rect), sagging cable,
   and a Follow-Me sweep that runs an L/U/T/I/box section along a drawn path.
-- **Decals & trim sheets** — place, PBR material, parallax, bake, image library,
-  a free-rectangle **trim-sheet UV editor** with **background removal** (chroma-key
+- **Decals & trim sheets** — place, PBR material, bake, image library, a
+  free-rectangle **trim-sheet UV editor** with **background removal** (chroma-key
   a flat/green-screen background to transparency), atlasing, plus
   create/match/retrim/conform + an editable library.
+- **Heightmap decals** — an image decal can carry a **dedicated grayscale height
+  map** (or use the color's own luminance) that drives depth independently of the
+  albedo: it feeds both **Parallax Occlusion Mapping** (recessed panel lines slide
+  behind their lip at grazing angles) and a **normal-relief Bump** for real shaded
+  depth, with an invert-polarity toggle.
 - **Kitbash assets** — INSERTs from a .blend library with a live preview,
   auto-scale, insert-grid snap, material inserts, and asset-pack export.
 
-The pure-logic core is unit-tested (114/114, no Blender needed) and every bpy path
-is verified headless in Blender 5.1.2 (122 tests); the modal tools' interactive
+The pure-logic core is unit-tested (122/122, no Blender needed) and every bpy path
+is verified headless in Blender 5.1.2 (127 tests); the modal tools' interactive
 feel is checked via a manual checklist, so bug reports are very welcome.
 
 Repo / install: {{repo link}}
@@ -101,7 +107,7 @@ features stay isolated.
 
 ## 🎨 BlenderArtists forum
 
-**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.17.0}})`
+**Title:** `Hardflow — free open-source hard-surface boolean toolkit (v{{1.18.0}})`
 
 **Body:** same as the Reddit body above. BlenderArtists supports embedded video —
 lead with a GIF/clip and put the install link near the top.
@@ -111,16 +117,17 @@ lead with a GIF/clip and put the install link near the top.
 ## 💼 LinkedIn
 
 ```
-Excited to share Hardflow {{1.17.0}} — a free, open-source hard-surface modeling
+Excited to share Hardflow {{1.18.0}} — a free, open-source hard-surface modeling
 toolkit for Blender 4.2+. 🛠️
 
 One GPLv3 add-on for the whole loop: draw-to-cut booleans, world-scale snapping,
 direct modeling (Push/Pull, Offset, edge tools), profile sweeps, a full decal
-pipeline, kitbash INSERT assets, and a SketchUp-fluid "Super Modeling Mode" with
-atomic per-session undo — no license fee.
+pipeline (now with heightmap decals — parallax + normal relief), kitbash INSERT
+assets, and a SketchUp-fluid "Super Modeling Mode" with atomic per-session undo —
+no license fee.
 
 Built with a strict, testable architecture (pure logic separated from Blender's
-API, 114/114 unit tests green). Open to contributors and feedback.
+API, 122/122 unit tests green). Open to contributors and feedback.
 
 ⬇️ {{repo link}}
 
@@ -132,11 +139,11 @@ API, 114/114 unit tests green). Open to contributors and feedback.
 ## 🐘 Mastodon (≤ 500 chars)
 
 ```
-Hardflow {{1.17.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
+Hardflow {{1.18.0}} 🚀 — free & open-source (GPLv3) hard-surface boolean toolkit
 for #Blender 4.2+.
 
-Draw-to-cut booleans, world-scale snapping, decals, kitbash assets, Push/Pull,
-and profile sweeps — all without a price tag.
+New: heightmap decals (parallax + normal relief). Plus draw-to-cut booleans,
+world-scale snapping, kitbash assets, Push/Pull, and profile sweeps — no price tag.
 
 ⬇️ {{repo link}}
 #b3d #blender #gamedev #opensource #3D
@@ -147,19 +154,22 @@ and profile sweeps — all without a price tag.
 ## 📝 GitHub Release notes (template)
 
 ```
-## Hardflow v{{1.17.0}}
+## Hardflow v{{1.18.0}}
 
-Draw-to-cut booleans in HardFlow Mode + trim-sheet background removal.
+Heightmap decals — a real height-map channel driving parallax occlusion + normal
+relief.
 
 ### Highlights
-- **HardFlow Mode gains Cut / Add / Slice / Intersect verbs** — draw a footprint,
-  it's extruded into a cutter and boolean'd against the active mesh, on the same
-  Ghost-Grid shell, as one atomic (solver-fallback) undo step.
-- **Trim-sheet background removal (chroma key)** — make a picked colour transparent
-  to lift graphics off a green-screen / flat background; eyedropper or
-  corner-sample, tolerance + edge-softness feather, non-destructive copy or in-place.
-- SURFACE-plane fix: the draw tools no longer snap the cursor "behind" the surface
-  on a ray miss.
+- **Dedicated height-map channel** — an image decal can carry a separate grayscale
+  height map (or use the color image's own luminance) that drives depth
+  independently of the albedo.
+- **Parallax + Relief, combinable** — the height feeds both the Parallax Occlusion
+  UV shift (recessed panel lines slide behind their lip at grazing angles) and a
+  new normal-relief **Bump** for real shaded depth, sampled at the corrected UV so
+  the two agree. An **Invert Height** toggle flips the polarity.
+- **Reach** — a `Load Height Map` picker + an N-panel "Depth (Image Decals)"
+  section put Relief / Parallax / Height-map within reach; every depth build
+  degrades gracefully to a flatter decal on a node-API mismatch (never a break).
 
 ### Install
 Blender 4.2+: Edit → Preferences → Get Extensions → ⌄ → Install from Disk →
@@ -173,8 +183,8 @@ select the hardflow zip.
 ## ✅ Launch checklist
 
 - [ ] Tag the release and write GitHub Release notes (template above)
-- [ ] Attach the built `hardflow-{{1.17.0}}.zip` to the release
-- [ ] Record fresh clips (cut, Push/Pull, decal/asset, sweep)
+- [ ] Attach the built `hardflow-{{1.18.0}}.zip` to the release
+- [ ] Record fresh clips (cut, Push/Pull, decal/asset, sweep, heightmap decal)
 - [ ] Post to X, Reddit, BlenderArtists, LinkedIn, Mastodon
 - [ ] Pin the announcement in GitHub Discussions
 - [ ] (Optional) Submit / update on the Blender Extensions Platform

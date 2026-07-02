@@ -1077,6 +1077,22 @@ def test_parallax_luminance_rec709():
     assert abs(parallax.luminance((0.0, 1.0, 0.0)) - 0.7152) < 1e-9
 
 
+def test_parallax_surface_depth_polarity():
+    # Height-map convention: a BRIGHT texel is the flush outer surface (d ~ 0),
+    # a DARK texel the deepest recess (d ~ 1).
+    assert abs(parallax.surface_depth((1.0, 1.0, 1.0))) < 1e-9
+    assert abs(parallax.surface_depth((0.0, 0.0, 0.0)) - 1.0) < 1e-9
+    # invert flips it (bright = deep) -- for maps authored the other way.
+    assert abs(parallax.surface_depth((1.0, 1.0, 1.0), invert=True) - 1.0) < 1e-9
+    assert abs(parallax.surface_depth((0.0, 0.0, 0.0), invert=True)) < 1e-9
+    # mid grey lands mid-range and the result never escapes [0, 1].
+    d = parallax.surface_depth((0.5, 0.5, 0.5))
+    assert 0.0 <= d <= 1.0
+    # depth is the complement of luminance (the exact node-graph polarity).
+    lum = parallax.luminance((0.3, 0.6, 0.2))
+    assert abs(parallax.surface_depth((0.3, 0.6, 0.2)) - (1.0 - lum)) < 1e-9
+
+
 def test_tangent_space_view_identity_and_rotated():
     # identity basis -> the view passes through unchanged
     v = parallax.tangent_space_view((1.0, 2.0, 3.0),

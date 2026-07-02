@@ -738,6 +738,28 @@ interactions are in `tests/manual_checklist.md`.
       the last good surface plane (`_surface_hold`) across a ray miss instead of
       dropping to a VIEW plane through the object origin.
 
+## v1.18 — Heightmap decals (POM + relief)
+The decal system already had Parallax Occlusion Mapping, but its depth was driven
+only by the color image's own luminance and the shader group's Bump path was dead.
+This adds a proper Decal-Machine-class height channel. Verified with 122 pure
+tests + the headless POM/height-bump node-graph check
+(`test_image_decal_parallax_and_height_bump`), live in Blender 5.1.2; the shading
+is in `tests/manual_checklist.md`.
+- [x] **Dedicated height-map channel** — an image decal can carry a separate
+      grayscale height map (`decal_height_image`, loader
+      `HARDFLOW_OT_load_height_map`) that drives depth independently of the albedo;
+      blank falls back to the color image's own luminance.
+- [x] **Normal-relief Bump** — `core/decal._wire_height_bump` feeds the height into
+      the shared `HF_DecalShader` group's previously-dead Height/Depth Bump for
+      real shaded relief (`decal_bump_strength`), sampled at the parallax-corrected
+      UV when POM is on so the two agree.
+- [x] **Height polarity** — `decal_height_invert` flips bright-is-flush ↔
+      bright-is-deep; the convention is pinned + tested in the pure
+      `core/parallax.surface_depth`.
+- [x] **Reach** — an N-panel "Depth (Image Decals)" section surfaces Relief /
+      Parallax / Height-map without opening add-on preferences; every depth build
+      is wrapped so a node-API mismatch degrades to a flatter decal.
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock

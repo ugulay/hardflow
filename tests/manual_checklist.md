@@ -716,6 +716,25 @@ Enable **Preferences → Parallax Occlusion** (and set a **Parallax Depth**, e.g
       Transfer modifier sits after `HF_Shrinkwrap`), not catch flat sticker
       lighting. On a build without the modifier it logs `normal transfer skipped`.
 
+### Heightmap decals — dedicated height map + Relief (Bump)
+
+Use the N-panel **Decals ▸ Depth (Image Decals)** section (mirrors the prefs).
+
+- [ ] Raise **Relief (Bump)** (e.g. 0.6) with **no** height map set and place a
+      grunge/panel PNG: the decal gains **shaded relief** from the color image's
+      own luminance (head-on, unlike POM). Set Relief back to 0 → flat again.
+- [ ] Click the **folder** button next to **Height** → pick a **grayscale height
+      map**; place the color decal. The relief/parallax now follow the **height
+      map**, not the color (bright = raised, dark = recessed). The node tree shows
+      a **second** image-texture node holding the height map wired to the shared
+      group's **Height** input, and (POM on) an `HF_Parallax_<heightmap>_<N>` group.
+- [ ] Toggle **Invert Height**: raised and recessed features swap; the POM group
+      name gains an **`_i`** suffix.
+- [ ] **Relief + Parallax together**: enable both — the silhouette shifts (POM) at
+      grazing angles *and* the interior shades with relief (bump), and they agree
+      (bump samples at the corrected UV). A bad node build degrades to a flatter
+      decal and logs `height bump skipped` / `parallax wiring skipped` (no crash).
+
 ---
 
 ## Viewport polish — shortcut bar + alignment guides (Module 2)

@@ -4,6 +4,7 @@ import bpy
 from bpy.types import Panel
 
 from ..core import decal
+from ..preferences import get_prefs
 
 
 class HARDFLOW_PT_decals(Panel):
@@ -23,6 +24,24 @@ class HARDFLOW_PT_decals(Panel):
         for type_id, label, _desc in decal.DECAL_TYPES:
             col.operator("object.hardflow_place_decal",
                          text=label).decal_type = type_id
+
+        # Depth: the height-map channel that drives Parallax + Relief on the NEXT
+        # image decal placed (reads/writes the add-on prefs, mirrored here for
+        # quick access).
+        prefs = get_prefs(context)
+        depth = layout.box().column(align=True)
+        depth.label(text="Depth (Image Decals)", icon='MOD_DISPLACE')
+        depth.prop(prefs, "decal_bump_strength")
+        depth.prop(prefs, "decal_parallax", text="Parallax Occlusion")
+        if prefs.decal_parallax:
+            row = depth.row(align=True)
+            row.prop(prefs, "decal_parallax_depth", text="Depth")
+            row.prop(prefs, "decal_parallax_layers", text="Layers")
+        row = depth.row(align=True)
+        row.prop_search(prefs, "decal_height_image", bpy.data, "images",
+                        text="Height")
+        row.operator("object.hardflow_load_height_map", text="", icon='FILE_FOLDER')
+        depth.prop(prefs, "decal_height_invert")
 
         coll = bpy.data.collections.get(decal.DECAL_COLLECTION)
         if coll is None or not coll.objects:

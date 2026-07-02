@@ -32,6 +32,21 @@ def luminance(rgb):
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+def surface_depth(rgb, invert=False):
+    """The scalar surface depth d in [0, 1] the shader reads a height texel as.
+
+    By the height-map convention a BRIGHT texel is the flush outer surface and a
+    DARK texel is the deepest recess, so d = 1 - luminance (d = 0 flush, d = 1
+    deepest) -- the exact polarity core/decal._parallax_uv_group wires with its
+    ``1 - luminance`` node and the invariant parallax_occlusion_uv marches on.
+    Set `invert` for maps authored the other way (bright = deep), which drops the
+    ``1 -`` (d = luminance). Pinned here so the convention is tested without
+    Blender. Returns a float clamped to [0, 1]."""
+    lum = luminance(rgb)
+    d = lum if invert else 1.0 - lum
+    return 0.0 if d < 0.0 else 1.0 if d > 1.0 else d
+
+
 def tangent_space_view(view_world, tangent, bitangent, normal):
     """Express a world-space view direction in the surface's tangent basis.
 
