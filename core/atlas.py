@@ -279,8 +279,14 @@ def pixel_rgb(pixels, width, x, y):
     """(r, g, b) of the pixel at column x, row y (row 0 = bottom) in a flat RGBA
     float list. Returns (0, 0, 0) if the coordinate falls outside the buffer, so
     corner-sampling a key colour never raises."""
-    i = (int(y) * int(width) + int(x)) * 4
-    if i < 0 or i + 2 >= len(pixels):
+    x, y, width = int(x), int(y), int(width)
+    # Range-check the column/row explicitly: a negative x with y >= 1 still yields
+    # a positive flat index that lands on the previous row, so the old
+    # `i < 0` guard would silently return a neighbouring pixel instead of black.
+    if x < 0 or y < 0 or width <= 0 or x >= width:
+        return (0.0, 0.0, 0.0)
+    i = (y * width + x) * 4
+    if i + 2 >= len(pixels):
         return (0.0, 0.0, 0.0)
     return (pixels[i], pixels[i + 1], pixels[i + 2])
 

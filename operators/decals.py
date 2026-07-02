@@ -125,13 +125,15 @@ class HARDFLOW_OT_place_decal(Operator):
 
         elif event.type == 'UP_ARROW' and event.value == 'PRESS':
             if self._is_region():
-                self.region_index += 1
+                # Wrap within [0, n) so cycling never lands on the -1 "no region"
+                # sentinel and silently drops region mode.
+                self.region_index = (self.region_index + 1) % len(self._regions())
             elif self._is_trim():
                 self.trim_index += 1
 
         elif event.type == 'DOWN_ARROW' and event.value == 'PRESS':
             if self._is_region():
-                self.region_index -= 1
+                self.region_index = (self.region_index - 1) % len(self._regions())
             elif self._is_trim():
                 self.trim_index -= 1
 

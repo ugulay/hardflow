@@ -668,6 +668,10 @@ def test_pixel_rgb_indexes_and_guards():
     assert atlas.pixel_rgb(px, 2, 1, 0) == (0.2, 0.4, 0.6)
     assert atlas.pixel_rgb(px, 2, 0, 0) == (0.0, 0.0, 0.0)
     assert atlas.pixel_rgb(px, 2, 5, 5) == (0.0, 0.0, 0.0)   # out of range -> guard
+    # a negative column with a non-zero row must NOT wrap onto the previous row:
+    # (x=-1, y=1) once returned the last pixel of row 0 instead of the guard.
+    assert atlas.pixel_rgb(px, 2, -1, 1) == (0.0, 0.0, 0.0)
+    assert atlas.pixel_rgb(px, 2, 2, 0) == (0.0, 0.0, 0.0)    # x == width -> guard
 
 
 def test_chroma_key_cuts_matching_pixels():
@@ -1346,6 +1350,25 @@ def test_modifier_sort_stable_for_unknowns_and_equal_rank():
             ("HF_WeightedNormal", 'WEIGHTED_NORMAL'), ("HF_Bevel", 'BEVEL')]
     assert modifiers.sorted_order(mods) == [
         "B2", "B1", "Weird", "HF_Bevel", "HF_WeightedNormal"]
+
+
+def test_modifier_sort_holds_pinned_at_bottom():
+    # A pinned modifier (3rd tuple element True) is kept at the very bottom in its
+    # input order, regardless of type priority -- Blender pins "Smooth by Angle"
+    # (use_pin_to_last) and refuses to move it, so the sort must not fight it.
+    # Even when it appears first in the stack, it sorts to the bottom:
+    unsorted = [("Smooth by Angle", 'NODES', True),
+                ("HF_Bevel", 'BEVEL', False),
+                ("HF_WeightedNormal", 'WEIGHTED_NORMAL', False)]
+    assert modifiers.sorted_order(unsorted) == [
+        "HF_Bevel", "HF_WeightedNormal", "Smooth by Angle"]
+    # Blender keeps the pin at the bottom already; that arrangement is recognised
+    # as sorted, so a re-sort is a no-op (the bug was the sort endlessly trying to
+    # lift the pinned modifier it could never move -> never idempotent).
+    pinned_bottom = [("HF_Bevel", 'BEVEL', False),
+                     ("HF_WeightedNormal", 'WEIGHTED_NORMAL', False),
+                     ("Smooth by Angle", 'NODES', True)]
+    assert modifiers.is_sorted(pinned_bottom)
 
 
 def test_modifier_reorder_moves_apply_to_desired():

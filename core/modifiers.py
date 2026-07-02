@@ -37,14 +37,27 @@ def modifier_priority(mtype, mirror_after_boolean=True):
     return _PRIORITY.get(mtype, _DEFAULT_PRIORITY)
 
 
+def _is_pinned(mod):
+    """True when a (name, type[, pinned]) tuple carries a truthy pinned flag.
+    Blender 4.3+ pins the "Smooth by Angle" node modifier to the bottom of the
+    stack (use_pin_to_last) and silently refuses any move off it, so a pinned
+    modifier must be held last regardless of its type priority."""
+    return len(mod) > 2 and bool(mod[2])
+
+
 def sorted_order(mods, mirror_after_boolean=True):
     """Modifier names in hard-surface stack order. `mods` is a list of
-    (name, type). Stable: equal-priority modifiers keep their input order, so
-    re-runs are idempotent and unknown modifiers don't jump around each other."""
+    (name, type) or (name, type, pinned). Stable: equal-priority modifiers keep
+    their input order, so re-runs are idempotent and unknown modifiers don't jump
+    around each other. Pinned-to-last modifiers are held at the very bottom in
+    their input order (moving them is impossible), so the sort never fights a pin
+    it can't win -- which is what made the previous version non-idempotent."""
     indexed = list(enumerate(mods))
-    indexed.sort(key=lambda it: (
+    free = [it for it in indexed if not _is_pinned(it[1])]
+    pinned = [it for it in indexed if _is_pinned(it[1])]
+    free.sort(key=lambda it: (
         modifier_priority(it[1][1], mirror_after_boolean), it[0]))
-    return [name for _i, (name, _t) in indexed]
+    return [mod[0] for _i, mod in free] + [mod[0] for _i, mod in pinned]
 
 
 def reorder_moves(current, desired):
@@ -67,7 +80,7 @@ def reorder_moves(current, desired):
 
 
 def is_sorted(mods, mirror_after_boolean=True):
-    """True when `mods` (list of (name, type)) is already in hard-surface order --
-    lets the operator stay quiet / skip work when there's nothing to do."""
-    names = [name for name, _t in mods]
+    """True when `mods` (list of (name, type[, pinned])) is already in hard-surface
+    order -- lets the operator stay quiet / skip work when there's nothing to do."""
+    names = [mod[0] for mod in mods]
     return names == sorted_order(mods, mirror_after_boolean)

@@ -1606,12 +1606,16 @@ class HARDFLOW_OT_draw(Operator):
         failures, fallbacks = [], []
         # Fix Shading: snapshot each target's clean normals BEFORE the cut, so the
         # transfer bound afterwards reflects the pre-cut surface onto the n-gons.
+        # Map target name -> (helper, created_now): created_now is False when
+        # capture_normal_source reused a helper from a prior successful cut, so a
+        # rollback below leaves that still-referenced helper alone.
         normal_sources = {}
         if fix_shading:
             for t in targets:
                 if t is not None and t.type == 'MESH':
-                    normal_sources[t.name] = boolean.capture_normal_source(
-                        context, t)
+                    created = not boolean.has_normal_source(t)
+                    normal_sources[t.name] = (
+                        boolean.capture_normal_source(context, t), created)
 
         # Build the chain. SLICE = DIFFERENCE on the target + INTERSECT on a
         # duplicate (kept as the carved-off piece); CUT/MAKE/INTERSECT = the same
@@ -1647,9 +1651,9 @@ class HARDFLOW_OT_draw(Operator):
                         geometry.dissolve_boolean_ngons(tgt)
                     # Fix Shading: bind the pre-cut normal snapshot back onto the
                     # cut target so its new n-gons shade flat, not smeared.
-                    src = normal_sources.get(tgt.name)
-                    if src is not None:
-                        boolean.add_normal_transfer(tgt, src)
+                    entry = normal_sources.get(tgt.name)
+                    if entry is not None:
+                        boolean.add_normal_transfer(tgt, entry[0])
             # A rolled-back slice leaves an inconsistent spare duplicate (its
             # target was restored); drop it (and its copied mesh) rather than
             # orphan it.
@@ -1661,8 +1665,13 @@ class HARDFLOW_OT_draw(Operator):
                     bpy.data.meshes.remove(me)
             # A failed cut leaves the targets untouched, so the pre-cut normal
             # snapshots are useless -- drop them rather than orphan hidden helpers.
+            # BUT only the ones this cut created: a reused helper is still bound to
+            # a prior successful cut's Data Transfer, so removing it would break
+            # that earlier cut's shading.
             if failures and normal_sources:
-                for src in list(normal_sources.values()):
+                for src, created in normal_sources.values():
+                    if not created:
+                        continue
                     sme = src.data
                     if src.name in bpy.data.objects:
                         bpy.data.objects.remove(src, do_unlink=True)
@@ -1690,19 +1699,29 @@ class HARDFLOW_OT_draw(Operator):
         if self.mode == 'SLICE':
             target = targets[0]
             other = boolean.duplicate_object(context, target)
+            # Each half needs its OWN cutter, parented to that half. A single
+            # shared cutter can only be parented to one half, so moving the other
+            # half would leave its INTERSECT boolean pointing at a cutter that no
+            # longer tracks it -- the slice would break on transform.
+            cutter_other = boolean.duplicate_object(context, cutter,
+                                                    name_suffix="_slice_cutter")
             boolean.add_boolean(target, cutter, 'DIFFERENCE', solver)
-            boolean.add_boolean(other, cutter, 'INTERSECT', solver)
+            boolean.add_boolean(other, cutter_other, 'INTERSECT', solver)
+            boolean.stash_cutter(context, cutter, target)
+            boolean.stash_cutter(context, cutter_other, other)
+            affected = [target, other]
         else:  # CUT / MAKE / INTERSECT
             for t in targets:
                 boolean.add_boolean(t, cutter, op, solver)
-        boolean.stash_cutter(context, cutter, targets[0])
+            boolean.stash_cutter(context, cutter, targets[0])
+            affected = list(targets)
         # A fresh HF_Bool appends to the BOTTOM of the stack -- below any existing
         # Bevel / Weighted Normal, which would cut the wrong (already-shaded)
         # result. Reorder into hard-surface order (booleans on top) so the live
         # preview matches a later bake.
         if get_prefs(context).sort_modifiers_after_cut:
             from .hardops import sort_modifier_stack
-            for t in targets:
+            for t in affected:
                 sort_modifier_stack(t)
 
     def _cleanup(self, context):

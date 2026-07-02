@@ -20,11 +20,12 @@ def sort_modifier_stack(obj, mirror_after_boolean=True):
     below the booleans per the toggle). Pure decision in core.modifiers; this
     only replays the resulting move plan through Blender's modifier API. Returns
     the number of moves made (0 when already sorted). Safe on any object."""
-    mods = [(m.name, m.type) for m in obj.modifiers]
+    mods = [(m.name, m.type, getattr(m, "use_pin_to_last", False))
+            for m in obj.modifiers]
     if len(mods) < 2:
         return 0
     desired = modifiers.sorted_order(mods, mirror_after_boolean)
-    current = [name for name, _t in mods]
+    current = [m[0] for m in mods]
     moves = modifiers.reorder_moves(current, desired)
     for src, dst in moves:
         try:

@@ -25,8 +25,15 @@ def _coerce_solver(solver):
     return 'EXACT'
 
 
-def _new_bool(target, cutter, operation, solver):
-    mod = target.modifiers.new("HF_Bool", 'BOOLEAN')
+# Transient name for the destructive apply modifier. Deliberately DISTINCT from
+# the live "HF_Bool" name the non-destructive path uses: a failed apply must only
+# ever remove the modifier it just added, never the user's existing
+# non-destructive cutters (which are also named "HF_Bool").
+_APPLY_MOD_NAME = "HF_BoolApply"
+
+
+def _new_bool(target, cutter, operation, solver, name="HF_Bool"):
+    mod = target.modifiers.new(name, 'BOOLEAN')
     mod.operation = operation
     mod.solver = _coerce_solver(solver)
     mod.object = cutter
@@ -35,21 +42,26 @@ def _new_bool(target, cutter, operation, solver):
 
 def apply_boolean(context, target, cutter, operation='DIFFERENCE', solver='EXACT'):
     """Destructive: add a modifier and apply it. The cutter is deleted by the
-    caller."""
-    mod = _new_bool(target, cutter, operation, solver)
-    with context.temp_override(active_object=target, object=target):
-        bpy.ops.object.modifier_apply(modifier=mod.name)
+    caller. On failure only the just-added modifier is removed (matched by its
+    exact name, not the "HF_Bool" prefix) so a doomed attempt never disturbs the
+    target's other modifiers, and the RuntimeError propagates to the fallback
+    chain."""
+    mod = _new_bool(target, cutter, operation, solver, name=_APPLY_MOD_NAME)
+    name = mod.name  # Blender may auto-suffix if the name is already taken
+    try:
+        with context.temp_override(active_object=target, object=target):
+            bpy.ops.object.modifier_apply(modifier=name)
+    except RuntimeError:
+        leftover = target.modifiers.get(name)
+        if leftover is not None:
+            target.modifiers.remove(leftover)
+        raise
 
 
 def add_boolean(target, cutter, operation='DIFFERENCE', solver='EXACT'):
     """Non-destructive: just add a modifier and return it. The cutter stays in
     the scene."""
     return _new_bool(target, cutter, operation, solver)
-
-
-def _remove_bool_mods(target):
-    for m in [m for m in target.modifiers if m.name.startswith("HF_Bool")]:
-        target.modifiers.remove(m)
 
 
 def _dedupe(seq):
@@ -64,14 +76,15 @@ def _dedupe(seq):
 
 
 def _apply_boolean_chain(context, target, cutter, operation, solvers):
-    """Try each solver in order until one applies, cleaning up the half-added
-    modifier between attempts. Returns the solver that succeeded, or None."""
+    """Try each solver in order until one applies. apply_boolean removes its own
+    half-added modifier when it raises, so a failed attempt leaves the target
+    exactly as it was. Returns the solver that succeeded, or None."""
     for attempt in solvers:
         try:
             apply_boolean(context, target, cutter, operation, attempt)
             return attempt
         except RuntimeError:
-            _remove_bool_mods(target)
+            continue
     return None
 
 
@@ -293,6 +306,15 @@ def helper_collection(context):
         coll.hide_render = True
         coll.hide_viewport = True
     return coll
+
+
+def has_normal_source(obj, name_suffix="_normals"):
+    """True when a normal-source helper already exists for `obj`. Lets a caller
+    tell a freshly-created snapshot from one `capture_normal_source` reuses, so a
+    failed-cut rollback only removes helpers IT created and never a helper a prior
+    successful cut's Data Transfer still references."""
+    src = bpy.data.objects.get(obj.name + name_suffix)
+    return src is not None and src.get("hf_normal_source_of") == obj.name
 
 
 def capture_normal_source(context, obj, name_suffix="_normals"):

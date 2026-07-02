@@ -54,7 +54,7 @@ independently of the albedo, feeding both the POM UV shift and a new normal-reli
 flips the polarity (pinned in the pure `core/parallax.surface_depth`), with a
 `HARDFLOW_OT_load_height_map` loader + an N-panel "Depth (Image Decals)" section.
 Code is syntax-verified with pure +
-headless tests (122 pure + 127 headless, run live against a standalone `bpy`
+headless tests (123 pure + 130 headless, run live against a standalone `bpy`
 build); the new bpy paths are also live-verified in Blender 5.1.2, and full GUI
 verification of the modal interactions is tracked in `tests/manual_checklist.md`.
 Roadmap: `ROADMAP.md`.

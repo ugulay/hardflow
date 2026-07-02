@@ -74,6 +74,26 @@ def test_apply_boolean_difference():
     assert len(target.modifiers) == 0, "modifier not applied (still present)"
 
 
+def test_destructive_apply_keeps_live_nondestructive_cutter():
+    # A destructive cut must NOT sweep away the target's existing non-destructive
+    # cutters. Those live modifiers are named "HF_Bool"; the destructive apply now
+    # uses a distinct transient name and removes only its own modifier, so the
+    # live "HF_Bool" survives (regression test for the failed-solver cleanup that
+    # used to wipe every HF_Bool* on the target).
+    _reset()
+    target = _add_cube("Target", size=2.0)
+    live_cutter = _add_cube("Live", size=1.0, location=(1.2, 0, 0))
+    dest_cutter = _add_cube("Dest", size=1.0, location=(-1.2, 0, 0))
+    _activate(target)
+    live = boolean.add_boolean(target, live_cutter, 'DIFFERENCE', 'EXACT')
+    assert live.name == "HF_Bool"
+    boolean.apply_boolean(bpy.context, target, dest_cutter, 'DIFFERENCE', 'EXACT')
+    names = [m.name for m in target.modifiers]
+    assert "HF_Bool" in names, ("live non-destructive cutter was wiped", names)
+    assert not any(n.startswith("HF_BoolApply") for n in names), \
+        ("transient apply modifier leaked", names)
+
+
 def test_bevel_cutter_chamfers_edges():
     # Bevelled cut: chamfering the cutter adds geometry (more faces/verts) and
     # leaves a valid closed mesh. A unit cube has 8 verts / 6 faces.
@@ -2663,6 +2683,46 @@ def test_draw_cut_apply_destructive_atomic_chain():
         hardflow.unregister()
 
 
+def test_nondestructive_slice_gives_each_half_its_own_cutter():
+    # A non-destructive SLICE must hand each half its own cutter, parented to that
+    # half -- a single shared cutter parented to one half breaks the other half's
+    # boolean the moment it's moved.
+    _reset()
+    hardflow.register()
+    try:
+        import types
+        from hardflow.operators import draw_cut
+        apply_nd = draw_cut.HARDFLOW_OT_draw._apply_nondestructive
+        target = _add_cube("NDSlice", size=2.0)
+        _activate(target)
+        cutter = _add_cube("NDSliceCut", size=1.0, location=(0.5, 0.5, 0.5))
+        fake = types.SimpleNamespace(mode='SLICE')
+        apply_nd(fake, bpy.context, [target], cutter, 'FAST')
+
+        def bool_cutter(obj):
+            mods = [m for m in obj.modifiers if m.type == 'BOOLEAN']
+            assert len(mods) == 1, (obj.name, len(mods))
+            return mods[0].object
+
+        other = bpy.data.objects.get("NDSlice_slice")
+        assert other is not None, "slice duplicate missing"
+        c_target, c_other = bool_cutter(target), bool_cutter(other)
+        assert c_target is not c_other, "both halves share one cutter"
+        assert c_target.parent is target, c_target.parent
+        assert c_other.parent is other, c_other.parent
+    finally:
+        hardflow.unregister()
+
+
+def test_has_normal_source_predicate():
+    # Lets the cut rollback tell a freshly-created snapshot from a reused one.
+    _reset()
+    target = _add_cube("HNS", size=2.0)
+    assert boolean.has_normal_source(target) is False
+    boolean.capture_normal_source(bpy.context, target)
+    assert boolean.has_normal_source(target) is True
+
+
 def test_mark_sharp_edges_marks_all_cube_edges():
     _reset()
     cube = _add_cube("Sharp", size=2.0)
@@ -2690,10 +2750,19 @@ def test_smart_sharpen_operator_idempotent():
         assert bev is not None and bev.type == 'BEVEL', "no bevel modifier"
         assert wn is not None and wn.type == 'WEIGHTED_NORMAL', "no weighted normal"
         assert bev.limit_method == 'WEIGHT', bev.limit_method
-        # Compare by name: bpy hands out a fresh wrapper per access, so `is`
-        # can be False even when it is the same underlying modifier.
-        assert list(cube.modifiers)[-1].name == wn.name, \
-            "weighted normal not at the bottom"
+        # The Weighted Normal must run after the bevel, so it is last among the
+        # modifiers we control. Blender 4.3+ pins its "Smooth by Angle" node
+        # modifier to the very bottom (use_pin_to_last) and refuses to move it,
+        # so it can legitimately sit below the WN -- WN is last of the *unpinned*
+        # modifiers. Compare by name: bpy hands out a fresh wrapper per access.
+        unpinned = [m for m in cube.modifiers
+                    if not getattr(m, "use_pin_to_last", False)]
+        assert unpinned[-1].name == wn.name, \
+            "weighted normal not last among unpinned modifiers"
+        # The sort must converge: once ordered, a re-sort moves nothing (it used
+        # to keep issuing a doomed move against the pinned Smooth-by-Angle).
+        from hardflow.operators.hardops import sort_modifier_stack
+        assert sort_modifier_stack(cube) == 0, "sort not idempotent"
         # Re-run: the managed modifiers update in place, never stacking copies.
         bpy.ops.object.hardflow_smart_sharpen()
         bevels = [m for m in cube.modifiers if m.type == 'BEVEL']
