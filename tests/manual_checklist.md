@@ -296,6 +296,26 @@ surface and straight segments cut through corners (see the v1.2 screenshot).
       ignores the cube (hangs freely through it) — the escape hatch for heavy
       scenes.
 
+**Custom profiles + Detail Along Path ⭐ (v1.20):**
+
+- [ ] **Custom mesh profile:** model a small flat outline (e.g. a plane, or an
+      Edit-Mode shape — must be open/flat; a closed solid won't do) and pick it
+      as **Profile** in N-panel ▸ Curves. In Pipe/Sweep, `P` now cycles onto
+      **CUSTOM** → the tube sweeps that outline (centered, sized to the radius,
+      so `Wheel` still scales it). Without a Profile object, `P` skips CUSTOM.
+- [ ] **Custom curve profile:** pick a Curve object as Profile → CUSTOM makes
+      the pipe a native **bevel-object curve** (non-destructive): edit the
+      profile curve afterwards → every pipe using it updates live.
+- [ ] **Detail Along Path:** commit a pipe (ROUND, so it stays a curve), pick a
+      small mesh (e.g. a chain link) as **Detail**, keep the curve active →
+      **Detail Along Path** → the mesh repeats along the whole curve (Array
+      Fit-Curve + Curve deform), following its bends. F9 exposes the axis and
+      a Merge Segments toggle. Editing the source mesh updates the chain
+      (instanced data).
+- [ ] **Commit shading:** committing a swept tube (SQUARE/L/CUSTOM…) leaves it
+      with angle-based **smooth shading** — a curved custom profile shades
+      round, the structural sections' hard corners stay crisp.
+
 ---
 
 ---

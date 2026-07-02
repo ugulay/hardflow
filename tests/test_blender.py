@@ -459,6 +459,76 @@ def test_build_pipe_bezier():
     assert curve.use_fill_caps
 
 
+def _link_mesh(name, verts, faces):
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [] if faces else
+                   [(i, (i + 1) % len(verts)) for i in range(len(verts))],
+                   faces)
+    me.update()
+    obj = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(obj)
+    return obj
+
+
+def test_object_profile_points():
+    _reset()
+    # A flat 2x2 plane: the 4 boundary edges become a centered loop scaled so
+    # the half-extent equals the radius.
+    plane = _link_mesh("HF_Prof", [(0, 0, 0), (2, 0, 0), (2, 2, 0), (0, 2, 0)],
+                       [(0, 1, 2, 3)])
+    prof = geometry.object_profile_points(plane, 0.1)
+    assert prof is not None and len(prof) == 4
+    assert {(round(u, 6), round(v, 6)) for u, v in prof} == {
+        (-0.1, -0.1), (0.1, -0.1), (0.1, 0.1), (-0.1, 0.1)}
+    # ... and it sweeps: a solid tube along a 2-point path
+    mesh = geometry.build_pipe_mesh(
+        [Vector((0, 0, 0)), Vector((0, 0, 1))], prof, name="HF_ProfPipe")
+    assert mesh is not None and len(mesh.polygons) == 6
+    # A face-less edge triangle still yields its outline.
+    tri = _link_mesh("HF_ProfTri", [(0, 0, 0), (1, 0, 0), (0.5, 1, 0)], [])
+    prof = geometry.object_profile_points(tri, 0.2)
+    assert prof is not None and len(prof) == 3
+    assert max(abs(c) for p in prof for c in p) <= 0.2 + 1e-9
+    # A closed solid has no boundary outline -> None (falls back to ROUND).
+    cube = _add_cube("HF_ProfCube", size=1.0)
+    assert geometry.object_profile_points(cube, 0.1) is None
+    assert geometry.object_profile_points(None, 0.1) is None
+
+
+def test_path_detail_operator():
+    _reset()
+    hardflow.register()
+    try:
+        scene = bpy.context.scene
+        assert hasattr(scene, "hardflow_profile_object")   # panel pointers
+        assert hasattr(scene, "hardflow_detail_object")
+        curve_data = geometry.build_pipe(
+            [Vector((0, 0, 0)), Vector((3, 0, 0))], radius=0.05)
+        curve_obj = bpy.data.objects.new("HF_Path", curve_data)
+        bpy.context.collection.objects.link(curve_obj)
+        link = _add_cube("HF_Link", size=0.2)
+        scene.hardflow_detail_object = link
+        _activate(curve_obj)
+        result = bpy.ops.object.hardflow_path_detail()
+        assert result == {'FINISHED'}
+        dup = bpy.context.view_layer.objects.active
+        assert dup is not None and dup is not curve_obj and dup is not link
+        assert dup.data is link.data                # instanced, not copied
+        arr = dup.modifiers.get("HF_DetailArray")
+        crv = dup.modifiers.get("HF_DetailCurve")
+        assert arr is not None and arr.type == 'ARRAY'
+        assert arr.fit_type == 'FIT_CURVE' and arr.curve is curve_obj
+        assert tuple(arr.relative_offset_displace) == (1.0, 0.0, 0.0)
+        assert crv is not None and crv.type == 'CURVE'
+        assert crv.object is curve_obj and crv.deform_axis == 'POS_X'
+        # no detail picked -> a clean CANCELLED report, no crash
+        scene.hardflow_detail_object = None
+        _activate(curve_obj)
+        assert bpy.ops.object.hardflow_path_detail() == {'CANCELLED'}
+    finally:
+        hardflow.unregister()
+
+
 def test_apply_cutters_operator():
     _reset()
     hardflow.register()

@@ -1,7 +1,7 @@
 # N-panel (View3D > Sidebar > Hardflow): tools, snap settings, cutter list.
 import bpy
 from bpy.types import Panel
-from bpy.props import EnumProperty
+from bpy.props import EnumProperty, PointerProperty
 
 from ..preferences import get_prefs
 from ..core import boolean
@@ -239,10 +239,21 @@ class HARDFLOW_PT_curves(Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
-        row = self.layout.row(align=True)
+        layout = self.layout
+        row = layout.row(align=True)
         row.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
         row.operator("mesh.hardflow_cable", text="Cable", icon='FORCE_CURVE')
         row.operator("mesh.hardflow_sweep", text="Sweep", icon='MOD_SIMPLEDEFORM')
+        scene = context.scene
+        if hasattr(scene, "hardflow_profile_object"):
+            col = layout.column(align=True)
+            col.prop(scene, "hardflow_profile_object", text="Profile")
+            col.prop(scene, "hardflow_detail_object", text="Detail")
+            col.operator("object.hardflow_path_detail",
+                         text="Detail Along Path", icon='MOD_ARRAY')
+            if not (context.active_object is not None
+                    and context.active_object.type == 'CURVE'):
+                col.label(text="Detail needs an active curve", icon='INFO')
 
 
 class HARDFLOW_PT_display(Panel):
@@ -527,15 +538,38 @@ class HARDFLOW_PT_cutters(Panel):
 
 
 # The panel PropertyGroups/Panels register through __init__'s _classes tuple;
-# these add the panel-owned Scene state (the persistent Boolean draw mode) and
-# are called from __init__.register()/unregister().
+# these add the panel-owned Scene state (the persistent Boolean draw mode +
+# the Curves tool object pickers) and are called from
+# __init__.register()/unregister().
+def _poll_profile_object(self, obj):
+    return obj.type in {'MESH', 'CURVE'}
+
+
+def _poll_detail_object(self, obj):
+    return obj.type == 'MESH'
+
+
 def register():
     bpy.types.Scene.hardflow_draw_mode = EnumProperty(
         name="Draw Mode", description="Boolean operation the Draw tool performs; "
         "pick it once here, then click any shape to draw with it",
         items=DRAW_MODE_ITEMS, default='CUT')
+    bpy.types.Scene.hardflow_profile_object = PointerProperty(
+        type=bpy.types.Object, name="Profile Object",
+        description="CUSTOM cross-section for Pipe/Sweep: a flat mesh outline "
+                    "(its boundary is swept as a solid) or a curve (native "
+                    "non-destructive bevel profile). P cycles onto CUSTOM "
+                    "while drawing once this is set",
+        poll=_poll_profile_object)
+    bpy.types.Scene.hardflow_detail_object = PointerProperty(
+        type=bpy.types.Object, name="Detail Object",
+        description="Mesh repeated along the active curve by Detail Along "
+                    "Path (Array Fit-Curve + Curve deform, non-destructive)",
+        poll=_poll_detail_object)
 
 
 def unregister():
-    if hasattr(bpy.types.Scene, "hardflow_draw_mode"):
-        del bpy.types.Scene.hardflow_draw_mode
+    for prop in ("hardflow_draw_mode", "hardflow_profile_object",
+                 "hardflow_detail_object"):
+        if hasattr(bpy.types.Scene, prop):
+            delattr(bpy.types.Scene, prop)

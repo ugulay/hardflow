@@ -6,6 +6,7 @@ import bmesh
 
 from . import bevel as _bevel
 from . import topology as _topology
+from . import transform as _transform
 
 
 def snapshot_mesh(obj, name="hf_snapshot"):
@@ -527,6 +528,46 @@ def round_profile(radius, segments=12):
     seg = max(3, int(segments))
     return [(radius * math.cos(k * math.tau / seg),
              radius * math.sin(k * math.tau / seg)) for k in range(seg)]
+
+
+def object_profile_points(obj, radius):
+    """Extract a CUSTOM sweep cross-section from a mesh object: its boundary
+    outline (edges with fewer than 2 faces -- or every edge on a face-less
+    profile), projected onto the object's local XY plane, ordered into a loop
+    via transform.order_edge_paths, centered on its bounding box and scaled so
+    the largest half-extent equals `radius` (matching the ~radius envelope of
+    the built-in profiles, so the Wheel keeps working). Uses the base mesh
+    (no modifiers). Returns a closed list of (u, v) corners for
+    build_pipe_mesh, or None when no usable >= 3 point loop exists."""
+    if obj is None or obj.type != 'MESH':
+        return None
+    me = obj.data
+    if len(me.vertices) < 3 or len(me.edges) == 0:
+        return None
+    face_count = {}
+    for poly in me.polygons:
+        for k in poly.edge_keys:
+            face_count[k] = face_count.get(k, 0) + 1
+    pairs = [tuple(e.vertices) for e in me.edges
+             if face_count.get(tuple(sorted(e.vertices)), 0) < 2]
+    chains = _transform.order_edge_paths(pairs)
+    if not chains:
+        return None
+    # Prefer the longest CLOSED loop; fall back to the longest open chain.
+    closed = [c for c in chains if len(c) > 3 and c[0] == c[-1]]
+    chain = max(closed, key=len) if closed else max(chains, key=len)
+    if chain and chain[0] == chain[-1]:
+        chain = chain[:-1]                    # the loop is implicit
+    if len(chain) < 3:
+        return None
+    pts = [(me.vertices[i].co.x, me.vertices[i].co.y) for i in chain]
+    us, vs = [p[0] for p in pts], [p[1] for p in pts]
+    cu, cv = (min(us) + max(us)) * 0.5, (min(vs) + max(vs)) * 0.5
+    half = max(max(us) - cu, max(vs) - cv)
+    if half <= 1e-9:
+        return None                           # degenerate: no XY extent
+    s = radius / half
+    return [((u - cu) * s, (v - cv) * s) for u, v in pts]
 
 
 def build_pipe_mesh(points, profile_pts, name="Hardflow_Pipe", closed=False):

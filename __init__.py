@@ -19,6 +19,7 @@ _classes = (
     pipe.HARDFLOW_OT_pipe,
     pipe.HARDFLOW_OT_cable,
     pipe.HARDFLOW_OT_sweep,
+    pipe.HARDFLOW_OT_path_detail,
     push_pull.HARDFLOW_OT_push_pull,
     offset.HARDFLOW_OT_offset,
     edge_tool.HARDFLOW_OT_edge_bevel,

@@ -36,13 +36,17 @@
 #   Tab/S toggle surface snap, V vertex/edge snap, X grid snap,
 #   F follow-surface (pipe), C smooth path, (cable only) G gravity settle +
 #   Shift+Wheel sag/slack, MMB navigation.
+import math
+
 import bpy
+from bpy.props import BoolProperty, EnumProperty
 from bpy.types import Operator
 from mathutils import Vector
 
 from ..core import raycast, geometry, transform, snapping, path, physics
 from ..preferences import get_prefs
 from ..ui import draw as hud
+from . import hardops
 
 
 def _px_dist2(a, b):
@@ -62,7 +66,10 @@ class _CurveDraw:
     _has_profile = False   # pipe overrides: square/rect swept cross-sections
     # Cross-sections the P key cycles through (subclasses override). ROUND falls
     # back to the curve bevel; the rest sweep a mesh section (build_pipe_mesh).
-    _PROFILE_CYCLE = ('ROUND', 'SQUARE', 'RECT')
+    # CUSTOM (v1.20) reads Scene.hardflow_profile_object -- a flat mesh outline
+    # (swept solid) or a curve (native bevel_object) -- and is skipped by the
+    # cycle while no usable object is picked.
+    _PROFILE_CYCLE = ('ROUND', 'SQUARE', 'RECT', 'CUSTOM')
     # Implicit click-vs-stroke gates (screen px): drag past START to begin a
     # freehand stroke; record a sample every GATE px along it.
     _STROKE_START_PX = 8
@@ -239,26 +246,62 @@ class _CurveDraw:
 
     # --- live preview ----------------------------------------------------
 
+    @staticmethod
+    def _profile_object(context):
+        """The scene's CUSTOM cross-section source (mesh outline or curve
+        object), or None when unset / unusable."""
+        obj = getattr(context.scene, "hardflow_profile_object", None)
+        if obj is not None and obj.type in {'MESH', 'CURVE'}:
+            return obj
+        return None
+
+    def _resolve_profile(self, context):
+        """(profile_points, bevel_object) for the current cycle entry. CUSTOM
+        reads the scene's profile object: a MESH contributes its boundary
+        outline to the mesh sweep (object_profile_points); a CURVE rides the
+        native curve bevel instead (non-destructive -- editing the profile
+        curve later updates every pipe that uses it). An unusable custom
+        source degrades to the plain ROUND bevel."""
+        if self._profile == 'CUSTOM':
+            obj = self._profile_object(context)
+            if obj is not None and obj.type == 'CURVE':
+                return None, obj
+            return geometry.object_profile_points(obj, self._radius), None
+        return geometry.profile_points(self._profile, self._radius), None
+
+    @staticmethod
+    def _wire_bevel_object(data, bevel_obj):
+        """Point a freshly built pipe curve at a CUSTOM profile curve (the
+        native bevel-object path; the profile keeps its own drawn size)."""
+        if data is not None and bevel_obj is not None:
+            data.bevel_mode = 'OBJECT'
+            data.bevel_object = bevel_obj
+        return data
+
     def _build_data(self, context, anchors):
         """Build the tube datablock for the given anchors. ROUND uses a curve
-        bevel; SQUARE/RECT sweep a mesh cross-section (build_pipe_mesh). Smooth
-        Path interpolates the anchors with a Catmull-Rom first -- or, for a
-        ROUND non-follow pipe, emits an editable AUTO-handle Bezier instead of
-        a baked poly-line. Returns (data, is_mesh) or (None, False)."""
+        bevel; SQUARE/RECT/L/U/T/I/CUSTOM-mesh sweep a mesh cross-section
+        (build_pipe_mesh); a CUSTOM curve profile wires the native
+        bevel_object. Smooth Path interpolates the anchors with a Catmull-Rom
+        first -- or, for a curve-bevel non-follow pipe, emits an editable
+        AUTO-handle Bezier instead of a baked poly-line. Returns
+        (data, is_mesh) or (None, False)."""
         if len(anchors) < 2:
             return None, False
         name = "Hardflow_%s" % self._title
-        prof = geometry.profile_points(self._profile, self._radius)
+        prof, bevel_obj = self._resolve_profile(context)
         smooth = self._smoothing(anchors)
         if smooth and prof is None and not self._follow:
-            return geometry.build_pipe(anchors, radius=self._radius, name=name,
-                                       spline_type='BEZIER'), False
+            data = geometry.build_pipe(anchors, radius=self._radius, name=name,
+                                       spline_type='BEZIER')
+            return self._wire_bevel_object(data, bevel_obj), False
         if smooth:
             anchors = [Vector(p) for p in
                        path.catmull_rom([tuple(p) for p in anchors])]
         pts = self._route_points(context, anchors)
         if prof is None:
-            return geometry.build_pipe(pts, radius=self._radius, name=name), False
+            data = geometry.build_pipe(pts, radius=self._radius, name=name)
+            return self._wire_bevel_object(data, bevel_obj), False
         return geometry.build_pipe_mesh(pts, prof, name=name), True
 
     def _set_preview_data(self, context, data, is_mesh):
@@ -348,7 +391,8 @@ class _CurveDraw:
             dirty = True
 
         elif (event.type == 'P' and event.value == 'PRESS' and self._has_profile):
-            cyc = self._PROFILE_CYCLE
+            cyc = [p for p in self._PROFILE_CYCLE
+                   if p != 'CUSTOM' or self._profile_object(context) is not None]
             i = cyc.index(self._profile) if self._profile in cyc else -1
             self._profile = cyc[(i + 1) % len(cyc)]
             dirty = True
@@ -496,6 +540,14 @@ class _CurveDraw:
             o.select_set(False)
         self._preview.select_set(True)
         context.view_layer.objects.active = self._preview
+        if is_mesh:
+            # Commit polish: angle-based smooth shading so curved custom
+            # profiles shade round while the structural sections' hard corners
+            # stay crisp (defensive -- a failure just means flat shading).
+            try:
+                hardops.ensure_smooth_by_angle(self._preview, math.radians(30.0))
+            except Exception:  # noqa: BLE001
+                pass
         return True
 
     def _commit(self, context):
@@ -603,8 +655,9 @@ class HARDFLOW_OT_sweep(_CurveDraw, Operator):
     _has_sag = False
     _can_follow = True
     _has_profile = True
-    # Structural sections (no ROUND -- a sweep is always a meshed cross-section).
-    _PROFILE_CYCLE = ('L', 'U', 'T', 'I', 'SQUARE', 'RECT')
+    # Structural sections (no ROUND -- a sweep is a meshed cross-section);
+    # CUSTOM sweeps the scene profile object's outline (or curve bevel).
+    _PROFILE_CYCLE = ('L', 'U', 'T', 'I', 'SQUARE', 'RECT', 'CUSTOM')
 
     def _init_params(self, prefs):
         self._radius = prefs.pipe_radius
@@ -612,3 +665,69 @@ class HARDFLOW_OT_sweep(_CurveDraw, Operator):
         self._sag = 0.0
         self._segments = 12
         self._profile = 'L'      # a structural section, not the round curve
+
+
+class HARDFLOW_OT_path_detail(Operator):
+    bl_idname = "object.hardflow_path_detail"
+    bl_label = "Hardflow Detail Along Path"
+    bl_description = ("Repeat a detail mesh along the active curve (chain "
+                      "links, cable clips, corrugated hose...): an instanced "
+                      "copy with Array (Fit Curve) + Curve deform modifiers, "
+                      "fully non-destructive. Pick the mesh as Detail in the "
+                      "Curves panel, select a path curve, run")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    axis: EnumProperty(
+        name="Along Axis",
+        description="Detail-object local axis laid along the curve (the array "
+                    "repeats and the curve deforms along it)",
+        items=[('POS_X', "X", "Repeat/deform along local +X (the usual)"),
+               ('POS_Y', "Y", "Repeat/deform along local +Y"),
+               ('POS_Z', "Z", "Repeat/deform along local +Z")],
+        default='POS_X',
+    )
+    merge: BoolProperty(
+        name="Merge Segments",
+        description="Weld coincident vertices between repeats (one continuous "
+                    "hose instead of separate links)",
+        default=False,
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (context.mode == 'OBJECT' and obj is not None
+                and obj.type == 'CURVE')
+
+    def execute(self, context):
+        curve_obj = context.active_object
+        detail = getattr(context.scene, "hardflow_detail_object", None)
+        if detail is None or detail.type != 'MESH':
+            self.report({'WARNING'},
+                        "Pick a mesh Detail object in the Curves panel first")
+            return {'CANCELLED'}
+        # Instance the detail's mesh (shared data: editing the source updates
+        # the chain) at the curve's transform so the deform starts at its root.
+        dup = bpy.data.objects.new("%s_On_%s" % (detail.name, curve_obj.name),
+                                   detail.data)
+        context.collection.objects.link(dup)
+        dup.matrix_world = curve_obj.matrix_world.copy()
+
+        arr = dup.modifiers.new("HF_DetailArray", 'ARRAY')
+        arr.fit_type = 'FIT_CURVE'
+        arr.curve = curve_obj
+        arr.use_relative_offset = True
+        offs = [0.0, 0.0, 0.0]
+        offs['XYZ'.index(self.axis[-1])] = 1.0
+        arr.relative_offset_displace = offs
+        arr.use_merge_vertices = self.merge
+
+        mod = dup.modifiers.new("HF_DetailCurve", 'CURVE')
+        mod.object = curve_obj
+        mod.deform_axis = self.axis
+
+        for o in list(context.selected_objects):
+            o.select_set(False)
+        dup.select_set(True)
+        context.view_layer.objects.active = dup
+        return {'FINISHED'}

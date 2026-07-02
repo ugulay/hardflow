@@ -98,6 +98,7 @@ _CURVE_ITEMS = (
     ("mesh.hardflow_pipe", "Pipe", 'MOD_SCREW', {}),
     ("mesh.hardflow_cable", "Cable / Rope", 'FORCE_CURVE', {}),
     ("mesh.hardflow_sweep", "Sweep (Follow Me)", 'MOD_SIMPLEDEFORM', {}),
+    ("object.hardflow_path_detail", "Detail Along Path", 'MOD_ARRAY', {}),
 )
 
 _ASSET_ITEMS = (
