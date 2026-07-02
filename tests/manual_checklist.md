@@ -33,6 +33,12 @@ Everything here is what's left: **the interactive tools.**
 - [ ] **Help & Shortcuts sub-panel (P2)** — a folded **Help & Shortcuts** section
       lists Global / While-drawing / Direct-modeling shortcuts in aligned
       key → meaning rows, ending with a "rebind in Preferences" hint.
+- [ ] **Collapsible tool sections (P3)** — the main Hardflow panel now keeps
+      **Boolean Draw** (the hero) always visible, and **Build / Edit / Curves /
+      Display & Mesh** are their own **foldable sub-panels** (Build + Edit open,
+      Curves + Display folded by default). Every button still fires the same
+      operator; folds persist. No duplicate/again registration error on
+      disable→enable.
 
 > Suspect spots flagged in `CLAUDE.md`: the `temp_override` + `modifier_apply`
 > in `core/boolean.py`, and the projection math in `_build_and_apply`

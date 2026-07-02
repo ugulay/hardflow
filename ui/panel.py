@@ -81,9 +81,55 @@ class HARDFLOW_PT_tools(Panel):
                      icon='CHECKMARK')
         self._draw_health(context, col)
 
-        # 2. Build -- create geometry to model on.
-        col = layout.column(align=True)
-        col.label(text="Build", icon='MESH_GRID')
+    # Recomputing mesh health rebuilds a bmesh on every panel redraw; skip it on
+    # heavy meshes so the sidebar stays responsive (mirrors the geo-snap cap).
+    _HEALTH_MAX_VERTS = 20000
+
+    def _draw_health(self, context, col):
+        """Passive pre-cut warning: if the active mesh has boolean-breaking
+        problems (non-manifold / zero-area geometry), flag it and offer the
+        one-click normal-recalc fix, so failures are caught before drawing."""
+        obj = context.active_object
+        if (obj is None or obj.type != 'MESH'
+                or len(obj.data.vertices) > self._HEALTH_MAX_VERTS):
+            return
+        summary = _cached_health_summary(obj)
+        if not summary:
+            return
+        box = col.box().column(align=True)
+        box.label(text="Cut may fail: " + summary, icon='ERROR')
+        box.operator("object.hardflow_recalc_normals",
+                     text="Recalculate Normals", icon='NORMALS_FACE')
+
+    def _draw_quickstart(self, layout, prefs):
+        """First-run onboarding card: the 3-step hero workflow + a one-click Cut
+        and the pie, with a dismiss (X) that persists via the show_quickstart
+        preference. Full reference lives in the Help & Shortcuts sub-panel."""
+        box = layout.box()
+        header = box.row(align=True)
+        header.label(text="Quick Start", icon='INFO')
+        header.prop(prefs, "show_quickstart", text="", icon='X', emboss=False)
+        col = box.column(align=True)
+        col.label(text="1.  Select a mesh (Object Mode)")
+        col.label(text="2.  Ctrl+Shift+D — draw a shape to cut it")
+        col.label(text="3.  Tab cycles Cut / Slice / Make mid-draw")
+        row = box.row(align=True)
+        row.operator("mesh.hardflow_draw", text="Cut Now",
+                     icon='MOD_BOOLEAN').mode = 'CUT'
+        row.operator("wm.call_menu_pie", text="Pie (Alt+Q)",
+                     icon='COLLAPSEMENU').name = "HARDFLOW_MT_pie"
+
+
+class HARDFLOW_PT_build(Panel):
+    bl_label = "Build"
+    bl_idname = "HARDFLOW_PT_build"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+
+    def draw(self, context):
+        col = self.layout.column(align=True)
         row = col.row(align=True)
         row.operator("object.hardflow_add_primitive", text="Cube",
                      icon='MESH_CUBE').kind = 'CUBE'
@@ -124,9 +170,17 @@ class HARDFLOW_PT_tools(Panel):
         row.operator("object.hardflow_add_guide", text="Guide", icon='IPO_LINEAR')
         row.operator("object.hardflow_loft", text="Loft", icon='MOD_SIMPLEDEFORM')
 
-        # 3. Edit -- direct-modeling tools that reshape existing geometry.
-        col = layout.column(align=True)
-        col.label(text="Edit", icon='TOOL_SETTINGS')
+
+class HARDFLOW_PT_edit(Panel):
+    bl_label = "Edit"
+    bl_idname = "HARDFLOW_PT_edit"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+
+    def draw(self, context):
+        col = self.layout.column(align=True)
         row = col.row(align=True)
         row.operator("mesh.hardflow_push_pull", text="Push/Pull",
                      icon='EMPTY_SINGLE_ARROW')
@@ -149,17 +203,34 @@ class HARDFLOW_PT_tools(Panel):
         col.operator("mesh.hardflow_extract_cutter", text="Extract Cutter",
                      icon='MOD_BOOLEAN')
 
-        # 4. Curves -- pipes, cables, swept profiles.
-        col = layout.column(align=True)
-        col.label(text="Curves", icon='MOD_SCREW')
-        row = col.row(align=True)
+
+class HARDFLOW_PT_curves(Panel):
+    bl_label = "Curves"
+    bl_idname = "HARDFLOW_PT_curves"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        row = self.layout.row(align=True)
         row.operator("mesh.hardflow_pipe", text="Pipe", icon='MOD_SCREW')
         row.operator("mesh.hardflow_cable", text="Cable", icon='FORCE_CURVE')
         row.operator("mesh.hardflow_sweep", text="Sweep", icon='MOD_SIMPLEDEFORM')
 
-        # 5. Display & mesh helpers.
-        col = layout.column(align=True)
-        col.label(text="Display", icon='OVERLAY')
+
+class HARDFLOW_PT_display(Panel):
+    bl_label = "Display & Mesh"
+    bl_idname = "HARDFLOW_PT_display"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        col = self.layout.column(align=True)
         row = col.row(align=True)
         row.operator("object.hardflow_display_toggle", text="Wire",
                      icon='SHADING_WIRE').mode = 'WIRE'
@@ -172,44 +243,6 @@ class HARDFLOW_PT_tools(Panel):
                      icon='COLOR')
         row.operator("object.hardflow_copy_material", text="Copy Mat",
                      icon='MATERIAL')
-
-    # Recomputing mesh health rebuilds a bmesh on every panel redraw; skip it on
-    # heavy meshes so the sidebar stays responsive (mirrors the geo-snap cap).
-    _HEALTH_MAX_VERTS = 20000
-
-    def _draw_health(self, context, col):
-        """Passive pre-cut warning: if the active mesh has boolean-breaking
-        problems (non-manifold / zero-area geometry), flag it and offer the
-        one-click normal-recalc fix, so failures are caught before drawing."""
-        obj = context.active_object
-        if (obj is None or obj.type != 'MESH'
-                or len(obj.data.vertices) > self._HEALTH_MAX_VERTS):
-            return
-        summary = _cached_health_summary(obj)
-        if not summary:
-            return
-        box = col.box().column(align=True)
-        box.label(text="Cut may fail: " + summary, icon='ERROR')
-        box.operator("object.hardflow_recalc_normals",
-                     text="Recalculate Normals", icon='NORMALS_FACE')
-
-    def _draw_quickstart(self, layout, prefs):
-        """First-run onboarding card: the 3-step hero workflow + a one-click Cut
-        and the pie, with a dismiss (X) that persists via the show_quickstart
-        preference. Full reference lives in the Help & Shortcuts sub-panel."""
-        box = layout.box()
-        header = box.row(align=True)
-        header.label(text="Quick Start", icon='INFO')
-        header.prop(prefs, "show_quickstart", text="", icon='X', emboss=False)
-        col = box.column(align=True)
-        col.label(text="1.  Select a mesh (Object Mode)")
-        col.label(text="2.  Ctrl+Shift+D — draw a shape to cut it")
-        col.label(text="3.  Tab cycles Cut / Slice / Make mid-draw")
-        row = box.row(align=True)
-        row.operator("mesh.hardflow_draw", text="Cut Now",
-                     icon='MOD_BOOLEAN').mode = 'CUT'
-        row.operator("wm.call_menu_pie", text="Pie (Alt+Q)",
-                     icon='COLLAPSEMENU').name = "HARDFLOW_MT_pie"
 
 
 class HARDFLOW_PT_help(Panel):
