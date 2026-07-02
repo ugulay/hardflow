@@ -15,6 +15,7 @@ price tag.
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.21.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Patreon](https://img.shields.io/badge/Patreon-support%20the%20project-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/ugurgulay)
 
 </div>
 
@@ -519,6 +520,17 @@ math layer is tested with plain CPython (`python tests/test_core.py`).
 Layering rule: `ui` and `operators` → may depend on `core`; `core` **never**
 depends on `ui`. A new feature usually means adding a pure function to core plus
 a thin operator that calls it.
+
+## Support the project
+
+Hardflow is free and always will be — GPLv3, no license fee, no paid tiers. If
+it replaces a paid add-on for you and you want to keep development moving
+(new tools, Blender version upkeep, bug turnaround), you can support it on
+Patreon:
+
+<a href="https://www.patreon.com/ugurgulay"><img src="https://img.shields.io/badge/Patreon-become%20a%20patron-FF424D?logo=patreon&logoColor=white&style=for-the-badge" alt="Become a patron"></a>
+
+Starring the repo and sharing your builds help too.
 
 ## Contributing
 
