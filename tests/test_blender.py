@@ -2063,6 +2063,26 @@ def test_panel_draw_mode_scene_property():
     assert not hasattr(bpy.types.Scene, "hardflow_draw_mode")   # cleaned up
 
 
+def test_translations_catalog_and_register():
+    # The tr_TR UI localization catalog is well-formed and register()/unregister()
+    # are guarded so Blender's "already registered" error can't strand the add-on
+    # (hardflow.register() is called many times across this suite).
+    from hardflow import translations as tr
+    cat = tr.TRANSLATIONS["tr_TR"]
+    assert cat, "empty tr_TR catalog"
+    for key, val in cat.items():
+        assert isinstance(key, tuple) and len(key) == 2, key      # (context, src)
+        assert key[0] == "*", key
+        assert isinstance(val, str) and val, (key, val)
+    assert cat[("*", "Cut")] == "Kes"
+    assert cat[("*", "Push/Pull")] == "İt/Çek"
+    # idempotent register (re-registers cleanly) + double unregister is a no-op
+    tr.register()
+    tr.register()
+    tr.unregister()
+    tr.unregister()
+
+
 def test_choose_solver_from_health():
     # a clean, closed manifold cube starts on the fast MANIFOLD solver where it
     # exists (Blender 4.5+), else the accurate EXACT solver

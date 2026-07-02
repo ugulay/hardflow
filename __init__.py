@@ -3,7 +3,7 @@
 import bpy
 from bpy.props import PointerProperty
 
-from . import preferences, keymaps, gizmos
+from . import preferences, keymaps, gizmos, translations
 from .operators import (draw_cut, cutters, pipe, decals,
                         boolean_ops, assets, push_pull, offset,
                         construction, hardops, edge_tool, hardflow_mode,
@@ -107,6 +107,7 @@ _classes = (
 )
 
 def register():
+    translations.register()   # UI localization catalog (tr_TR); before the UI
     for cls in _classes:
         bpy.utils.register_class(cls)
     # Trim-sheet region data lives on the Image datablock (travels with the
@@ -134,6 +135,7 @@ def unregister():
     decal_library.unregister()
     panel.unregister()
     gizmos.unregister()
+    translations.unregister()
     if hasattr(bpy.types.Scene, "hardflow_trim_image"):
         del bpy.types.Scene.hardflow_trim_image
     if hasattr(bpy.types.Image, "hardflow_trim"):
