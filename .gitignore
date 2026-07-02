@@ -6,3 +6,4 @@ __pycache__/
 *.blend1
 .vscode/
 .idea/
+promo/out/
