@@ -278,6 +278,33 @@ def test_live_boolean_preview_and_cutter_options():
         hardflow.unregister()
 
 
+def test_vent_radial_draw_options():
+    # v1.20 Competitive Edge: the VENT shape is registered on the draw operator,
+    # the array-axis enum accepts RADIAL, the vent-ratio pref exists, and the
+    # pure vent slats extrude into one multi-prism cutter like the array does.
+    _reset()
+    hardflow.register()
+    try:
+        from hardflow.preferences import get_prefs
+        from hardflow.operators.draw_cut import _SHAPES
+        assert any(s[0] == 'VENT' for s in _SHAPES)
+        prefs = get_prefs(bpy.context)
+        assert hasattr(prefs, "draw_vent_ratio")
+        assert math.isclose(prefs.draw_vent_ratio, 0.5, abs_tol=1e-6)
+        prefs.draw_array_axis = 'RADIAL'      # the enum accepts the new item
+        assert prefs.draw_array_axis == 'RADIAL'
+        prefs.draw_array_axis = 'X'
+    finally:
+        hardflow.unregister()
+
+    slats = grid.vent_slats(grid.box_points((0, 0), (4, 2)), 3)
+    vd = Vector((0.0, 0.0, -1.0))
+    sets = [([Vector((x, y, 0.0)) for x, y in s], vd) for s in slats]
+    mesh = geometry.build_prisms(sets, 1.0)
+    assert mesh is not None
+    assert len(mesh.polygons) == 18   # 3 closed slat boxes x 6 faces
+
+
 def test_live_preview_world_aabb_culling():
     # The high-poly live-preview guard: draw_cut._world_aabb builds a target's
     # world bounding box, and core.preview_cache.boxes_overlap decides whether the

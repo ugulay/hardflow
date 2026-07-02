@@ -34,6 +34,9 @@ _SHAPES = [
     ('SLOT', "Slot", "Rounded-rectangle / stadium (cap segments from [ ])"),
     ('STAR', "Star", "N-pointed star (point count from [ ])"),
     ('ARC', "Arc", "Filled circular sector / pie wedge (sweep from [ ])"),
+    ('VENT', "Vent", "Vent / grill: parallel louvre slots filling the drawn "
+                     "rectangle (slat count from [ ], slot ratio from "
+                     "preferences)"),
 ]
 _MODES = [
     ('CUT', "Cut", "Boolean DIFFERENCE"),
@@ -248,10 +251,11 @@ class HARDFLOW_OT_draw(Operator):
             elif self.points:
                 self._commands.undo()   # pops the screen + world point together
 
-        elif event.type in {'Q', 'W', 'E', 'R', 'T', 'Y', 'U'} \
+        elif event.type in {'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I'} \
                 and event.value == 'PRESS':
             self.shape = {'Q': 'BOX', 'W': 'CIRCLE', 'E': 'POLY', 'R': 'NGON',
-                          'T': 'SLOT', 'Y': 'STAR', 'U': 'ARC'}[event.type]
+                          'T': 'SLOT', 'Y': 'STAR', 'U': 'ARC',
+                          'I': 'VENT'}[event.type]
             self.points = []
             self.world_points = []
             self._commands.clear()   # drop the half-drawn shape's journal
@@ -261,12 +265,15 @@ class HARDFLOW_OT_draw(Operator):
               and event.value == 'PRESS'):
             step = 1 if event.type == 'RIGHT_BRACKET' else -1
             # On ARC the bracket keys grow / shrink the sector sweep (15deg steps,
-            # clamped to a full turn); for the other shapes they set the side /
-            # point / cap-segment count.
+            # clamped to a full turn); on VENT they set the slat count (down to a
+            # single slot); for the other shapes the side / point / cap-segment
+            # count.
             if self.shape == 'ARC':
                 self.arc_sweep = max(math.radians(15),
                                      min(math.tau,
                                          self.arc_sweep + step * math.radians(15)))
+            elif self.shape == 'VENT':
+                self.sides = max(1, min(64, self.sides + step))
             else:
                 self.sides = max(3, min(64, self.sides + step))
 
@@ -308,7 +315,10 @@ class HARDFLOW_OT_draw(Operator):
             self.array_count = self.array_count % 6 + 1  # cycle 1..6
 
         elif event.type == 'D' and event.value == 'PRESS':
-            self.array_axis = {'X': 'Y', 'Y': 'Z', 'Z': 'X'}[self.array_axis]
+            # X / Y / Z linear rails, then RADIAL: spin the copies about the
+            # construction-plane origin (re-anchor it with H for bolt circles).
+            self.array_axis = {'X': 'Y', 'Y': 'Z', 'Z': 'RADIAL',
+                               'RADIAL': 'X'}[self.array_axis]
 
         elif event.type == 'M' and event.value == 'PRESS':
             self.mirror_axis = {'': 'X', 'X': 'Y', 'Y': 'Z', 'Z': ''}[self.mirror_axis]
@@ -784,6 +794,10 @@ class HARDFLOW_OT_draw(Operator):
             return grid.star_points(a, b, self.sides)
         if self.shape == 'ARC':
             return grid.arc_points(a, b, self.sides, self.arc_sweep)
+        if self.shape == 'VENT':
+            # The 2D outline is the outer rectangle; the slat expansion happens
+            # in _processed_corner_sets, so the 3D cage shows the real slots.
+            return grid.box_points(a, b)
         return []
 
     def _shape_screen_points(self, context):
@@ -873,7 +887,7 @@ class HARDFLOW_OT_draw(Operator):
         # keeps the status plus one compact line for the less-frequent keys.
         lines = [
             status,
-            ("Q/W/E/R/T/Y/U shape    type = exact size    < > plane    "
+            ("Q/W/E/R/T/Y/U/I shape    type = exact size    < > plane    "
              "Shift+< > rotate    Ctrl=snap grid    Ctrl+Wheel grid    "
              "PgUp/Dn depth (Shift fine)    H origin    G stamp    S save", dim),
         ]
@@ -921,6 +935,7 @@ class HARDFLOW_OT_draw(Operator):
         hud.draw_shortcut_bar(region, [
             ("Tab", self.mode.title()),
             ("[ ]", "Sides/Arc"),
+            ("A/D", "Array", self.array_count > 1),
             ("B", "Bevel", self.bevel_cut),
             ("C", "Cutter Bvl", self.cutter_bevel),
             ("J", "Live Bool", self.live_bool),
@@ -995,8 +1010,9 @@ class HARDFLOW_OT_draw(Operator):
 
     def _processed_corner_sets(self, context, screen_pts):
         """World corner sets for the drawn shape after the in-draw operations
-        (v1.4): in-plane rotation + inset, then replicated for Array and Mirror.
-        Returns (sets, normal) where sets is a list of (corners, view_dir); or
+        (v1.4): the VENT slat expansion, in-plane rotation + inset, then
+        replicated for Array (linear rail or radial spin) and Mirror. Returns
+        (sets, normal) where sets is a list of (corners, view_dir); or
         ([], None) when the shape can't be projected onto the plane."""
         from ..core import offset as offset_mod
         region, rv3d = context.region, context.region_data
@@ -1006,27 +1022,49 @@ class HARDFLOW_OT_draw(Operator):
         if any(c is None for c in world):
             return [], None
 
-        # Rotation + inset happen in the plane's (u, v) meter space.
+        # Everything in-plane happens in the plane's (u, v) meter space.
         uv = [raycast.world_to_plane_uv(c, origin, right, up) for c in world]
+        uv_sets = [uv]
+        if self.shape == 'VENT':
+            # Expand the drawn rectangle into the louvre slot rectangles before
+            # rotating, so the slats stay square with the drawn box.
+            slats = grid.vent_slats(uv, self.sides,
+                                    get_prefs(context).draw_vent_ratio)
+            if slats:
+                uv_sets = slats
         if abs(self.rotation) > 1e-9:
-            uv = grid.rotate_2d(uv, self.rotation)
+            pivot = grid.centroid(uv)   # shared pivot keeps the pattern rigid
+            uv_sets = [grid.rotate_2d(s, self.rotation, pivot) for s in uv_sets]
         if abs(self.inset) > 1e-9:
-            off = offset_mod.offset_polygon(uv, self.inset)
-            if off is not None:
-                uv = off
-        base = [raycast.plane_uv_to_world(u, v, origin, right, up) for u, v in uv]
+            insetted = []
+            for s in uv_sets:
+                off = offset_mod.offset_polygon(s, self.inset)
+                insetted.append(off if off is not None else s)
+            uv_sets = insetted
 
-        # Array: stamp N copies edge-to-edge along a world axis.
-        sets = [(base, normal)]
-        if self.array_count > 1:
+        # Array: RADIAL spins the copies about the plane / grid origin (set it
+        # with H -- the bolt-circle pivot) in uv space; X/Y/Z stamps them
+        # edge-to-edge along a world axis. Both replicate every uv set, so a
+        # VENT pattern arrays as a whole.
+        if self.array_count > 1 and self.array_axis == 'RADIAL':
+            uv_sets = [spun for s in uv_sets
+                       for spun in grid.radial_sets(s, self.array_count)]
+
+        def lift(s):
+            return [raycast.plane_uv_to_world(u, v, origin, right, up)
+                    for u, v in s]
+
+        bases = [lift(s) for s in uv_sets]
+        sets = [(b, normal) for b in bases]
+        if self.array_count > 1 and self.array_axis != 'RADIAL':
             axis = self._AXIS_VEC[self.array_axis]
             idx = {'X': 0, 'Y': 1, 'Z': 2}[self.array_axis]
-            coords = [c[idx] for c in base]
+            coords = [c[idx] for b in bases for c in b]
             step = max(coords) - min(coords)
             if step < 1e-6:
                 step = self.grid_size
-            sets = [([c + axis * (step * i) for c in base], normal)
-                    for i in range(self.array_count)]
+            sets = [([c + axis * (step * i) for c in b], normal)
+                    for i in range(self.array_count) for b in bases]
 
         # Mirror: reflect every set across the plane through the object origin.
         if self.mirror_axis:

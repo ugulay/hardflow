@@ -28,6 +28,7 @@ DRAW_SHAPE_ITEMS = [
     ('SLOT', "Slot", 'MESH_CAPSULE'),
     ('STAR', "Star", 'SOLO_ON'),
     ('ARC', "Arc", 'MOD_SIMPLEDEFORM'),
+    ('VENT', "Vent", 'ALIGN_JUSTIFY'),
 ]
 
 
@@ -426,10 +427,12 @@ class HARDFLOW_PT_cutter_options(Panel):
         row = col.row(align=True)
         row.prop(prefs, "draw_array_count")
         row.prop(prefs, "draw_array_axis", text="")
+        col.prop(prefs, "draw_vent_ratio")
         legend = col.box().column(align=True)
         legend.label(text="Live keys while drawing", icon='INFO')
         legend.label(text="−/=  inset       ,/.  rotate")
-        legend.label(text="A/D  array       B/C  bevel       J  preview")
+        legend.label(text="A/D  array (D: X/Y/Z/Radial)   B/C  bevel")
+        legend.label(text="J  preview     H  origin (radial pivot)")
         col.separator()
         col.label(text="Topology & Shading")
         col.prop(prefs, "cut_dissolve_ngons")

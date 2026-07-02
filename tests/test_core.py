@@ -139,6 +139,57 @@ def test_rotate_2d_quarter_turn_about_centroid():
     assert math.isclose(r[1], 0.0, abs_tol=1e-9)
 
 
+def test_radial_sets_bolt_circle():
+    # 4 copies of a point offset from the pivot land on the 4 compass points.
+    sets = grid.radial_sets([(2.0, 0.0)], 4, center=(0.0, 0.0))
+    assert len(sets) == 4
+    got = [(round(s[0][0], 6), round(s[0][1], 6)) for s in sets]
+    assert got == [(2.0, 0.0), (0.0, 2.0), (-2.0, 0.0), (0.0, -2.0)]
+    # count < 2 is an identity: one unrotated copy
+    assert grid.radial_sets([(1.0, 1.0)], 1) == [[(1.0, 1.0)]]
+    # a custom sweep spreads the copies over sweep / count steps
+    sw = grid.radial_sets([(1.0, 0.0)], 3, center=(0.0, 0.0), sweep=math.pi)
+    x, y = sw[1][0]
+    assert math.isclose(x, math.cos(math.pi / 3), abs_tol=1e-9)
+    assert math.isclose(y, math.sin(math.pi / 3), abs_tol=1e-9)
+
+
+def test_vent_slats_equal_ribs():
+    # A 4 x 2 rect, 3 slats at ratio 0.5: slats span X (the long axis), stack
+    # along Y, and the border ribs equal the interior ribs (the framed look).
+    rect = grid.box_points((0.0, 0.0), (4.0, 2.0))
+    slats = grid.vent_slats(rect, 3, ratio=0.5)
+    assert len(slats) == 3
+    pitch = 2.0 / (3 + 1 - 0.5)
+    border = pitch * 0.5
+    for i, s in enumerate(slats):
+        xs = [p[0] for p in s]
+        ys = [p[1] for p in s]
+        assert math.isclose(min(xs), border, abs_tol=1e-9)
+        assert math.isclose(max(xs), 4.0 - border, abs_tol=1e-9)
+        assert math.isclose(min(ys), border + i * pitch, abs_tol=1e-9)
+        assert math.isclose(max(ys), border + i * pitch + pitch * 0.5,
+                            abs_tol=1e-9)
+    # the top border also matches the rib width
+    top = max(p[1] for p in slats[-1])
+    assert math.isclose(2.0 - top, border, abs_tol=1e-6)
+
+
+def test_vent_slats_orientation_and_guards():
+    # A tall rect stacks the slats along X so they span the long Y axis.
+    tall = grid.box_points((0.0, 0.0), (2.0, 6.0))
+    slats = grid.vent_slats(tall, 2)
+    assert len(slats) == 2
+    for s in slats:
+        xs = [p[0] for p in s]
+        ys = [p[1] for p in s]
+        assert (max(ys) - min(ys)) > (max(xs) - min(xs))
+    # degenerate inputs give no slats instead of raising
+    assert grid.vent_slats([], 3) == []
+    assert grid.vent_slats(tall, 0) == []
+    assert grid.vent_slats([(0.0, 0.0), (4.0, 0.0)], 3) == []
+
+
 # --- transform: dice planes + fit scale (v1.5 / v1.8) ------------------------
 
 def test_dice_coordinates():

@@ -273,6 +273,60 @@ def rotate_2d(points, angle, center=None):
     return out
 
 
+def radial_sets(points, count, center=(0.0, 0.0), sweep=None):
+    """`count` copies of a 2D outline spun evenly about `center` -- the radial /
+    bolt-circle array (v1.20). Copy i is the outline rotated by i * step, where
+    step is `sweep` / count (default a full turn, so the copies close the
+    circle). The original outline is returned first, unrotated. count < 2 is an
+    identity. Pure 2D, like rotate_2d, so the operator spins the shape's plane
+    (u, v) coordinates about the plane / grid origin (H) and lifts them back."""
+    if count < 2:
+        return [list(points)]
+    total = math.tau if sweep is None else sweep
+    step = total / count
+    return [rotate_2d(points, step * i, center) if i else list(points)
+            for i in range(count)]
+
+
+def vent_slats(points, count, ratio=0.5):
+    """Split the bounding rectangle of a drawn 2D outline into `count` parallel
+    slot rectangles -- the vent / grill pattern (v1.20: draw one box, cut N
+    louvre slots). Slats span the rect's LONGER axis and stack along the shorter
+    one; each takes `ratio` (0..1) of its pitch, and the pitch is chosen so the
+    border rib equals the interior ribs (pitch = span / (count + 1 - ratio)),
+    the framed look a real vent has. The slat ends keep the same border. Returns
+    a list of 4-corner rectangles (each like box_points), or [] when the rect
+    degenerates. Pure 2D, unit-tested."""
+    if count < 1 or not points:
+        return []
+    ratio = max(0.05, min(0.95, ratio))
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    w, h = x1 - x0, y1 - y0
+    if w < 1e-9 or h < 1e-9:
+        return []
+    # Stack along the shorter axis so the slats span the longer one.
+    along_x = w >= h
+    stack = h if along_x else w         # pitch axis
+    pitch = stack / (count + 1.0 - ratio)
+    slot = pitch * ratio
+    border = pitch * (1.0 - ratio)      # equals the rib between two slots
+    end0 = (x0 if along_x else y0) + border
+    end1 = (x1 if along_x else y1) - border
+    if end1 - end0 < 1e-9 or slot < 1e-9:
+        return []
+    out = []
+    for i in range(count):
+        lo = (y0 if along_x else x0) + border + i * pitch
+        hi = lo + slot
+        if along_x:
+            out.append(box_points((end0, lo), (end1, hi)))
+        else:
+            out.append(box_points((lo, end0), (hi, end1)))
+    return out
+
+
 def _orient(a, b, c):
     """Sign of the a->b->c turn (>0 CCW, <0 CW, 0 collinear)."""
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])

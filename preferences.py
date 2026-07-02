@@ -449,9 +449,18 @@ class HARDFLOW_Preferences(AddonPreferences):
     )
     draw_array_axis: EnumProperty(
         name="Array Axis",
-        description="World axis the cutter array repeats along",
-        items=[('X', "X", ""), ('Y', "Y", ""), ('Z', "Z", "")],
+        description="World axis the cutter array repeats along; Radial spins "
+                    "the copies about the construction-plane / grid origin "
+                    "(set it live with H) for bolt circles",
+        items=[('X', "X", ""), ('Y', "Y", ""), ('Z', "Z", ""),
+               ('RADIAL', "Radial", "Spin the copies about the grid origin")],
         default='X',
+    )
+    draw_vent_ratio: FloatProperty(
+        name="Vent Slot Ratio",
+        description="VENT shape: fraction of each pitch that is open slot "
+                    "(the rest stays solid rib; border ribs match)",
+        default=0.5, min=0.05, max=0.95, subtype='FACTOR',
     )
     default_solver: EnumProperty(
         name="Boolean Solver",
@@ -531,6 +540,7 @@ class HARDFLOW_Preferences(AddonPreferences):
             row = col.row(align=True)
             row.prop(self, "draw_array_count")
             row.prop(self, "draw_array_axis", text="")
+            col.prop(self, "draw_vent_ratio")
             col.separator()
             col.label(text="Topology & shading", icon='MOD_DATA_TRANSFER')
             col.prop(self, "cut_dissolve_ngons")
