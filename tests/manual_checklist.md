@@ -46,6 +46,46 @@ Everything here is what's left: **the interactive tools.**
 
 ---
 
+## 0b. UX polish (Tracks 1–4)
+
+**Track 1 — native-feel HUD.**
+- [ ] **Cursor dimension:** while drawing a **Box** (and while dragging
+      **Push/Pull** / **Offset**), a small pill next to the **cursor** shows the
+      live size / distance — not only the bottom-left panel.
+- [ ] **UI scale:** Preferences ▸ Interface ▸ Display ▸ **Resolution Scale** →
+      1.5–2.0. The HUD panel, bottom **shortcut bar** and snap rings scale up
+      proportionally (readable on hiDPI, not a few pixels).
+- [ ] **Theme:** switch to a **light** theme (Preferences ▸ Themes). The HUD
+      panel background/text follow the theme (readable, not a fixed dark box);
+      the **active** shortcut-key box uses your line color; the active-key glyph
+      stays legible.
+
+**Track 2 — status bar + F9 redo.**
+- [ ] **Status bar:** start each modal tool (Draw, Push/Pull, Offset, Edge Bevel,
+      Loop Cut, Pipe/Cable/Sweep, HardFlow Mode) → the **bottom status bar** shows
+      its key hints; the hint **clears** when the tool exits.
+- [ ] **F9 redo — Push/Pull:** push/pull a face, apply, press **F9** → "Adjust
+      Last Operation" shows **Distance / Copy**; changing Distance re-extrudes
+      **without** re-entering the modal loop.
+- [ ] **F9 redo — Offset:** offset a face (optionally `E` extrude), apply, **F9**
+      → shows **Thickness / Extrude Inner / Depth**; editing them re-applies.
+
+**Track 3 — panel.**
+- [ ] **Mode dropdown:** N-panel ▸ **Boolean Draw** shows a **Mode** dropdown.
+      Pick **Slice**, click the **Circle** shape button → a **Slice with a Circle**
+      draw starts (any mode × shape now reachable). The big **Draw (<mode>)** hero
+      button launches the current mode with a Box.
+- [ ] **Disabled hint:** with **no active mesh**, the panel shows
+      "**Boolean & Edit need an active mesh**" and the draw/edit buttons are greyed.
+
+**Track 4 — Turkish UI (i18n).**
+- [ ] Preferences ▸ Interface ▸ **Translation** → Language **Türkçe (Turkish)**,
+      enable **Interface**. The Hardflow panel labels show in Turkish
+      (Kes / Dilimle / İt/Çek / İnşa / Eğriler / Kesicileri Uygula …). Switching
+      the language back to English restores the English labels.
+
+---
+
 ## 1. Boolean draw (baseline — confirms projection works)
 
 Setup: add a default cube, stay in Object Mode, keep it selected/active.

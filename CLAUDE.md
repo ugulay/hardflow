@@ -145,6 +145,32 @@ Surface toggle row. (P2) **onboarding** — a dismissible **Quick Start** card
 `bl_parent_id` sub-panels (Boolean stays the always-visible hero). GUI verification
 tracked in `tests/manual_checklist.md` (Module 2 + the P0–P3 items).
 
+**UX Tracks 1–4.** A follow-up pass (each its own commit) closing the remaining
+native-feel gaps, still one-directional: (T1) **native-feel HUD** — `ui/draw.py`
+multiplies every HUD / shortcut-bar / snap-marker size by
+`preferences.system.ui_scale` (constant physical size on hiDPI) and pulls
+background/text/border from the active theme (`_theme_hud_colors`/
+`_theme_bar_colors`, hardcoded palette kept as the headless fallback; active-key
+glyph via `_contrast_text`); new `draw_cursor_label` shows the live size/distance
+in a pill **at the cursor** (Draw Cut + the shared `face_tool._cursor_label` hook →
+Push/Pull distance, Offset thickness/depth); `draw_shortcut_bar` gains an `accent`
+arg the tools pass. (T2) **status bar + F9 redo** — every modal tool writes a
+native `workspace.status_text_set` hint on invoke and clears it on cleanup (shared
+`face_tool._set_status` covers the four face-drag tools; Draw Cut, Pipe/Cable/Sweep,
+HardFlow Mode add their own); **Push/Pull + Offset gain real bpy properties +
+`execute()` + a redo `draw()`** so "Adjust Last Operation" (F9) re-applies
+non-modally and the tools are scriptable (`EXEC_DEFAULT`) — the interactive
+`invoke()` modal path is unchanged. (T3) **panel** — a persistent
+`Scene.hardflow_draw_mode` EnumProperty (registered by `ui/panel.register()`) drives
+a **Mode dropdown + hero Draw button + 3×2 shape grid** so every operation × shape
+is one click (was CUT-only shapes / BOX-only modes); a "Boolean & Edit need an
+active mesh" hint explains the poll-greyed buttons. (T4) **i18n** — new
+`translations.py` registers a `bpy.app.translations` **tr_TR** catalog (~70 UI
+strings; guarded double-register). Custom brand icons were intentionally **not**
+faked — they need real artwork (wire via the decal library's `bpy.utils.previews`
+once assets exist). Tests: +5 headless (push/pull + offset execute, draw-mode Scene
+prop, translations catalog); GUI items in `tests/manual_checklist.md` §0b.
+
 ## FIRST TASK: smoke test inside Blender
 
 This code **has been written and syntax-verified, but has not yet been run in a
@@ -184,6 +210,7 @@ ops ─┘
 | `__init__.py` | Registration orchestration, the `_classes` tuple |
 | `keymaps.py` | Shortcut registration + preferences rebind UI (`register_keymaps`, `draw_keymap_prefs`); defaults Alt+Q / Ctrl+Shift+D |
 | `preferences.py` | Settings + the `get_prefs(context)` accessor |
+| `translations.py` | UI localization: a `bpy.app.translations` **tr_TR** catalog (`TRANSLATIONS`, ~70 strings) with guarded `register`/`unregister` (double-register safe), wired into `__init__` — the interface shows Turkish when Blender's language + Translate-Interface are on. Add a language = one more top-level dict |
 | `core/raycast.py` | Screen↔3D projection + plane (u,v) + surface ray (`screen_to_plane`, `view_direction`, `world_to_plane_uv`, `plane_uv_to_world`, `world_to_screen`, `ray_cast_surface`/`ray_cast_surface_ex` (w/ `ignore` to skip the live preview), `face_edge_tangent` (smart edge-aligned orient; `near_point` aligns to the edge nearest the click for the SURFACE grid), `basis_from_normal`, `view_basis`/`surface_basis_at` (the shared VIEW + on-face SURFACE construction basis; draw_cut and the HardFlow Mode shell both delegate), `closest_axis_distance`) |
 | `core/grid.py` | World-scale + angle + scalar snap, shape points, construction grid, 2D rotation (`snap_world`, `snap_scalar`, `world_grid_segments`, `centered_grid_segments`, `snap_angle`, `box_points`, `circle_points`, `ngon_points`, `slot_points` (stadium), `star_points` (n-pointed star), `arc_points` (pie sector), `centroid`, `rotate_2d`, `is_self_intersecting`, `point_in_polygon`, `polygons_overlap` (knife footprint test), `lock_distance` (numeric exact-size entry)) |
 | `core/snap.py` | Vertex/edge geometry snap, pure 2D (`nearest_point`, `closest_point_on_segment`, `nearest_on_segments`, `resolve_snap` (nearest-wins disambiguation, vertex priority breaks ties), `snap_to_candidates` (1-D inference: snap a scalar to the nearest feature value)) |
@@ -221,10 +248,10 @@ ops ─┘
 | `operators/decals.py` | Decal placement/management/bake/library/trim/atlas + v1.7 create/match/retrim/conform/transfer + editable library (`HARDFLOW_OT_place_decal/select_decal/remove_decal/bake_decal/load_decal_image/load_height_map/library_place/load_trim_sheet/atlas_decals/match_decal/retrim_decal/conform_decal/transfer_decal/create_decal/library_rename/library_delete`). `place_decal` also takes a **`region_index`** into the sheet's custom `hardflow_trim` regions (v1.16): a whole-image / equal-grid-cell / custom-region sub-rect all flow through the one `_uv_rect`/`_wh` path, Up/Down cycles regions; its `_build_decal` threads the height-map prefs (`decal_height_image`/`decal_bump_strength`/`decal_height_invert`) into `make_image_decal`. `load_height_map` loads a grayscale image and points `decal_height_image` at it |
 | `operators/trim_editor.py` | **Trim Sheet UV editor (v1.16):** the region data model (`HARDFLOW_TrimRegion`/`HARDFLOW_TrimSheet` PropertyGroups stored on `bpy.types.Image.hardflow_trim`; `Scene.hardflow_trim_image` points at the active sheet) + the interactive modal `HARDFLOW_OT_trim_editor` (draws the sheet as a screen-space canvas, LMB-drag = new region, drag handles = resize, click = select/move, `C`/`Shift+C` = guillotine split, `X` = delete, `A` = add, `Tab` = next, `G`/`[ ]`/wheel = snap, Enter/Esc = confirm/cancel-via-snapshot; all rect math via `core/atlas`) + region-management ops (`HARDFLOW_OT_load_trim_image`/`trim_region_add`/`trim_region_remove`/`trim_grid_regions`/`place_trim_region`/`retrim_region`) + **chroma-key background removal** (`HARDFLOW_OT_trim_chroma_key`: make a key colour transparent — eyedropper or corner-sample, tolerance + edge-softness feather, copy `<name>_cutout` (regions carried) or in-place; numpy fast path + `atlas.chroma_key` fallback) |
 | `operators/assets.py` | INSERT placement (auto-scale + insert-grid snap, v1.8) + library + mark + material INSERT + asset-pack export (`HARDFLOW_OT_place_asset/load_asset/asset_library_place/mark_asset/material_insert/export_asset`) |
-| `ui/draw.py` | GPU + blf helpers: shapes/points/fills/grid, the **framed HUD** (`draw_hud` with a bordered panel + optional accent `title`/header — every modal tool's premium overlay), the viewport-guide primitives (`draw_rect_outline`, `draw_rect_fill`, `draw_guide_line`, `draw_dashed_line`, `draw_snap_ring`, `draw_mirror_plane`, `fade_color` for translucent / fade-in overlays), plus **`draw_image`** (a GPU texture as a screen-space quad — the trim-editor canvas) and **`draw_text`** (a single blf label — per-region names), and the **v1.16+ Module 2 polish** — **`draw_shortcut_bar`** (a premium translucent bottom bar of `[KEY] Label` chips with a live accent = engaged/current state) + **`draw_alignment_guides`** (dashed full-span guides when the cursor is square with a placed point), both packing/aligning via the pure `core/hud.py`; **`draw_snap_marker`** (the shared ring + faded-dot "snapped here" marker — the UX-overhaul unification every draw tool now uses instead of a bare dot) |
+| `ui/draw.py` | GPU + blf helpers: shapes/points/fills/grid, the **framed HUD** (`draw_hud` with a bordered panel + optional accent `title`/header — every modal tool's premium overlay), the viewport-guide primitives (`draw_rect_outline`, `draw_rect_fill`, `draw_guide_line`, `draw_dashed_line`, `draw_snap_ring`, `draw_mirror_plane`, `fade_color` for translucent / fade-in overlays), plus **`draw_image`** (a GPU texture as a screen-space quad — the trim-editor canvas) and **`draw_text`** (a single blf label — per-region names), and the **v1.16+ Module 2 polish** — **`draw_shortcut_bar`** (a premium translucent bottom bar of `[KEY] Label` chips with a live accent = engaged/current state) + **`draw_alignment_guides`** (dashed full-span guides when the cursor is square with a placed point), both packing/aligning via the pure `core/hud.py`; **`draw_snap_marker`** (the shared ring + faded-dot "snapped here" marker — the UX-overhaul unification every draw tool now uses instead of a bare dot); and the **UX-Track-1 native-feel pass** — `_ui_scale` multiplies every size/pad by `preferences.system.ui_scale` (hiDPI-constant), `_theme_hud_colors`/`_theme_bar_colors` pull the panel/bar colors from the active theme (`_contrast_text` picks a legible active-key glyph; hardcoded palette kept as the headless fallback), and **`draw_cursor_label`** renders the live size/distance in a pill at the cursor (`draw_shortcut_bar` gained an `accent` arg) |
 | `ui/pie.py` | Categorized pie system: main pie (Cut/Push-Pull/Offset heroes + category openers + Apply Cutters) + Boolean/Build/Edit/Curves sub-pies (`HARDFLOW_MT_pie`, `HARDFLOW_MT_pie_boolean/build/edit/curves`); `_draw`/`_open` helpers. Same Boolean→Build→Edit→Curves category order as the header menu + N-panel |
 | `ui/menu.py` | 3D-View header dropdown covering every tool incl. Decals/Assets; data-driven `*_ITEMS` tables + submenus (Boolean/Build/Edit/Curves/Display/Decals/Assets — Edit = Push-Pull/Offset/Edge-Bevel/Loop-Cut) (`HARDFLOW_MT_menu`, `HARDFLOW_MT_menu_*`); `register`/`unregister` add the header hook |
-| `ui/panel.py` | N-panel in Boolean→Build→Edit→Curves→Display order (matches the pie + header menu): Boolean draw (Cut/Slice/Make/Intersect/Join/Knife + Circle/N-gon/Slot/Star/Arc shapes + Boolean-Selected + Apply Cutters), Build (cube/plane/cylinder/cone/sphere/tube + sketch faces + grid/guide/loft), Edit (Push/Pull/Offset/Edge-Bevel/Loop-Cut), Curves (pipe/cable/sweep), display + material rows, snap settings, **Cutter Options** (v1.13 prefs-backed inset/bevel/array/live-preview), **modifier-stack manager** (v1.5), **gizmo toggles** (v1.10), cutter list. The **UX/UI overhaul** made Build/Edit/Curves/Display their own **foldable sub-panels** (Boolean Draw stays the always-visible hero), added a dismissible **Quick Start** onboarding card (`_draw_quickstart`, `show_quickstart` pref) + a **Help & Shortcuts** cheat-sheet panel, a premium **Grid/Vertex/Surface** snap toggle row + boxed groups in the snap panel, and a readable Cutter-Options live-keys legend (`HARDFLOW_PT_tools/build/edit/curves/display/help/gizmos/snap/cutter_options/modifiers/cutters`) |
+| `ui/panel.py` | N-panel in Boolean→Build→Edit→Curves→Display order (matches the pie + header menu): Boolean draw (Cut/Slice/Make/Intersect/Join/Knife + Circle/N-gon/Slot/Star/Arc shapes + Boolean-Selected + Apply Cutters), Build (cube/plane/cylinder/cone/sphere/tube + sketch faces + grid/guide/loft), Edit (Push/Pull/Offset/Edge-Bevel/Loop-Cut), Curves (pipe/cable/sweep), display + material rows, snap settings, **Cutter Options** (v1.13 prefs-backed inset/bevel/array/live-preview), **modifier-stack manager** (v1.5), **gizmo toggles** (v1.10), cutter list. The **UX/UI overhaul** made Build/Edit/Curves/Display their own **foldable sub-panels** (Boolean Draw stays the always-visible hero), added a dismissible **Quick Start** onboarding card (`_draw_quickstart`, `show_quickstart` pref) + a **Help & Shortcuts** cheat-sheet panel, a premium **Grid/Vertex/Surface** snap toggle row + boxed groups in the snap panel, and a readable Cutter-Options live-keys legend (`HARDFLOW_PT_tools/build/edit/curves/display/help/gizmos/snap/cutter_options/modifiers/cutters`). **UX Track 3** reworked the Boolean section into a persistent **Mode dropdown + hero Draw button + 3×2 shape grid** (`DRAW_MODE_ITEMS`/`DRAW_SHAPE_ITEMS`, the `Scene.hardflow_draw_mode` prop registered by module-level `register`/`unregister`) so any operation × shape is one click, plus a "Boolean & Edit need an active mesh" poll hint |
 | `gizmos/__init__.py` | Gizmo subsystem registration (v1.10): `HARDFLOW_GizmoSettings` (Scene-stored toggles `show`/`move`/`rotate`/`scale`/`bevel`/`push_pull`) + its own `register`/`unregister` (gizmo classes via `register_class`, Workspace Tools via `tools.register`), called from the add-on `__init__` |
 | `gizmos/shapes.py` | Pure custom-gizmo geometry, stdlib math only (`arrow_tris` — +Z shaft+cone triangle soup for the Push/Pull handle) |
 | `gizmos/custom.py` | Custom modal Gizmo `HARDFLOW_GT_drag_extrude`: drag a face along its normal to extrude it live (snapshot/restore in invoke/modal/exit, reuses `core.geometry` extrude + `core.raycast.closest_axis_distance` — the gizmo form of `operators/push_pull.py`) |
@@ -243,6 +270,13 @@ ops ─┘
 Every new class must be added to the `_classes` tuple in `__init__.py`,
 otherwise it won't be registered. Keymaps live in `keymaps.register_keymaps()`;
 users can rebind them from the standard Blender keymap editor in preferences.
+
+**Non-class registrations** (Scene/Image properties, translation catalogs,
+header hooks, previews) live in their own module's `register`/`unregister`, all
+called from `__init__.register()`/`unregister()`: `menu`, `decal_library`,
+`panel` (the `Scene.hardflow_draw_mode` prop), `translations` (the tr_TR
+`bpy.app.translations` catalog), plus the `Image.hardflow_trim` /
+`Scene.hardflow_trim_image` pointers set inline in `__init__`.
 
 **Gizmos are the exception:** `Gizmo`/`GizmoGroup` classes and `WorkSpaceTool`s
 register through `gizmos.register()` (called from the add-on `__init__`), *not*
