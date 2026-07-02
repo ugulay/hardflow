@@ -26,6 +26,13 @@ Everything here is what's left: **the interactive tools.**
       toggle row / Boolean / Curves / Preview Colors); the **Grid / Vertex /
       Surface** snap toggles read as a 3-button row. Cutter Options shows a readable
       live-keys legend (not the old `-/= , . A D B C J` string).
+- [ ] **Quick Start card (P2)** — the top of the Hardflow N-panel shows a **Quick
+      Start** box (3-step workflow + **Cut Now** / **Pie** buttons). Its **X**
+      dismisses it and the choice **persists** (reopen Blender → still hidden;
+      re-enable via Preferences ▸ **Show Quick Start**). **Cut Now** starts a Cut.
+- [ ] **Help & Shortcuts sub-panel (P2)** — a folded **Help & Shortcuts** section
+      lists Global / While-drawing / Direct-modeling shortcuts in aligned
+      key → meaning rows, ending with a "rebind in Preferences" hint.
 
 > Suspect spots flagged in `CLAUDE.md`: the `temp_override` + `modifier_apply`
 > in `core/boolean.py`, and the projection math in `_build_and_apply`

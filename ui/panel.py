@@ -36,6 +36,10 @@ class HARDFLOW_PT_tools(Panel):
     def draw(self, context):
         layout = self.layout
 
+        prefs = get_prefs(context)
+        if getattr(prefs, "show_quickstart", False):
+            self._draw_quickstart(layout, prefs)
+
         # 1. Boolean -- the signature draw-to-cut workflow.
         col = layout.column(align=True)
         col.label(text="Boolean Draw", icon='MOD_BOOLEAN')
@@ -188,6 +192,73 @@ class HARDFLOW_PT_tools(Panel):
         box.label(text="Cut may fail: " + summary, icon='ERROR')
         box.operator("object.hardflow_recalc_normals",
                      text="Recalculate Normals", icon='NORMALS_FACE')
+
+    def _draw_quickstart(self, layout, prefs):
+        """First-run onboarding card: the 3-step hero workflow + a one-click Cut
+        and the pie, with a dismiss (X) that persists via the show_quickstart
+        preference. Full reference lives in the Help & Shortcuts sub-panel."""
+        box = layout.box()
+        header = box.row(align=True)
+        header.label(text="Quick Start", icon='INFO')
+        header.prop(prefs, "show_quickstart", text="", icon='X', emboss=False)
+        col = box.column(align=True)
+        col.label(text="1.  Select a mesh (Object Mode)")
+        col.label(text="2.  Ctrl+Shift+D — draw a shape to cut it")
+        col.label(text="3.  Tab cycles Cut / Slice / Make mid-draw")
+        row = box.row(align=True)
+        row.operator("mesh.hardflow_draw", text="Cut Now",
+                     icon='MOD_BOOLEAN').mode = 'CUT'
+        row.operator("wm.call_menu_pie", text="Pie (Alt+Q)",
+                     icon='COLLAPSEMENU').name = "HARDFLOW_MT_pie"
+
+
+class HARDFLOW_PT_help(Panel):
+    bl_label = "Help & Shortcuts"
+    bl_idname = "HARDFLOW_PT_help"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @staticmethod
+    def _kv(col, key, desc):
+        """One aligned key/description row -- the shortcut is left, its meaning
+        right, so the list scans like a cheat-sheet."""
+        split = col.split(factor=0.44, align=True)
+        split.label(text=key)
+        split.label(text=desc)
+
+    def draw(self, context):
+        layout = self.layout
+
+        box = layout.box()
+        box.label(text="Global", icon='KEYINGSET')
+        col = box.column(align=True)
+        self._kv(col, "Alt+Q", "Pie menu")
+        self._kv(col, "Ctrl+Shift+D", "Draw / Cut")
+        self._kv(col, "Ctrl+Shift+X", "HardFlow Mode")
+
+        box = layout.box()
+        box.label(text="While drawing", icon='MOD_BOOLEAN')
+        col = box.column(align=True)
+        self._kv(col, "Tab", "Cut / Slice / Make / …")
+        self._kv(col, "Q W E R T Y U", "Shape")
+        self._kv(col, "type number", "Exact size")
+        self._kv(col, "[  ]", "Sides / arc")
+        self._kv(col, "X · V", "Grid · vertex snap")
+        self._kv(col, "< >", "Projection plane")
+        self._kv(col, "J", "Live boolean preview")
+
+        box = layout.box()
+        box.label(text="Direct modeling", icon='TOOL_SETTINGS')
+        col = box.column(align=True)
+        self._kv(col, "Push/Pull", "Drag a face along its normal")
+        self._kv(col, "Offset", "Inset a face border (E = extrude)")
+        self._kv(col, "Edge Bevel", "Bevel an edge, no Edit Mode")
+        self._kv(col, "Loop Cut", "Insert an edge loop")
+
+        layout.label(text="Rebind keys in Preferences ▸ Shortcuts", icon='INFO')
 
 
 class HARDFLOW_PT_gizmos(Panel):

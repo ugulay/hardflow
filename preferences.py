@@ -54,6 +54,14 @@ class HARDFLOW_Preferences(AddonPreferences):
     ui_show_appearance: BoolProperty(default=True)
     ui_show_shortcuts: BoolProperty(default=True)
 
+    # Onboarding: the dismissible Quick Start card at the top of the N-panel.
+    # Flipped off by the card's own "Got it" button; persists across sessions.
+    show_quickstart: BoolProperty(
+        name="Show Quick Start",
+        description="Show the Quick Start card at the top of the Hardflow N-panel",
+        default=True,
+    )
+
     snap_enabled: BoolProperty(
         name="Grid Snap",
         description="Lock drawing points to the grid",

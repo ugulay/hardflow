@@ -89,6 +89,7 @@ _classes = (
     menu.HARDFLOW_MT_menu_decals,
     menu.HARDFLOW_MT_menu_assets,
     panel.HARDFLOW_PT_tools,
+    panel.HARDFLOW_PT_help,
     panel.HARDFLOW_PT_gizmos,
     panel.HARDFLOW_PT_snap,
     panel.HARDFLOW_PT_cutter_options,
