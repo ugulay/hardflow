@@ -163,6 +163,15 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "surface; more = tighter contour following, slightly slower",
         default=8, min=1, max=64,
     )
+    pipe_smooth: BoolProperty(
+        name="Smooth Path",
+        description="Interpolate the pipe/sweep path through the placed anchors "
+                    "with a smooth spline (centripetal Catmull-Rom) instead of "
+                    "straight segments; with a ROUND profile and Follow off the "
+                    "result is an editable auto-handle Bezier curve. Toggle "
+                    "live with C while drawing",
+        default=False,
+    )
     cable_radius: FloatProperty(
         name="Cable Radius (m)",
         description="Round cross-section radius of the cable/rope tool",
@@ -562,6 +571,7 @@ class HARDFLOW_Preferences(AddonPreferences):
             col.prop(self, "pipe_profile")
             col.prop(self, "pipe_follow_surface")
             col.prop(self, "pipe_follow_segments")
+            col.prop(self, "pipe_smooth")
             col.separator()
             col.prop(self, "cable_radius")
             col.prop(self, "cable_sag")

@@ -40,6 +40,7 @@ hud = _load("hud")
 hardsurface = _load("hardsurface")
 topology = _load("topology")
 modifiers = _load("modifiers")
+path = _load("path")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1495,6 +1496,107 @@ def test_order_edge_paths_two_disjoint_loops():
     assert len(chains) == 2
     for c in chains:
         assert c[0] == c[-1] and len(c) == 4
+
+
+# --- path: freehand stroke / spline math --------------------------------------
+
+def test_path_length_and_dedup():
+    assert path.path_length([(0, 0, 0), (3, 0, 0), (3, 4, 0)]) == 7.0
+    assert path.path_length([(1, 2, 3)]) == 0.0
+    out = path.dedup_points([(0, 0, 0), (0, 0, 0), (1, 0, 0), (1, 0, 0)])
+    assert out == [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+
+
+def test_rdp_simplify_collapses_straight_line():
+    line = [(i * 0.5, 0.0, 0.0) for i in range(9)]
+    assert path.rdp_simplify(line, 0.01) == [(0.0, 0.0, 0.0), (4.0, 0.0, 0.0)]
+    # epsilon <= 0 and tiny inputs are plain copies
+    assert path.rdp_simplify(line, 0.0) == [tuple(p) for p in line]
+    two = [(0, 0, 0), (1, 1, 1)]
+    assert path.rdp_simplify(two, 1.0) == [(0, 0, 0), (1, 1, 1)]
+
+
+def test_rdp_simplify_keeps_corner_and_noise_threshold():
+    # an L stroke with slight noise: the corner survives, the noise does not
+    pts = [(0, 0, 0), (1, 0.01, 0), (2, 0, 0), (2.01, 1, 0), (2, 2, 0)]
+    out = path.rdp_simplify(pts, 0.05)
+    assert out[0] == (0, 0, 0) and out[-1] == (2, 2, 0)
+    assert (2, 0, 0) in out and len(out) == 3
+    # a smaller epsilon keeps more detail (monotone refinement)
+    assert len(path.rdp_simplify(pts, 0.001)) == 5
+
+
+def test_rdp_simplify_doubled_back_stroke():
+    # the far point is ON the infinite line through the endpoints but far from
+    # the SEGMENT -- segment distance must keep it
+    pts = [(0, 0, 0), (3, 0, 0), (1, 0, 0)]
+    assert path.rdp_simplify(pts, 0.5) == [(0, 0, 0), (3, 0, 0), (1, 0, 0)]
+
+
+def test_chaikin_smooth_open_endpoints_and_corner():
+    pts = [(0, 0, 0), (1, 0, 0), (1, 1, 0)]
+    out = path.chaikin_smooth(pts, iterations=1)
+    assert out[0] == (0, 0, 0) and out[-1] == (1, 1, 0)
+    assert len(out) == 6                      # p0 + 2 per edge + pn
+    assert (1, 0, 0) not in out               # the corner got cut
+    # the cut points hug the corner at 1/4 offsets
+    assert (0.75, 0.0, 0.0) in out and (1.0, 0.25, 0.0) in out
+    assert path.chaikin_smooth(pts, iterations=0) == [tuple(p) for p in pts]
+
+
+def test_chaikin_smooth_closed_wraps():
+    sq = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    out = path.chaikin_smooth(sq, iterations=1, closed=True)
+    assert len(out) == 8                      # 2 per edge, seam edge included
+    assert all(p not in out for p in [tuple(p) for p in sq])
+
+
+def test_catmull_rom_interpolates_anchors():
+    anchors = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (2, 2, 1)]
+    out = path.catmull_rom(anchors, samples=4)
+    assert len(out) == (len(anchors) - 1) * 4 + 1
+    for a in anchors:                          # passes THROUGH every anchor
+        assert any(sum((p[i] - a[i]) ** 2 for i in range(3)) < 1e-16
+                   for p in out)
+    assert out[0] == (0, 0, 0) and out[-1] == (2, 2, 1)
+    assert out == path.catmull_rom(anchors, samples=4)   # deterministic
+
+
+def test_catmull_rom_closed_and_degenerate():
+    sq = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    out = path.catmull_rom(sq, samples=3, closed=True)
+    assert len(out) == 4 * 3                   # wraps, no repeated seam
+    for a in sq:
+        assert any(sum((p[i] - a[i]) ** 2 for i in range(3)) < 1e-16
+                   for p in out)
+    # fewer than 3 distinct points: plain copy (duplicates collapsed)
+    assert path.catmull_rom([(0, 0, 0), (0, 0, 0), (1, 0, 0)]) == \
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+
+
+def test_resample_path_even_spacing_and_endpoints():
+    line = [(0, 0, 0), (10, 0, 0)]
+    out = path.resample_path(line, 1.0)
+    assert len(out) == 11
+    for i, p in enumerate(out):
+        assert abs(p[0] - i) < 1e-9
+    # a step that does not divide the length keeps the true endpoint
+    out = path.resample_path([(0, 0, 0), (1, 0, 0)], 0.4)
+    assert out[0] == (0.0, 0.0, 0.0) and out[-1] == (1.0, 0.0, 0.0)
+    assert len(out) == 4                       # 0, .4, .8, 1
+    # a step longer than the path degenerates to the two endpoints
+    assert path.resample_path([(0, 0, 0), (1, 0, 0)], 5.0) == \
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+
+
+def test_resample_path_closed_no_seam_duplicate():
+    sq = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
+    out = path.resample_path(sq, 1.0, closed=True)
+    assert len(out) == 4                       # perimeter 4 / step 1, no seam
+    assert out[0] == (0.0, 0.0, 0.0)
+    # spans cross corners: spacing along the perimeter stays the step
+    out = path.resample_path(sq, 0.5, closed=True)
+    assert len(out) == 8
 
 
 def _run_all():

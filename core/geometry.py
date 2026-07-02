@@ -457,19 +457,30 @@ def build_tube(radius=0.5, inner_radius=0.3, depth=1.0, segments=32,
 
 
 def build_pipe(points, radius=0.05, bevel_res=4, name="Hardflow_Pipe",
-               closed=False):
+               closed=False, spline_type='POLY'):
     """Build a round-section pipe curve from a list of 3D points. At least 2
     points. `closed` makes the spline cyclic (a pipe/panel-line looping back to
-    its start -- the Cut-to-Trim boundary ring). Returns curve data; the caller
-    links it to an object."""
+    its start -- the Cut-to-Trim boundary ring). `spline_type` 'BEZIER' makes an
+    AUTO-handle Bezier through the points instead of a poly-line -- the light,
+    editable-afterwards smooth pipe (freehand / Smooth Path, v1.20). Returns
+    curve data; the caller links it to an object."""
     if len(points) < 2:
         return None
     curve = bpy.data.curves.new(name, 'CURVE')
     curve.dimensions = '3D'
-    spline = curve.splines.new('POLY')
-    spline.points.add(len(points) - 1)   # one point already exists
-    for i, p in enumerate(points):
-        spline.points[i].co = (p[0], p[1], p[2], 1.0)
+    if spline_type == 'BEZIER':
+        spline = curve.splines.new('BEZIER')
+        spline.bezier_points.add(len(points) - 1)   # one point already exists
+        for i, p in enumerate(points):
+            bp = spline.bezier_points[i]
+            bp.co = (p[0], p[1], p[2])
+            bp.handle_left_type = 'AUTO'
+            bp.handle_right_type = 'AUTO'
+    else:
+        spline = curve.splines.new('POLY')
+        spline.points.add(len(points) - 1)   # one point already exists
+        for i, p in enumerate(points):
+            spline.points[i].co = (p[0], p[1], p[2], 1.0)
     spline.use_cyclic_u = closed
     curve.bevel_depth = radius
     curve.bevel_resolution = bevel_res

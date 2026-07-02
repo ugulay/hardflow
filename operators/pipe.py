@@ -15,16 +15,33 @@
 # The real curve object is built and updated LIVE under the cursor, so the tube
 # you see while clicking is exactly what gets committed (Esc discards it).
 #
-# Shortcuts (modal): LMB add point, Enter create, Backspace undo, Esc/RMB
-#   cancel, Wheel radius, Ctrl+Wheel clearance, Tab/S toggle surface snap,
-#   V vertex/edge snap, X grid snap, F follow-surface (pipe), (cable only)
-#   Shift+Wheel sag, MMB navigation.
+# Input is IMPLICIT click-or-stroke (v1.20): a plain LMB click places one
+# anchor exactly as before, while pressing and DRAGGING past a few pixels
+# records a freehand stroke -- sampled through the same snap chain (so a stroke
+# dragged across the model hugs the surface), then reduced to clean anchors
+# with Ramer-Douglas-Peucker on release (core/path.rdp_simplify). Clicks and
+# strokes mix freely in one session; Backspace removes a whole stroke at once.
+# `C` toggles Smooth Path: a centripetal Catmull-Rom (core/path.catmull_rom)
+# through the anchors -- and when the profile is ROUND with Follow off, a light
+# AUTO-handle Bezier curve you can keep editing after commit.
+#
+# Shortcuts (modal): LMB click add point / drag freehand, Enter create,
+#   Backspace undo, Esc/RMB cancel, Wheel radius, Ctrl+Wheel clearance,
+#   Tab/S toggle surface snap, V vertex/edge snap, X grid snap,
+#   F follow-surface (pipe), C smooth path, (cable only) Shift+Wheel sag,
+#   MMB navigation.
 import bpy
 from bpy.types import Operator
+from mathutils import Vector
 
-from ..core import raycast, geometry, transform, snapping
+from ..core import raycast, geometry, transform, snapping, path
 from ..preferences import get_prefs
 from ..ui import draw as hud
+
+
+def _px_dist2(a, b):
+    dx, dy = a[0] - b[0], a[1] - b[1]
+    return dx * dx + dy * dy
 
 
 class _CurveDraw:
@@ -35,10 +52,15 @@ class _CurveDraw:
     _title = "Pipe"
     _has_sag = False
     _can_follow = True
+    _can_smooth = True     # cable overrides: sag defines its shape, not a spline
     _has_profile = False   # pipe overrides: square/rect swept cross-sections
     # Cross-sections the P key cycles through (subclasses override). ROUND falls
     # back to the curve bevel; the rest sweep a mesh section (build_pipe_mesh).
     _PROFILE_CYCLE = ('ROUND', 'SQUARE', 'RECT')
+    # Implicit click-vs-stroke gates (screen px): drag past START to begin a
+    # freehand stroke; record a sample every GATE px along it.
+    _STROKE_START_PX = 8
+    _STROKE_GATE_PX = 6
 
     @classmethod
     def poll(cls, context):
@@ -56,11 +78,16 @@ class _CurveDraw:
                         else context.scene.cursor.location.copy())
         self._normal = raycast.view_direction(rv3d)
         self._pts = []            # confirmed 3D points (Vectors), already lifted
+        self._groups = []         # anchors per click/stroke -- whole-stroke undo
         self._cursor3d = None     # current 3D point
         self._on_surface = False  # did the last sample hit a surface?
         self._snap_kind = None    # VERT/MID/EDGE/FACE/GRID/None -- HUD marker
         self._preview = None      # live curve object (becomes the result)
         self._finalized = False
+        self._press_px = None     # LMB press position; None = button is up
+        self._stroking = False    # drag passed the start gate -> freehand stroke
+        self._stroke = []         # raw stroke samples (Vectors) while dragging
+        self._last_stroke_px = None
 
         prefs = get_prefs(context)
         # Session-local snap toggles, seeded from prefs and flipped live with the
@@ -70,6 +97,7 @@ class _CurveDraw:
         self._grid_snap = prefs.snap_enabled
         self._follow = self._can_follow and prefs.pipe_follow_surface
         self._follow_segs = prefs.pipe_follow_segments
+        self._smooth = self._can_smooth and prefs.pipe_smooth
         self._profile = prefs.pipe_profile if self._has_profile else 'ROUND'
         self._geo = snapping.collect_geo(context, prefs.snap_target)
 
@@ -156,27 +184,66 @@ class _CurveDraw:
         """Convert clicked anchors into the final dense point list. Pipe drapes
         over the surface; the cable subclass overrides this to hang a catenary."""
         if self._follow and len(anchors) >= 2:
-            return snapping.drape_path(context, anchors, self._follow_segs,
-                                       self._lift())
+            # Freehand strokes and smoothed paths are already dense: snapping
+            # each sample (segments=1) is enough and keeps the preview fast.
+            segs = 1 if (self._stroking or self._smoothing(anchors)) \
+                else self._follow_segs
+            return snapping.drape_path(context, anchors, segs, self._lift())
         return list(anchors)
 
     def _anchor_list(self, include_cursor):
-        anchors = list(self._pts)
+        anchors = list(self._pts) + list(self._stroke)
         if include_cursor and self._cursor3d is not None:
             anchors = anchors + [self._cursor3d]
         return anchors
+
+    def _smoothing(self, anchors):
+        """Is the Catmull-Rom pass live for this rebuild? Not while a raw
+        freehand stroke is still being dragged (the ink previews as drawn and
+        snaps to the clean spline on release)."""
+        return self._smooth and not self._stroking and len(anchors) >= 3
+
+    def _end_press(self):
+        """LMB released: commit the press as one anchor (plain click) or as a
+        freehand stroke reduced to clean anchors (RDP, epsilon scaled to the
+        tube radius). Each press lands as ONE undo group for Backspace."""
+        if self._stroking and len(self._stroke) >= 2:
+            eps = max(self._radius * 0.35, 1e-4)
+            new = [Vector(p) for p in
+                   path.rdp_simplify([tuple(p) for p in self._stroke], eps)]
+        elif self._stroke:                       # a plain click
+            new = [self._stroke[0]]
+        else:
+            new = []
+        if new:
+            self._pts.extend(new)
+            self._groups.append(len(new))
+        self._press_px = None
+        self._stroking = False
+        self._stroke = []
+        self._last_stroke_px = None
+        return True
 
     # --- live preview ----------------------------------------------------
 
     def _build_data(self, context, anchors):
         """Build the tube datablock for the given anchors. ROUND uses a curve
-        bevel; SQUARE/RECT sweep a mesh cross-section (build_pipe_mesh). Returns
-        (data, is_mesh) or (None, False)."""
+        bevel; SQUARE/RECT sweep a mesh cross-section (build_pipe_mesh). Smooth
+        Path interpolates the anchors with a Catmull-Rom first -- or, for a
+        ROUND non-follow pipe, emits an editable AUTO-handle Bezier instead of
+        a baked poly-line. Returns (data, is_mesh) or (None, False)."""
         if len(anchors) < 2:
             return None, False
-        pts = self._route_points(context, anchors)
         name = "Hardflow_%s" % self._title
         prof = geometry.profile_points(self._profile, self._radius)
+        smooth = self._smoothing(anchors)
+        if smooth and prof is None and not self._follow:
+            return geometry.build_pipe(anchors, radius=self._radius, name=name,
+                                       spline_type='BEZIER'), False
+        if smooth:
+            anchors = [Vector(p) for p in
+                       path.catmull_rom([tuple(p) for p in anchors])]
+        pts = self._route_points(context, anchors)
         if prof is None:
             return geometry.build_pipe(pts, radius=self._radius, name=name), False
         return geometry.build_pipe_mesh(pts, prof, name=name), True
@@ -229,6 +296,15 @@ class _CurveDraw:
 
         if event.type == 'MOUSEMOVE':
             self._cursor3d = self._sample(context, event)
+            if self._press_px is not None and self._cursor3d is not None:
+                px = (event.mouse_region_x, event.mouse_region_y)
+                if (not self._stroking and _px_dist2(px, self._press_px)
+                        >= self._STROKE_START_PX ** 2):
+                    self._stroking = True   # the press became a freehand drag
+                if (self._stroking and _px_dist2(px, self._last_stroke_px)
+                        >= self._STROKE_GATE_PX ** 2):
+                    self._stroke.append(self._cursor3d.copy())
+                    self._last_stroke_px = px
             dirty = True
 
         elif event.type == 'WHEELUPMOUSE' and event.value == 'PRESS':
@@ -264,10 +340,21 @@ class _CurveDraw:
             self._profile = cyc[(i + 1) % len(cyc)]
             dirty = True
 
+        elif (event.type == 'C' and event.value == 'PRESS' and self._can_smooth):
+            self._smooth = not self._smooth
+            dirty = True
+
         elif event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             if self._cursor3d is not None:
-                self._pts.append(self._cursor3d.copy())
+                # Click or stroke? Decided by drag distance; resolved on RELEASE.
+                self._press_px = (event.mouse_region_x, event.mouse_region_y)
+                self._last_stroke_px = self._press_px
+                self._stroke = [self._cursor3d.copy()]
                 dirty = True
+
+        elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            if self._press_px is not None:
+                dirty = self._end_press()
 
         elif event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
             if len(self._pts) >= 2:
@@ -275,7 +362,8 @@ class _CurveDraw:
 
         elif event.type == 'BACK_SPACE' and event.value == 'PRESS':
             if self._pts:
-                self._pts.pop()
+                take = self._groups.pop() if self._groups else 1
+                del self._pts[-max(1, take):]   # a whole stroke undoes at once
                 dirty = True
 
         elif event.type in {'RIGHTMOUSE', 'ESC'} and event.value == 'PRESS':
@@ -310,6 +398,9 @@ class _CurveDraw:
         if self._can_follow:
             controls += " · F follow"
             params += " · Follow %s" % onoff(self._follow)
+        if self._can_smooth:
+            controls += " · C smooth"
+            params += " · Smooth %s" % onoff(self._smooth)
         if self._has_profile:
             controls += " · P profile"
             params += " · Profile %s" % self._profile
@@ -317,8 +408,8 @@ class _CurveDraw:
             controls += " · Shift+Wheel sag"
             params += " · Sag %.3f m" % self._sag
         return [
-            "%s — LMB point · Enter create · Backspace undo · Esc cancel"
-            % self._title,
+            "%s — LMB click / drag freehand · Enter create · Backspace undo "
+            "· Esc cancel" % self._title,
             controls,
             params,
             "Snap → vertex %s · surface %s · grid %s · now: %s"
@@ -360,6 +451,8 @@ class _CurveDraw:
                  ("X", "Grid", self._grid_snap)]
         if self._can_follow:
             chips.append(("F", "Follow", self._follow))
+        if self._can_smooth:
+            chips.append(("C", "Smooth", self._smooth))
         if self._has_profile:
             chips.append(("P", self._profile))
         if self._has_sag:
@@ -431,6 +524,7 @@ class HARDFLOW_OT_cable(_CurveDraw, Operator):
     _title = "Cable"
     _has_sag = True
     _can_follow = False   # a cable hangs free; it does not drape over the wall
+    _can_smooth = False   # the sag (or the settle) IS the cable's shape
 
     def _init_params(self, prefs):
         self._radius = prefs.cable_radius

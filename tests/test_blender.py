@@ -446,6 +446,19 @@ def test_build_pipe():
     assert geometry.build_pipe([Vector((0, 0, 0))]) is None
 
 
+def test_build_pipe_bezier():
+    _reset()
+    pts = [Vector((0, 0, 0)), Vector((1, 0, 0)), Vector((1, 1, 0))]
+    curve = geometry.build_pipe(pts, radius=0.1, spline_type='BEZIER')
+    assert curve is not None
+    sp = curve.splines[0]
+    assert sp.type == 'BEZIER' and len(sp.bezier_points) == 3
+    for bp, src in zip(sp.bezier_points, pts):
+        assert (Vector(bp.co) - src).length < 1e-6
+        assert bp.handle_left_type == 'AUTO' and bp.handle_right_type == 'AUTO'
+    assert curve.use_fill_caps
+
+
 def test_apply_cutters_operator():
     _reset()
     hardflow.register()

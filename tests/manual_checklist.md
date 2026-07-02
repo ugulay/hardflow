@@ -259,6 +259,24 @@ surface and straight segments cut through corners (see the v1.2 screenshot).
       **hangs in a sag** clear of the wall (not buried). `Shift+Wheel` changes
       sag, `Wheel` radius. Live preview + `Enter`/`Esc` behave as above.
 
+**Freehand strokes + Smooth Path ⭐ (v1.20):**
+
+- [ ] **Freehand:** in Pipe, press LMB and **drag** across the model → a raw
+      ink stroke previews live and **hugs the surface**; on release it snaps to
+      a clean simplified path (a handful of anchors, not hundreds). A plain
+      click still places a single anchor; clicks and strokes mix in one tube.
+- [ ] **Backspace after a stroke** removes the whole stroke at once (one press),
+      not one point at a time; after a click it removes just that anchor.
+- [ ] **`C` Smooth:** with 3+ clicked anchors, `C` toggles Smooth Path → the
+      polyline turns into a flowing spline through the anchors (chip lights
+      up). With profile **ROUND + Follow OFF**, the committed object is a
+      **Bezier curve with AUTO handles** (editable in Edit Mode: few control
+      points, smooth handles). With Follow ON the smooth path still drapes
+      onto the surface.
+- [ ] **Sweep freehand:** the same drag-stroke works in Sweep with an L/U/T/I
+      profile (mesh sweep follows the smoothed path). Cable has no `C` chip
+      (sag defines its shape).
+
 ---
 
 ---
