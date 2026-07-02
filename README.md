@@ -59,7 +59,32 @@ price tag.
 > [ROADMAP.md](ROADMAP.md) for the full roadmap and [CHANGELOG.md](CHANGELOG.md)
 > for the per-version history.
 
+## See it in action
+
+<p align="center">
+  <img src="docs/img/hardflow-demo.gif" width="640" alt="Hardflow: boolean details added one at a time, then a turntable">
+  <br><sub>Boolean details cut and added one group at a time, then a turntable — every frame is real Hardflow output.</sub>
+</p>
+
+## Gallery
+
+<sub>Every image below is real Hardflow output — geometry built by the add-on's
+own boolean, shape and curve functions, rendered in Blender's Workbench.</sub>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/shot1-boolean-cut.png" alt="Draw-to-cut booleans" width="100%"><br><sub><b>Draw-to-cut booleans</b> — a slot, a radius and a notch cut straight into a panel.</sub></td>
+<td width="50%"><img src="docs/img/shot2-shapes.png" alt="Built-in shapes" width="100%"><br><sub><b>Shape library</b> — Box / Circle / N-gon / Slot / Star / Arc footprints.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/img/shot3-greeble.png" alt="Rapid hard-surface detailing" width="100%"><br><sub><b>Rapid detailing</b> — raised bays, vent slots, ports and bolt holes.</sub></td>
+<td width="50%"><img src="docs/img/shot4-pipe.png" alt="Surface-draping pipe" width="100%"><br><sub><b>Pipes &amp; sweeps</b> — a profile draped along the surface.</sub></td>
+</tr>
+</table>
+
 ## Features
+
+<img align="right" width="240" src="docs/tools.png" alt="The Hardflow N-panel">
 
 - **Boolean via modal drawing** — Box / Circle / Polygon / N-gon / Slot / Star /
   Arc shapes; Cut, Slice (split in two), Make (add), Join (add as a separate
