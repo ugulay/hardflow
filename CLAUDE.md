@@ -3,6 +3,36 @@
 This file exists so that Claude Code approaches the project with the right
 context in every session.
 
+## Output & token discipline (top rule)
+
+Work **token-frugally** — this is the owner's most important rule and it applies
+to Claude and every subagent equally:
+
+- Keep chat output minimal: answer the question, no preamble/postamble, no
+  restating the plan back. Report outcomes plainly.
+- **Never dump file contents** into chat — return the conclusion plus a
+  `path:line` reference.
+- Avoid unnecessary tool calls. Prefer one targeted `Grep`/`Read` over a broad
+  sweep; batch independent calls into one message; don't re-read a file you just
+  edited to "verify".
+- Delegate a broad multi-file search to a subagent and keep only its conclusion,
+  not the intermediate file dumps.
+
+## Agent roster (`.claude/agents/`)
+
+Specialist subagents, each carrying these same rules (token discipline +
+one-directional architecture + pure-core/thin-operator/tests). Dispatch by
+domain:
+
+| Agent | Owns |
+|-------|------|
+| `math-professor` | Pure geometry/numerics in `core/` — raycast, grid/snap, offset, Smart Bevel loops, parallax POM, Verlet physics, path splines, topology predicates |
+| `computer-science` | Algorithms, complexity, architecture — Command journal/undo, preview-cache culling, modifier sorting, packing, idempotency; guards the layer rule |
+| `render-engineer` | Shading/PBR/GPU — decal node graphs, POM/height/bump wiring, `ui/draw.py` overlay, bake, atlas/chroma-key |
+| `blender-engineer` | bpy glue — modal lifecycle, gizmos/tools registration, Scene/Image props, version-safe API, headless tests |
+| `3d-artist` | Modeler's UX/feel + competitive edge vs the paid incumbents |
+| `concept-artist` | Visual identity/promo — icons, promo renders, listing/social imagery |
+
 ## What the project is
 
 Hardflow is an **open-source (GPLv3) hard-surface boolean modeling** toolkit for
