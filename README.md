@@ -16,8 +16,16 @@ price tag.
 [![Version](https://img.shields.io/badge/version-1.21.0-brightgreen.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Patreon](https://img.shields.io/badge/Patreon-support%20the%20project-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/ugurgulay)
+[![Built with Claude](https://img.shields.io/badge/built%20with-Claude-D97757?logo=anthropic&logoColor=white)](https://www.anthropic.com/claude-code)
 
 </div>
+
+> **Human-directed, built with Claude.** Hardflow is designed and steered by a
+> human maintainer, with [Claude](https://www.anthropic.com/claude-code)
+> (Anthropic's AI) used as a pair-programmer. Every feature is human-specified,
+> reviewed and tested — the AI writes code to direction, it does not decide what
+> the project is or where it goes. We say this openly because we'd rather be
+> transparent about how the tool is built than have anyone guess.
 
 > **Status — under active development.** **Every roadmap feature through v1.21 is
 > implemented** — the boolean cut loop (Cut / Slice / Make / Join / Intersect /
