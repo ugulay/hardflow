@@ -3,6 +3,31 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic: minor versions add features, patch versions fix bugs.
 
+## [1.21.1] — 2026-08-25
+
+Bug-fix release. Pure suite 144 tests, headless 143, verified in Blender 5.2.0
+LTS.
+
+### Fixed
+- **Toolbar registration corrupted Blender's tool list**
+  ([#4](https://github.com/ugulay/hardflow/issues/4)): the Workspace Tools were
+  anchored with `after={"builtin.scale"}`, but `builtin.scale` is not a
+  standalone toolbar entry — it lives inside the `(scale, scale_cage)` group
+  tuple, and `bpy.utils.register_tool` splices an `after` match into whichever
+  group it finds the anchor in. Two consequences: the `separator=True` wrote a
+  bare `None` *inside* that group, and Blender's own
+  `ToolSelectPanelHelper._tool_get_group_by_id` walks group members without a
+  `None` guard — so every toolbar redraw and tool-button hover raised
+  `AttributeError: 'NoneType' object has no attribute 'idname'` (silently
+  swallowed by the UI handler, but it halts an attached debugger). The five
+  Object-Mode Hardflow tools were also chained *into* the built-in Scale
+  dropdown instead of being their own toolbar buttons. They now anchor on the
+  standalone `builtin.transform` with no extra separator (Blender already draws
+  one there), and the new `gizmos.tools._anchor_is_standalone` guard refuses any
+  grouped or missing anchor — degrading to appending at the end of the toolbar
+  rather than nesting into a group — so a future Blender reshuffle cannot
+  reintroduce the crash. Covered by a headless regression test.
+
 ## [1.21.0] — 2026-07-02
 
 The Curves upgrade — Pipe/Cable/Sweep grow from click-by-click placement into a
