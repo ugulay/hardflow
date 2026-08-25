@@ -3204,6 +3204,56 @@ def test_extract_faces_makes_cutter_volume():
     assert geometry.extract_faces(cube.data, [999], name="Z2") is None
 
 
+def test_workspace_tools_do_not_corrupt_the_toolbar():
+    # Regression for issue #4: registering after `builtin.scale` spliced the
+    # Hardflow tools *into* the (scale, scale_cage) group and left a bare None
+    # inside it, so Blender's own group walk raised
+    # "AttributeError: 'NoneType' object has no attribute 'idname'" on every
+    # toolbar redraw / tool-button hover.
+    from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+    from hardflow.gizmos import tools as hf_tools
+    _reset()
+
+    def lists():
+        cls = ToolSelectPanelHelper._tool_class_from_space_type('VIEW_3D')
+        return {mode: cls._tools[mode] for mode in ('OBJECT', 'EDIT_MESH')}
+
+    before = {mode: list(items) for mode, items in lists().items()}
+    hardflow.register()
+    try:
+        for mode, items in lists().items():
+            flat = []
+            for item in items:
+                assert item is None or type(item) is tuple or hasattr(item, "idname")
+                if type(item) is tuple:
+                    # A group tuple must hold ToolDefs only -- a None in here is
+                    # exactly what crashed _tool_get_group_by_id.
+                    for sub in item:
+                        assert sub is not None,                             "None inside a %s toolbar group: %r" % (
+                                mode, [None if s is None else s.idname for s in item])
+                        flat.append(sub.idname)
+                elif item is not None:
+                    flat.append(item.idname)
+            # Every Hardflow tool for this mode is a standalone toolbar entry,
+            # not buried inside a built-in group.
+            standalone = {
+                item.idname for item in items
+                if item is not None and type(item) is not tuple
+            }
+            for idname in flat:
+                if idname.startswith("hardflow."):
+                    assert idname in standalone,                         "%s is nested in a built-in group (%s)" % (idname, mode)
+        # The anchor guard rejects grouped ids and accepts standalone ones.
+        cls = hf_tools.HARDFLOW_T_move
+        assert hf_tools._anchor_is_standalone(cls, {"builtin.transform"}) is True
+        assert hf_tools._anchor_is_standalone(cls, {"builtin.scale"}) is False
+        assert hf_tools._anchor_is_standalone(cls, {"builtin.nope"}) is False
+    finally:
+        hardflow.unregister()
+    # Unregistering restores the toolbar exactly (no leftover separators).
+    assert lists() == before, "toolbar not restored after unregister"
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
