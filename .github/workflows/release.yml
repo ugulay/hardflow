@@ -46,6 +46,7 @@ jobs:
             --exclude '.github' \
             --exclude '.claude' \
             --exclude 'promo' \
+            --exclude 'tools' \
             --exclude 'tests' \
             --exclude 'docs' \
             --exclude '*.md' \

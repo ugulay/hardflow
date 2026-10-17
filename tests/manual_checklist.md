@@ -1092,6 +1092,29 @@ The axis decision needs a real viewport, so none of this is reachable headless.
       pie and the header menu ▸ Edit both list Mirror; the Help panel lists
       **Alt+X**. Rebinding Alt+X in Preferences ▸ Keymap sticks.
 
+## 27. Bundled starter library
+
+- [ ] **Fresh install, nothing configured:** N-panel > Decals > Decal Library
+      shows a filled icon grid with a "Starter library" note, and no
+      rename/delete buttons on those entries.
+- [ ] N-panel > Assets > Asset Library likewise lists the 8 kit parts.
+- [ ] Place `panel_seam` on a curved surface: it shrinkwraps and follows the
+      curve. Switch on Decals > Depth > Parallax: the seam recesses at grazing
+      angles (the PNG's own luminance is the height map -- no second texture).
+- [ ] Load `library/trims/trim_sheet_4x4.png` as the trim sheet, then **Seed
+      Grid Regions 4 x 4**: the 16 regions land exactly on the cell artwork.
+      Open the trim editor and place one region as a decal.
+- [ ] Place `vent_louvre` as an INSERT, then again with **Asset as Cutter** on:
+      it cuts a real louvre vent into the surface.
+- [ ] Set your own Decal Library folder in preferences: the grid switches to it
+      and the rename/delete buttons come back. Point it at a folder that does
+      not exist: it falls back to the starter library rather than going empty.
+- [ ] **Export Asset Pack** with no library folder set: it refuses with a
+      message about not writing into the bundled kit (it must never add files
+      to the add-on's own folder).
+- [ ] Install the built zip on a clean Blender: `library/` is inside it and the
+      grids are populated; `tools/` is not.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

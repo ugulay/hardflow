@@ -93,6 +93,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | PBR shader | Base / metallic / roughness / AO / normal / height+depth / emission / alpha | `core/decal.py HF_DecalShader` |
 | Bake into mesh | Bake Normal / Combined detail into the target's texture | `core/decal.py bake_image` |
 | Image library | Folder of PNG/JPG/TGA placed from an icon grid | `core/decal_image.py`, `ui/decal_library.py` |
+| **Bundled starter library (v1.23)** | Ships 16 hard-surface decals, a 4x4 trim sheet and 8 INSERT kit parts, so the decal / trim / POM / atlas / INSERT features are usable on a fresh install instead of opening as empty grids. The user's own folder replaces it; a stale path falls back to it. All generated in-house by `tools/make_library.py` (GPLv3, no third-party assets) and treated as read-only | `core/library.py`, `preferences.library_dir`, `library/` |
 | Trim sheets | Slice a sheet into a grid; place / cycle individual cells | `core/atlas.py slice_grid` |
 | Trim sheet UV editor (v1.16) | Carve a sheet into free, unequal named UV rectangles (draw / resize / move / split) stored on the image; place any region as a decal | `operators/trim_editor.py`, `core/atlas.py`, `ui/trim_panel.py` |
 | Background removal / chroma key (v1.17) | Make a picked colour transparent on a trim sheet — knock out a green-screen / flat background so the graphics separate; eyedropper or corner-sample, tolerance + edge-softness feather, copy or in-place | `operators/trim_editor.py HARDFLOW_OT_trim_chroma_key`, `core/atlas.py chroma_key` |

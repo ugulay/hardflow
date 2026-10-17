@@ -436,7 +436,12 @@ class HARDFLOW_OT_export_asset(Operator):
         folder = bpy.path.abspath(prefs.asset_library_path) \
             if prefs.asset_library_path else ""
         if not folder or not os.path.isdir(folder):
-            self.report({'ERROR'}, "Set a valid Asset Library folder first")
+            # Deliberately the user's own preference, NOT the bundled-library
+            # fallback the read-side grids use: an export must never write into
+            # the starter kit shipped inside the add-on.
+            self.report({'ERROR'},
+                        "Set your own Asset Library folder first (exports "
+                        "cannot be written into the bundled starter kit)")
             return {'CANCELLED'}
         objects = [o for o in context.selected_objects]
         if not objects:

@@ -1,8 +1,35 @@
 # Addon preferences and a prefs accessor reachable from anywhere.
+import os
+
 import bpy
 from bpy.types import AddonPreferences
 from bpy.props import (BoolProperty, IntProperty, FloatProperty,
                        FloatVectorProperty, EnumProperty, StringProperty)
+
+from .core import library as _library
+
+# Where the add-on itself lives, so the bundled starter library can be found
+# regardless of how it was installed (extension, legacy add-on, symlinked repo).
+ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def library_dir(context=None, kind=_library.DECALS):
+    """The folder to scan for a library `kind` ('decals' / 'assets' / 'trims'),
+    as ``(path, is_bundled)``.
+
+    One accessor for every consumer (both N-panel grids and the place/export
+    operators), so the user's preference and the bundled starter content are
+    resolved the same way everywhere: their folder when they set one, else the
+    content shipped inside the add-on. `is_bundled` tells the UI to hide the
+    rename/delete-on-disk buttons -- those must never be aimed at shipped files.
+    The bpy-side path expansion (Blender's '//' relative paths) happens here;
+    the decision itself is pure in core/library."""
+    prefs = get_prefs(context)
+    attr = {_library.DECALS: "decal_library_path",
+            _library.ASSETS: "asset_library_path"}.get(kind, "")
+    raw = getattr(prefs, attr, "") if attr else ""
+    user = bpy.path.abspath(raw) if raw else ""
+    return _library.resolve_dir(user, _library.bundled_dir(ADDON_DIR, kind))
 
 
 def get_prefs(context=None):

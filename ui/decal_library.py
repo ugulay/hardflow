@@ -10,6 +10,7 @@ import bpy
 import bpy.utils.previews
 from bpy.types import Panel
 
+from .. import preferences
 from ..core import decal_image
 from ..preferences import get_prefs
 
@@ -55,12 +56,16 @@ class HARDFLOW_PT_decal_library(Panel):
         row.operator("object.hardflow_load_decal_image", icon='FILE_IMAGE')
         row.operator("object.hardflow_load_trim_sheet", icon='MESH_GRID')
 
-        folder = bpy.path.abspath(prefs.decal_library_path) \
-            if prefs.decal_library_path else ""
+        # The user's folder when they set one, else the starter library shipped
+        # inside the add-on, so this grid is never empty on a fresh install.
+        folder, bundled = preferences.library_dir(context, 'decals')
         items = decal_image.scan_library(folder)
         if not items:
             layout.label(text="Set a library folder with images", icon='INFO')
             return
+        if bundled:
+            layout.label(text="Starter library (set a folder above for your own)",
+                         icon='LOCKED')
 
         grid = layout.grid_flow(row_major=True, columns=3, even_columns=True,
                                 even_rows=True, align=True)
@@ -72,7 +77,12 @@ class HARDFLOW_PT_decal_library(Panel):
                 cell.operator("object.hardflow_library_place", text=name,
                               icon='IMAGE_DATA')
             op.filepath = path
-            # Editable library: rename / delete the file on disk (v1.7).
+            # Editable library: rename / delete the file on disk (v1.7) -- but
+            # never for bundled content: that folder can be read-only on an
+            # extension install, and a file deleted there comes back on the next
+            # update. Either outcome only confuses the user.
+            if bundled:
+                continue
             edit = cell.row(align=True)
             edit.operator("object.hardflow_library_rename", text="",
                           icon='GREASEPENCIL').filepath = path

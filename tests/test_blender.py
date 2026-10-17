@@ -3704,6 +3704,160 @@ def test_mirror_axis_and_half_resolve_without_a_viewport():
     assert mop.resolve_keep_positive(bpy.context, 'X', flip=True) is False
 
 
+def test_bundled_decal_library_ships_loadable_images():
+    # The starter library is the difference between a fresh install opening with
+    # content and three empty grids. Check the real shipped files, through the
+    # add-on's own scanner -- a renamed folder or a corrupt PNG must fail here,
+    # not in the user's N-panel.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow import preferences
+        from hardflow.core import decal_image
+        folder, bundled = preferences.library_dir(bpy.context, 'decals')
+        assert bundled is True, folder
+        assert os.path.isdir(folder), folder
+        items = decal_image.scan_library(folder)
+        assert len(items) >= 12, [n for n, _p in items]
+        names = {n for n, _p in items}
+        # The staples a hard-surface starter set has to cover.
+        for want in ("panel_seam", "vent_slots", "bolt_row", "access_hatch",
+                     "hazard_stripes", "hex_grill"):
+            assert want in names, (want, sorted(names))
+        # Every file actually loads as an image, is square, and carries alpha
+        # (a decal without alpha would stick as an opaque square).
+        for name, path in items:
+            img = bpy.data.images.load(path)
+            try:
+                assert img.size[0] == img.size[1] >= 256, (name, img.size[:])
+                assert img.channels == 4, (name, img.channels)
+                assert img.depth == 32, (name, img.depth)
+            finally:
+                bpy.data.images.remove(img)
+    finally:
+        hardflow.unregister()
+
+
+def test_bundled_trim_sheet_matches_a_4x4_grid():
+    # The sheet exists so "Seed Grid Regions" has something to carve; it is laid
+    # out 4x4 on purpose, so a 4x4 seed lands exactly on the cell graphics.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow import preferences
+        from hardflow.core import library as libmod, atlas
+        folder = libmod.bundled_dir(preferences.ADDON_DIR, 'trims')
+        path = os.path.join(folder, "trim_sheet_4x4.png")
+        assert os.path.isfile(path), path
+        img = bpy.data.images.load(path)
+        try:
+            w, h = img.size[0], img.size[1]
+            assert w == h == 1024, (w, h)
+            # The cells the pure grid slicer produces line up with the artwork.
+            rects = atlas.slice_grid(4, 4)
+            assert len(rects) == 16
+            cw, ch = atlas.rect_pixels(rects[0], w, h)
+            assert abs(cw - 256) < 1e-6 and abs(ch - 256) < 1e-6, (cw, ch)
+        finally:
+            bpy.data.images.remove(img)
+    finally:
+        hardflow.unregister()
+
+
+def test_bundled_insert_kit_loads_real_meshes():
+    # Each .blend must yield at least one mesh with geometry, at a believable
+    # hard-surface scale -- an INSERT that appends empty or metre-sized would be
+    # worse than shipping nothing.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow import preferences
+        from hardflow.core import asset, asset_lib
+        folder, bundled = preferences.library_dir(bpy.context, 'assets')
+        assert bundled is True, folder
+        items = asset_lib.scan_assets(folder)
+        assert len(items) >= 6, [n for n, _p in items]
+        names = {n for n, _p in items}
+        for want in ("bolt_m8", "vent_louvre", "hatch_round", "heatsink"):
+            assert want in names, (want, sorted(names))
+        for name, path in items:
+            objects = asset.load_blend_objects(path)
+            assert objects, name
+            meshes = [o for o in objects if o.type == 'MESH']
+            assert meshes, name
+            for ob in meshes:
+                assert len(ob.data.vertices) >= 8, (name, len(ob.data.vertices))
+                assert len(ob.data.polygons) >= 4, (name, len(ob.data.polygons))
+                # Kit parts are centimetre-scale, not metre-scale.
+                assert max(ob.dimensions) < 0.5, (name, tuple(ob.dimensions))
+                assert max(ob.dimensions) > 0.001, (name, tuple(ob.dimensions))
+            for ob in objects:
+                if ob is not None and ob.name in bpy.data.objects:
+                    bpy.data.objects.remove(ob, do_unlink=True)
+    finally:
+        hardflow.unregister()
+
+
+def test_user_library_path_overrides_the_bundled_one():
+    # Setting a folder must win over the shipped content -- and an unset or
+    # stale one must fall back to it rather than showing an empty grid.
+    # Headless, get_prefs() hands back a fresh defaults stand-in on every call
+    # (the package is imported, not enabled as an add-on), so the preference is
+    # stubbed to exercise the wiring: the attribute name, the '//' expansion and
+    # the hand-off to core.library.resolve_dir.
+    _reset()
+    import tempfile
+    import types
+    import hardflow
+    hardflow.register()
+    from hardflow import preferences
+    real = preferences.get_prefs
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            preferences.get_prefs = lambda ctx=None: types.SimpleNamespace(
+                decal_library_path=tmp, asset_library_path="")
+            folder, bundled = preferences.library_dir(bpy.context, 'decals')
+            assert os.path.normcase(os.path.abspath(folder))                 == os.path.normcase(os.path.abspath(tmp)), folder
+            assert bundled is False
+            # The ASSET kind is independent: still bundled.
+            _f, abundled = preferences.library_dir(bpy.context, 'assets')
+            assert abundled is True
+
+            # A stale path (moved drive) falls back instead of showing empty.
+            gone = os.path.join(tmp, "does_not_exist")
+            preferences.get_prefs = lambda ctx=None: types.SimpleNamespace(
+                decal_library_path=gone, asset_library_path="")
+            _folder, bundled = preferences.library_dir(bpy.context, 'decals')
+            assert bundled is True
+    finally:
+        preferences.get_prefs = real
+        hardflow.unregister()
+    # With nothing set (the real default) it is the bundled library.
+    _folder, bundled = preferences.library_dir(bpy.context, 'decals')
+    assert bundled is True
+
+
+def test_bundled_library_files_are_flagged_read_only():
+    # The library grid offers rename/delete on disk; those must never be aimed
+    # at shipped files (read-only on an extension install, and a deleted one
+    # returns on the next update).
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow import preferences
+        from hardflow.core import decal_image, library as libmod
+        folder, _bundled = preferences.library_dir(bpy.context, 'decals')
+        for _name, path in decal_image.scan_library(folder):
+            assert libmod.is_inside(path, folder) is True, path
+        assert libmod.is_inside("/somewhere/else/x.png", folder) is False
+    finally:
+        hardflow.unregister()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

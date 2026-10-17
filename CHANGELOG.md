@@ -19,6 +19,13 @@ Blender 5.2.2 LTS.
   about an origin) or the active object. F9-redoable, batched per object, and it
   refuses to mirror an object away when nothing is on the kept side. All the
   decision math is pure in the new `core/mirror.py`.
+- **Bundled starter library**: 16 hard-surface decals, a 4x4 trim sheet and 8
+  INSERT kit parts ship with the add-on, so the decal, trim-sheet, parallax,
+  atlas and INSERT features are usable on a fresh install instead of opening as
+  three empty grids. Your own library folder still wins when you set one (and a
+  stale path falls back to the bundled set rather than showing nothing); the
+  shipped files are read-only to the add-on. All of it is generated in-house by
+  `tools/make_library.py` and GPLv3 like the rest -- no third-party assets.
 - **Persistent draw tool** (`HARDFLOW_T_draw` in the toolbar) plus in-session
   **draw settings memory** (pref `draw_remember_session`), so a row of cuts is
   one click each and keeps the array / mirror / inset already dialed in.

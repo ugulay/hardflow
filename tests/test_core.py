@@ -43,6 +43,7 @@ modifiers = _load("modifiers")
 path = _load("path")
 physics = _load("physics")
 mirror = _load("mirror")
+library = _load("library")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1823,6 +1824,56 @@ def test_mirror_bisect_angle_ok_flags_walls_on_the_seam():
     assert mirror.bisect_angle_ok('X', (1.0, 0.0, 0.0)) is False
     # Degenerate normals never raise.
     assert mirror.bisect_angle_ok('X', (0.0, 0.0, 0.0)) is True
+
+
+# --- library: bundled vs user library-path resolution ----------------------
+
+def test_library_bundled_dir_builds_and_guards():
+    import os
+    p = library.bundled_dir(os.path.join("X", "addon"), "decals")
+    assert p == os.path.join("X", "addon", "library", "decals")
+    # unknown kind / missing addon dir -> "" (never a half-formed path)
+    assert library.bundled_dir(os.path.join("X", "addon"), "nope") == ""
+    assert library.bundled_dir("", "decals") == ""
+    assert library.bundled_dir(None, "decals") == ""
+    assert set(library.KINDS) == {"decals", "assets", "trims"}
+
+
+def test_library_resolve_prefers_user_then_bundled():
+    import os
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        user = os.path.join(tmp, "mine")
+        bundled = os.path.join(tmp, "bundled")
+        os.makedirs(user)
+        os.makedirs(bundled)
+        # user folder wins, and is reported as NOT bundled
+        assert library.resolve_dir(user, bundled) == (user, False)
+        # nothing set -> bundled, flagged as bundled
+        assert library.resolve_dir("", bundled) == (bundled, True)
+        assert library.resolve_dir(None, bundled) == (bundled, True)
+        # a stale user path (moved drive) falls back instead of showing empty
+        missing = os.path.join(tmp, "gone")
+        assert library.resolve_dir(missing, bundled) == (bundled, True)
+        # neither -> empty, so callers keep their "nothing here" branch
+        assert library.resolve_dir("", os.path.join(tmp, "nope")) == ("", False)
+        assert library.resolve_dir("", "") == ("", False)
+
+
+def test_library_is_inside_guards_the_bundled_folder():
+    import os
+    root = os.path.abspath(os.path.join("lib", "decals"))
+    assert library.is_inside(os.path.join(root, "bolt.png"), root) is True
+    assert library.is_inside(root, root) is True                 # the folder
+    # a sibling whose name merely starts the same must NOT match
+    assert library.is_inside(root + "_user", root) is False
+    assert library.is_inside(os.path.abspath("elsewhere"), root) is False
+    assert library.is_inside("", root) is False
+    assert library.is_inside(os.path.join(root, "a.png"), "") is False
+    # case / separator insensitive (Windows)
+    assert library.is_inside(os.path.join(root.upper(), "a.png"),
+                             root) is (os.name == 'nt')
+
 
 
 def _run_all():

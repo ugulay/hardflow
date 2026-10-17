@@ -4,6 +4,7 @@
 import bpy
 from bpy.types import Panel
 
+from .. import preferences
 from ..core import asset, asset_lib
 from ..preferences import get_prefs
 
@@ -58,12 +59,15 @@ class HARDFLOW_PT_asset_library(Panel):
         prefs = get_prefs(context)
 
         layout.prop(prefs, "asset_library_path", text="")
-        folder = bpy.path.abspath(prefs.asset_library_path) \
-            if prefs.asset_library_path else ""
+        # Their folder when set, else the INSERT kit shipped with the add-on.
+        folder, bundled = preferences.library_dir(context, 'assets')
         items = asset_lib.scan_assets(folder)
         if not items:
             layout.label(text="Set a folder with .blend kit parts", icon='INFO')
             return
+        if bundled:
+            layout.label(text="Starter kit (set a folder above for your own)",
+                         icon='LOCKED')
 
         grid = layout.grid_flow(row_major=True, columns=2, even_columns=True,
                                 even_rows=True, align=True)

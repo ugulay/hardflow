@@ -1,0 +1,35 @@
+Hardflow starter library
+========================
+
+decals/  16 hard-surface decal images (PNG, RGBA)
+trims/   one 4x4 trim sheet, laid out so "Seed Grid Regions" with 4 x 4 lands
+         exactly on the cell artwork
+assets/  8 INSERT kit parts (.blend)
+
+Provenance and licence
+----------------------
+Every file here is generated procedurally by this project's own script,
+tools/make_library.py, and is covered by the same GPLv3 licence as the rest of
+Hardflow. No third-party assets are bundled, so there is nothing extra to
+attribute when you ship renders or models made with them.
+
+Regenerate with:
+
+    python tools/make_library.py                 # images only
+    blender -b -P tools/make_library.py -- all   # images + the INSERT kit
+
+Using your own content instead
+------------------------------
+Point "Decal Library" / "Asset Library" in the add-on preferences at your own
+folder and it replaces this one. Leave them empty to keep using this starter
+set. These files are treated as read-only by the add-on: the library grid's
+rename/delete buttons are hidden for them, and the asset-pack export refuses to
+write here, because an extension install may mount this folder read-only and
+anything changed here is replaced on the next update.
+
+About the decal images
+----------------------
+They are grayscale graphics with alpha. The luminance doubles as a height map,
+so the same file drives both the colour and the depth: switch on Parallax
+(N-panel > Decals > Depth) and a seam or vent recesses properly at grazing
+angles without a second texture.
