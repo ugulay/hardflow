@@ -10,29 +10,57 @@
 
 
 def shortcut_bar_layout(chip_widths, region_width, margin=24.0, gap=8.0,
-                        height=26.0, bottom=14.0):
+                        height=26.0, bottom=14.0, row_gap=6.0):
     """Pack a row of shortcut chips of the given pixel `chip_widths`, centered
     along the bottom edge of a `region_width`-wide viewport.
 
-    Returns ``{'bar': (x, y, w, h), 'chips': [(x, w), ...]}`` in screen pixels with
-    a bottom-left origin: 'bar' is the enclosing strip, each chip its own left edge
-    + width. The row is centered on the viewport; when it is wider than the
-    viewport minus both margins it is left-anchored at `margin` instead, so the
-    first chips never slide off the left edge. Non-positive widths are dropped;
-    empty input yields an empty layout. Pure, unit-tested."""
+    Returns ``{'bar': (x, y, w, h), 'chips': [(x, w), ...], 'rows': [i, ...],
+    'row_height': h, 'row_gap': g}`` in screen pixels with a bottom-left origin:
+    'bar' is the box enclosing every row, each chip its own left edge + width,
+    and 'rows' the row each chip landed on (0 = top row, the last row sits at
+    `bottom`) so the caller can place it vertically.
+
+    Chips that would not fit inside `region_width` minus both margins **wrap**
+    onto further rows instead of running off the right edge -- a dozen chips at a
+    high UI scale, or a narrow viewport with the sidebar open, used to push the
+    last ones out of sight. Each row is centered on its own; a row still wider
+    than the viewport (a single over-wide chip) is left-anchored at `margin` so
+    its first chips never slide off the left edge. Non-positive widths are
+    dropped; empty input yields an empty layout. Pure, unit-tested."""
     widths = [w for w in chip_widths if w > 0]
     if not widths:
-        return {'bar': (0.0, bottom, 0.0, height), 'chips': []}
-    total = sum(widths) + gap * (len(widths) - 1)
-    x0 = (region_width - total) / 2.0
-    if x0 < margin:
-        x0 = margin
-    chips = []
-    x = x0
+        return {'bar': (0.0, bottom, 0.0, height), 'chips': [], 'rows': [],
+                'row_height': height, 'row_gap': row_gap}
+    avail = max(region_width - 2.0 * margin, 0.0)
+    # Greedy wrap: start a new row as soon as the next chip would overflow. A
+    # lone chip wider than the available width keeps its own row -- there is
+    # nothing left to split.
+    rows, used = [[]], 0.0
     for w in widths:
-        chips.append((x, w))
-        x += w + gap
-    return {'bar': (x0, bottom, total, height), 'chips': chips}
+        step = w if not rows[-1] else gap + w
+        if rows[-1] and used + step > avail:
+            rows.append([w])
+            used = w
+        else:
+            rows[-1].append(w)
+            used += step
+    n = len(rows)
+    bar_h = n * height + (n - 1) * row_gap
+    chips, chip_rows, lefts, totals = [], [], [], []
+    for r, row in enumerate(rows):
+        total = sum(row) + gap * (len(row) - 1)
+        x = (region_width - total) / 2.0
+        if x < margin:
+            x = margin
+        lefts.append(x)
+        totals.append(total)
+        for w in row:
+            chips.append((x, w))
+            chip_rows.append(r)
+            x += w + gap
+    return {'bar': (min(lefts), bottom, max(totals), bar_h),
+            'chips': chips, 'rows': chip_rows,
+            'row_height': height, 'row_gap': row_gap}
 
 
 def axis_alignment(pa, pb, tol=6.0):

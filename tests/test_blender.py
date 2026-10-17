@@ -262,7 +262,9 @@ def test_live_boolean_preview_and_cutter_options():
         for attr in ("live_boolean_preview", "draw_inset", "draw_bevel_cut",
                      "draw_cutter_bevel", "draw_array_count", "draw_array_axis"):
             assert hasattr(prefs, attr), attr
-        assert prefs.live_boolean_preview is False and prefs.draw_array_count == 1
+        # On by default: seeing the real hole while dragging is the whole point,
+        # and the AABB cull + evaluated-vertex cap keep it cheap on heavy scenes.
+        assert prefs.live_boolean_preview is True and prefs.draw_array_count == 1
 
         target = _add_cube("Target", size=2.0)
         cutter = _add_cube("Cutter", size=1.0, location=(1, 0, 0))
@@ -3404,6 +3406,92 @@ def test_ensure_smooth_by_angle_adds_the_modern_modifier():
     # Idempotent: a second call refreshes the angle, never stacks a duplicate.
     assert hardops.ensure_smooth_by_angle(cube, math.radians(45.0)) is True
     assert len([m for m in cube.modifiers if m.type == 'NODES']) == len(mods)
+
+
+def test_draw_tool_is_registered_in_the_toolbar():
+    # The persistent draw tool is the fix for "the modal exits after every cut":
+    # as an active tool it stays armed, so a second hole is one more click.
+    _reset()
+    from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+    import hardflow
+    hardflow.register()
+    try:
+        cls = ToolSelectPanelHelper._tool_class_from_space_type('VIEW_3D')
+        items = cls._tools.get('OBJECT') or []
+        ids = []
+        for item in items:
+            if item is None:
+                continue
+            if type(item) is tuple:          # a group of tools
+                ids += [t.idname for t in item if t is not None]
+            else:
+                ids.append(item.idname)
+        assert "hardflow.draw" in ids, ids
+        # Still no bare None anywhere (issue #4 guard) and no nesting of our
+        # tools inside a built-in group.
+        for item in items:
+            if type(item) is tuple:
+                assert all(t is None or not t.idname.startswith("hardflow.")
+                           for t in item), "hardflow tool buried in a group"
+        # The tool launches the draw operator with the panel-mode flag set.
+        tool = next(i for i in items
+                    if i is not None and type(i) is not tuple
+                    and i.idname == "hardflow.draw")
+        km = tool.keymap
+        assert km, km
+    finally:
+        hardflow.unregister()
+
+
+def test_draw_session_state_round_trips():
+    # With the toolbar tool staying armed, every commit would otherwise re-seed
+    # the in-draw settings from preferences and throw away what the user just
+    # dialed in. _store_session / _apply_session carry them over (in-session
+    # only -- Ctrl+S is still what writes a real default). Driven on a stand-in
+    # self, like test_draw_placement_journal.
+    import types
+    from hardflow.operators import draw_cut
+    cls = draw_cut.HARDFLOW_OT_draw
+    cls._session_state = {}
+    tuned = types.SimpleNamespace(
+        inset=0.25, array_count=4, array_axis='RADIAL', mirror_axis='X',
+        bevel_cut=True, cutter_bevel=False, live_bool=True, shape='SLOT',
+        sides=7, plane='SURFACE', grid_size=0.05, depth=1.25,
+        orientation='PROJECT')
+    stored = cls._store_session(tuned)
+    assert stored['array_axis'] == 'RADIAL' and stored['shape'] == 'SLOT'
+
+    fresh = types.SimpleNamespace(
+        inset=0.0, array_count=1, array_axis='X', mirror_axis='',
+        bevel_cut=False, cutter_bevel=False, live_bool=False, shape='BOX',
+        sides=6, plane='VIEW', grid_size=0.1, depth=0.0, orientation='FIXED')
+    cls._apply_session(fresh)
+    assert fresh.array_count == 4 and fresh.mirror_axis == 'X'
+    assert fresh.shape == 'SLOT' and fresh.plane == 'SURFACE'
+    assert abs(fresh.depth - 1.25) < 1e-9 and fresh.orientation == 'PROJECT'
+
+    # Every stored key is a declared one (a stray attribute cannot leak through).
+    assert set(stored) <= set(cls._SESSION_KEYS)
+    # Partial state is fine: adding a key later must not raise on old state.
+    cls._session_state = {'array_count': 2}
+    cls._apply_session(fresh)
+    assert fresh.array_count == 2 and fresh.shape == 'SLOT'
+    cls._session_state = {}
+
+
+def test_draw_operator_has_scene_mode_flag():
+    # The toolbar tool passes use_scene_mode=True so the N-panel Mode dropdown
+    # drives it; the menu/pie entries keep passing an explicit mode.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        props = bpy.ops.mesh.hardflow_draw.get_rna_type().properties
+        assert "use_scene_mode" in props
+        assert props["use_scene_mode"].default is False
+        assert hasattr(bpy.context.scene, "hardflow_draw_mode")
+    finally:
+        hardflow.unregister()
 
 
 def _run():

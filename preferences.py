@@ -438,7 +438,16 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "RESULT live on the target (a temporary modifier, removed on "
                     "commit/cancel) instead of only the wire cutter cage. Toggle "
                     "with J while drawing; skipped on heavy targets for speed",
-        default=False,
+        default=True,
+    )
+    draw_remember_session: BoolProperty(
+        name="Remember Draw Settings",
+        description="Carry the in-draw settings (inset, array, mirror, bevel, "
+                    "depth, plane, grid) from one draw to the next for the rest "
+                    "of this Blender session, so repeated cuts with the toolbar "
+                    "tool don't reset what you just dialed in. Ctrl+S while "
+                    "drawing is still what makes a setting the saved default",
+        default=True,
     )
     live_preview_max_verts: IntProperty(
         name="Live Preview Vertex Cap",
@@ -575,6 +584,7 @@ class HARDFLOW_Preferences(AddonPreferences):
             col.prop(self, "live_preview_max_verts")
             col.separator()
             col.label(text="Cutter defaults (seed the next draw)", icon='MOD_BOOLEAN')
+            col.prop(self, "draw_remember_session")
             col.prop(self, "draw_inset")
             col.prop(self, "draw_bevel_cut")
             col.prop(self, "draw_cutter_bevel")

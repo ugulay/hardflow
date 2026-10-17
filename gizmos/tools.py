@@ -11,6 +11,29 @@ import bpy
 from bpy.types import WorkSpaceTool
 
 
+class HARDFLOW_T_draw(WorkSpaceTool):
+    """The hero: a persistent toolbar tool for the draw-to-cut boolean.
+
+    Without this the modal exits on every commit and each hole costs another
+    Ctrl+Shift+D -- the thing a BoxCutter/Fluent user notices on cut #2. As an
+    active tool it stays armed: click, drag, cut, click again. The mode comes
+    from the N-panel's Mode dropdown (Scene.hardflow_draw_mode) via
+    `use_scene_mode`, so the dropdown drives the toolbar tool too.
+    """
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+    bl_idname = "hardflow.draw"
+    bl_label = "Hardflow Draw Cut"
+    bl_description = ("Draw a shape on the surface and boolean it into the mesh "
+                      "(mode from the N-panel Mode dropdown)")
+    bl_icon = "ops.mesh.knife_tool"
+    bl_keymap = (
+        ("mesh.hardflow_draw",
+         {"type": 'LEFTMOUSE', "value": 'PRESS'},
+         {"properties": [("use_scene_mode", True)]}),
+    )
+
+
 class HARDFLOW_T_move(WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
@@ -89,7 +112,8 @@ class HARDFLOW_T_push_pull_edit(WorkSpaceTool):
 # No `separator` on the first tool either: Blender already places one after
 # `builtin.transform`, and a second would draw a double gap.
 _TOOLS = (
-    (HARDFLOW_T_move, {"after": {"builtin.transform"}}),
+    (HARDFLOW_T_draw, {"after": {"builtin.transform"}}),
+    (HARDFLOW_T_move, {"after": {"hardflow.draw"}}),
     (HARDFLOW_T_rotate, {"after": {"hardflow.move"}}),
     (HARDFLOW_T_scale, {"after": {"hardflow.rotate"}}),
     (HARDFLOW_T_push_pull, {"after": {"hardflow.scale"}}),

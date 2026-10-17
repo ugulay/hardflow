@@ -55,6 +55,10 @@ pick the `hardflow` zip.
 4. Still drawing? **Tab** switches Cut → Slice → Make → Join → Intersect →
    Face → Knife, and **Q W E R T Y U I** switch the shape.
 
+Cutting a row of holes? Pick **Hardflow Draw Cut** from the toolbar (**T**)
+instead: it stays armed, so every cut is just another click, and it keeps the
+array, mirror and inset you dialed in. The N-panel **Mode** dropdown drives it.
+
 Everything also lives in the **N-panel ▸ Hardflow** tab, the **Alt+Q** pie menu
 and the 3D-View header menu, so you never have to memorise a key to find a tool.
 
@@ -66,7 +70,7 @@ and the 3D-View header menu, so you never have to memorise a key to find a tool.
 Vent footprints straight onto a surface and cut, slice, union, intersect or
 score them. Type a number while drawing to lock an exact size. The grid snaps in
 real meters, not screen pixels, so a 20 mm hole is 20 mm from any camera angle.
-Press **J** to see the real boolean result before you commit. Drop Cube / Plane
+The real boolean result previews live while you draw. Drop Cube / Plane
 / Cylinder / Cone / Sphere / Tube starters to model on.
 
 **Detail fast.** Array a cut along an axis or spin it into a **bolt circle**,
@@ -153,7 +157,7 @@ step**.
 | B / C | Bevel-on-cut / bevelled cutter |
 | J | Live boolean preview |
 | G | Stamp the previous shape again |
-| S | Save the current draw settings as your defaults |
+| Ctrl+S | Save the current draw settings as your defaults |
 | O | Project / Fixed extrude orientation |
 | Ctrl+Wheel | Grid density |
 | PgUp / PgDn | Cutter depth (Shift = fine) |

@@ -16,7 +16,7 @@ import math
 
 import bpy
 from bpy.types import Operator
-from bpy.props import EnumProperty
+from bpy.props import BoolProperty, EnumProperty
 from mathutils import Vector
 
 from ..core import (raycast, geometry, boolean, grid, snap, decal_math, command,
@@ -79,6 +79,13 @@ class HARDFLOW_OT_draw(Operator):
 
     shape: EnumProperty(name="Shape", items=_SHAPES, default='BOX')
     mode: EnumProperty(name="Mode", items=_MODES, default='CUT')
+    use_scene_mode: BoolProperty(
+        name="Use Panel Mode",
+        description="Take the operation from the N-panel's Mode dropdown "
+                    "(Scene.hardflow_draw_mode) instead of this property -- the "
+                    "toolbar tool sets this so one dropdown drives both",
+        default=False, options={'SKIP_SAVE'},
+    )
     solver: EnumProperty(name="Solver", items=_SOLVERS, default='DEFAULT')
     orientation: EnumProperty(name="Orientation", items=_ORIENTS, default='FIXED')
 
@@ -88,17 +95,48 @@ class HARDFLOW_OT_draw(Operator):
         return (obj is not None and obj.type == 'MESH'
                 and context.mode in {'OBJECT', 'EDIT_MESH'})
 
+    # Live in-draw settings carried from one draw to the next *within this
+    # Blender session* (the toolbar tool stays armed, so every cut would
+    # otherwise re-seed from preferences and throw away what the user just dialed
+    # in). Written on cleanup, read on invoke, gated by draw_remember_session.
+    # Deliberately NOT persisted to the .blend or the prefs: Ctrl+S is still what
+    # makes a setting the default.
+    _SESSION_KEYS = ('inset', 'array_count', 'array_axis', 'mirror_axis',
+                     'bevel_cut', 'cutter_bevel', 'live_bool', 'shape',
+                     'sides', 'plane', 'grid_size', 'depth', 'orientation')
+    _session_state = {}
+
+    @classmethod
+    def _store_session(cls, op):
+        """Snapshot the live in-draw settings for the next draw in this session.
+        Pure dict work on the operator's own attributes -- unit-testable on a
+        stand-in self, like _record_placement."""
+        cls._session_state = {k: getattr(op, k) for k in cls._SESSION_KEYS
+                              if hasattr(op, k)}
+        return cls._session_state
+
+    @classmethod
+    def _apply_session(cls, op):
+        """Re-apply the stored in-draw settings over the preference-seeded
+        defaults. Unknown/absent keys are skipped, so adding a key is safe."""
+        for k, v in cls._session_state.items():
+            if k in cls._SESSION_KEYS:
+                setattr(op, k, v)
+        return op
+
     def invoke(self, context, event):
         if context.area is None or context.area.type != 'VIEW_3D':
             self.report({'WARNING'}, "Run inside View3D")
             return {'CANCELLED'}
 
         prefs = get_prefs(context)
+        if self.use_scene_mode:          # launched from the toolbar tool
+            self.mode = getattr(context.scene, "hardflow_draw_mode", self.mode)
         self.edit = context.mode == 'EDIT_MESH'  # draw into the active edit-mesh
         self.snap = prefs.snap_enabled
         self.geo = prefs.geo_snap        # vertex/edge snap (overrides grid)
         self.nd = prefs.non_destructive  # non-destructive: leave a live modifier
-        self.plane = prefs.default_plane  # saved projection plane (S saves it)
+        self.plane = prefs.default_plane  # saved plane (Ctrl+S saves it)
         self.plane_spin = 0.0            # live in-plane grid rotation (Shift+arrows)
         self.sides = prefs.ngon_sides    # N-gon side count (adjust live with [ ])
         self.arc_sweep = 1.5707963267948966  # ARC sector sweep (rad); [ ] adjusts
@@ -143,6 +181,14 @@ class HARDFLOW_OT_draw(Operator):
         self._preview_sig = None    # last-built preview signature (dirty check)
         self._collect_snap_geometry(context)
 
+        # Carry the previous draw's live settings over (toolbar tool stays
+        # armed, so this is what stops every cut from resetting the array /
+        # mirror / inset / depth the user just set). Applied after the
+        # preference seeding above and before the EDGES auto-detect below, so an
+        # explicit edge selection still wins.
+        if prefs.draw_remember_session:
+            self._apply_session(self)
+
         # Edge-grid workflow: if you enter with edge(s) selected in Edit Mode,
         # start on the EDGES plane (grid laid on the selection).
         if self.edit:
@@ -160,8 +206,8 @@ class HARDFLOW_OT_draw(Operator):
         # Native status-bar hint (mirrors the premium bar for discoverability).
         try:
             context.workspace.status_text_set(
-                "Draw Cut    LMB place    Tab mode    Q/W/E/R/T/Y/U shape    "
-                "type exact size    Enter apply    Esc cancel")
+                "Draw Cut    LMB place    Tab mode    Q/W/E/R/T/Y/U/I shape  "
+                "  type exact size    Enter apply    Esc cancel")
         except Exception:
             pass
         return {'RUNNING_MODAL'}
@@ -365,9 +411,11 @@ class HARDFLOW_OT_draw(Operator):
                 self.grid_origin = raycast.ray_to_plane(
                     region, rv3d, self.cursor, origin, normal)
 
-        # S: persist the live HUD settings (snap/geo/ND, grid, sides, plane) as
-        # the defaults for the next draw session.
-        elif event.type == 'S' and event.value == 'PRESS':
+        # Ctrl+S: persist the live HUD settings (snap/geo/ND, grid, sides,
+        # plane) as the defaults for the next draw session. Deliberately NOT a
+        # bare S: that is Blender's Scale key, and a reflex press used to
+        # rewrite the user's preferences with no confirmation and no undo.
+        elif event.type == 'S' and event.value == 'PRESS' and event.ctrl:
             self._save_settings(context)
 
         elif event.type in {'LEFT_ARROW', 'RIGHT_ARROW'} and event.value == 'PRESS':
@@ -890,7 +938,8 @@ class HARDFLOW_OT_draw(Operator):
             status,
             ("Q/W/E/R/T/Y/U/I shape    type = exact size    < > plane    "
              "Shift+< > rotate    Ctrl=snap grid    Ctrl+Wheel grid    "
-             "PgUp/Dn depth (Shift fine)    H origin    G stamp    S save", dim),
+             "PgUp/Dn depth (Shift fine)    H origin    G stamp    "
+             "Ctrl+S save", dim),
         ]
         # Surface the in-draw operation state only when something is active.
         bits = []
@@ -1101,13 +1150,18 @@ class HARDFLOW_OT_draw(Operator):
                                      name="hf_preview",
                                      apex=self._project_apex(context.region_data))
 
+    # Fallback cutter depth when there is no target to measure (the active
+    # object vanished mid-draw): a metre pierces anything at hand-drawn scale.
+    _FALLBACK_THICKNESS = 1.0
+
     def _thickness(self, context):
         """Cutter depth: the explicit live thickness (PgUp/PgDn) when set, else a
         depth large enough to pierce all targets."""
         if self.depth > 1e-6:
             return self.depth
-        return max(geometry.estimate_thickness(t)
-                   for t in self._targets(context))
+        depths = [geometry.estimate_thickness(t)
+                  for t in self._targets(context)]
+        return max(depths) if depths else self._FALLBACK_THICKNESS
 
     def _project_apex(self, rv3d):
         """World-space camera position for PROJECT orientation, else None. Each
@@ -1194,6 +1248,20 @@ class HARDFLOW_OT_draw(Operator):
         corners = [mw @ Vector(c) for c in obj.bound_box]
         return preview_cache.aabb([(c.x, c.y, c.z) for c in corners])
 
+    @staticmethod
+    def _eval_vert_count(context, obj):
+        """The vertex count the live boolean will actually be evaluated against.
+        `obj.data.vertices` is the wrong measure: a target carrying Subdivision /
+        Array / Mirror -- the very stack core.modifiers sorts for us -- passes any
+        cap on its base cage while the evaluated mesh is orders of magnitude
+        heavier, which is exactly the case the cap exists to skip. Falls back to
+        the base mesh if the evaluated copy is unavailable."""
+        try:
+            dg = context.evaluated_depsgraph_get()
+            return len(obj.evaluated_get(dg).data.vertices)
+        except (AttributeError, ReferenceError, RuntimeError):
+            return len(obj.data.vertices)
+
     def _clear_live_boolean(self, context):
         """Strip the live-preview boolean modifier(s) via the LivePreviewCommand.
         Idempotent; called before the real cut on commit and on cancel."""
@@ -1227,8 +1295,7 @@ class HARDFLOW_OT_draw(Operator):
             self._world_aabb(self._preview), self.grid_size * 0.5)
         targets = [
             t for t in self._targets(context)
-            if t is not None and t.type == 'MESH'
-            and len(t.data.vertices) <= cap
+            if self._eval_vert_count(context, t) <= cap
             and preview_cache.boxes_overlap(cutter_box, self._world_aabb(t))]
 
         if self._live_cmd is None:
@@ -1318,6 +1385,11 @@ class HARDFLOW_OT_draw(Operator):
             return
 
         targets = self._targets(context)
+        if not targets:
+            # The active mesh went away mid-draw (selection changed, object
+            # deleted): say so instead of building a cutter nothing can cut.
+            self.report({'WARNING'}, "No mesh target to cut -- select one")
+            return
         # Array/Mirror copies are baked into one cutter mesh; depth = live
         # thickness when set, else big enough to pierce all targets. apex tapers
         # the cutter with perspective in PROJECT orientation (None = Fixed).
@@ -1449,13 +1521,21 @@ class HARDFLOW_OT_draw(Operator):
 
     def _targets(self, context):
         """If multi-object mode is on, all selected meshes (CUT/MAKE); otherwise
-        only the active object. SLICE/FACE always operate on the active one."""
-        active = context.active_object
+        only the active object. SLICE/FACE always operate on the active one.
+
+        Always a list of real meshes: the active object can be None (or a
+        non-mesh) when the selection changes mid-draw, and every caller used to
+        have to filter that out -- _sync_live_boolean did, _thickness did not,
+        so estimate_thickness(None) raised inside the preview."""
         if (get_prefs(context).multi_object
                 and self.mode in {'CUT', 'MAKE', 'INTERSECT'}):
             sel = [o for o in context.selected_objects if o.type == 'MESH']
-            return sel if sel else [active]
-        return [active]
+            if sel:
+                return sel
+        active = context.active_object
+        if active is not None and active.type == 'MESH':
+            return [active]
+        return []
 
     def _build_face(self, context, sets):
         """Create a new face object from the drawn shape(s) -- one n-gon per
@@ -1782,6 +1862,10 @@ class HARDFLOW_OT_draw(Operator):
         self._cleanup(context)
 
     def _cleanup(self, context):
+        try:
+            self._store_session(self)     # carry the live settings to the next draw
+        except Exception:  # noqa: BLE001 -- teardown must never raise
+            pass
         self._clear_live_boolean(context)  # strip any temp preview mods first
         self._clear_preview()  # discards the cage on cancel; no-op after commit
         # Drop the placement journal: on commit the net change is the cutter (one

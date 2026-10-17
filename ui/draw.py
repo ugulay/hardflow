@@ -484,10 +484,17 @@ def draw_shortcut_bar(region, items, accent=None):
     if not layout['chips']:
         return
     _draw_rect(bx - 9 * scale, by - 5 * scale, bw + 18 * scale, bh + 10 * scale,
-               bar_bg)   # bar backdrop
+               bar_bg)   # bar backdrop (encloses every wrapped row)
+    # Row 0 is the TOP row and the last sits at the layout's `bottom`, so the
+    # chips read top-to-bottom when the row wraps on a narrow viewport.
+    row_h, row_gap = layout['row_height'], layout['row_gap']
+    rows = layout['rows']
+    row_count = max(rows) + 1
 
-    for (cx, cw), (key, label, active, keybox_w, kw, lw) in zip(
-            layout['chips'], norm):
+    for (cx, cw), row, (key, label, active, keybox_w, kw, lw) in zip(
+            layout['chips'], rows, norm):
+        by = layout['bar'][1] + (row_count - 1 - row) * (row_h + row_gap)
+        bh = row_h
         _draw_rect(cx, by, cw, bh, chip_bg)
         # key box
         kbx, kby = cx + pad, by + 4 * scale

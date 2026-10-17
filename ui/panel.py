@@ -135,6 +135,8 @@ class HARDFLOW_PT_tools(Panel):
         col.label(text="1.  Select a mesh (Object Mode)")
         col.label(text="2.  Ctrl+Shift+D — draw a shape to cut it")
         col.label(text="3.  Tab cycles Cut / Slice / Make mid-draw")
+        col.label(text="Many cuts? Toolbar (T) ▸ Hardflow Draw Cut stays on",
+                  icon='TOOL_SETTINGS')
         row = box.row(align=True)
         row.operator("mesh.hardflow_draw", text="Cut Now",
                      icon='MOD_BOOLEAN').mode = 'CUT'
@@ -308,16 +310,37 @@ class HARDFLOW_PT_help(Panel):
         self._kv(col, "Ctrl+Shift+D", "Draw / Cut")
         self._kv(col, "Ctrl+Shift+X", "HardFlow Mode")
 
+        # Keep this list in step with README.md's "Drawing shortcuts" table and
+        # with HARDFLOW_OT_draw._modal -- a stale cheat-sheet is worse than none.
         box = layout.box()
         box.label(text="While drawing", icon='MOD_BOOLEAN')
         col = box.column(align=True)
         self._kv(col, "Tab", "Cut / Slice / Make / …")
-        self._kv(col, "Q W E R T Y U", "Shape")
-        self._kv(col, "type number", "Exact size")
-        self._kv(col, "[  ]", "Sides / arc")
+        self._kv(col, "Q W E R T Y U I", "Shape (…I = Vent)")
+        self._kv(col, "type number", "Exact size (0-9 and .)")
+        self._kv(col, "[  ]", "Sides / arc sweep / slats")
+        self._kv(col, "< >", "Drawing plane")
+        self._kv(col, "Shift+< >", "Rotate the grid")
         self._kv(col, "X · V", "Grid · vertex snap")
-        self._kv(col, "< >", "Projection plane")
+        self._kv(col, "Ctrl (held)", "Force grid snap")
+        self._kv(col, "Shift (held)", "Lock to angle steps")
         self._kv(col, "J", "Live boolean preview")
+        self._kv(col, "N", "Non-destructive")
+
+        box = layout.box()
+        box.label(text="Shape it mid-draw", icon='MOD_ARRAY')
+        col = box.column(align=True)
+        self._kv(col, "- =", "Inset / extract the loop")
+        self._kv(col, ", .", "Rotate in plane")
+        self._kv(col, "A · D", "Array count · axis (incl. radial)")
+        self._kv(col, "M", "Mirror across an axis")
+        self._kv(col, "B · C", "Bevel on cut · bevelled cutter")
+        self._kv(col, "H", "Set / move the grid origin")
+        self._kv(col, "O", "Project / Fixed extrude")
+        self._kv(col, "G", "Stamp the previous shape")
+        self._kv(col, "PgUp / PgDn", "Cutter depth (Shift = fine)")
+        self._kv(col, "Ctrl+Wheel", "Grid density")
+        self._kv(col, "Ctrl+S", "Save these settings as defaults")
 
         box = layout.box()
         box.label(text="Direct modeling", icon='TOOL_SETTINGS')

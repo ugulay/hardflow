@@ -37,6 +37,8 @@ it brings to Blender for free. The right column points at the implementing modul
 | Self-intersection guard | A broken polygon is rejected before the cut | `core/grid.py is_self_intersecting` |
 | Multi-object cut | Apply CUT/MAKE to all selected meshes with one cutter | `operators/draw_cut.py` |
 | Live boolean preview (v1.13) | Toggle `J` to see the actual Cut/Make/Intersect RESULT on the target while drawing (a temporary modifier, removed on commit/cancel; vertex-capped) | `operators/draw_cut.py` |
+| Persistent draw tool (v1.23) | A toolbar Workspace Tool (`Hardflow Draw Cut`) that stays armed, so a row of cuts is one click each; takes its operation from the N-panel Mode dropdown (`use_scene_mode`) | `gizmos/tools.py HARDFLOW_T_draw`, `operators/draw_cut.py` |
+| Draw session memory (v1.23) | The in-draw settings (inset / array / mirror / bevel / depth / plane / grid / shape) carry from one draw to the next within the Blender session, so a persistent tool stops resetting them; pref `draw_remember_session`, Ctrl+S still writes the real defaults | `operators/draw_cut.py _store_session/_apply_session` |
 | Cutter options (v1.13) | N-panel "Cutter Options" presets the next draw's inset / bevel-on-cut / bevelled cutter / array | `ui/panel.py`, `preferences.py` |
 
 ### In-draw operations (v1.4)

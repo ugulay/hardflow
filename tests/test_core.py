@@ -1232,6 +1232,33 @@ def test_shortcut_bar_layout_left_anchors_when_too_wide():
     assert lay['chips'][0][0] == 24.0
 
 
+def test_shortcut_bar_layout_wraps_instead_of_overflowing():
+    # A dozen chips on a narrow viewport used to run straight off the right edge
+    # (the row was only ever left-anchored, never wrapped). Now they stack.
+    w = [100.0] * 12
+    lay = hud.shortcut_bar_layout(w, 500.0, margin=20.0, gap=10.0, height=26.0,
+                                  bottom=14.0, row_gap=6.0)
+    assert len(lay['chips']) == 12
+    # 500 - 2*20 = 460 usable -> 4 chips/row (4*100 + 3*10 = 430), 3 rows.
+    assert max(lay['rows']) == 2
+    assert lay['rows'] == [0] * 4 + [1] * 4 + [2] * 4
+    # No chip may extend past the viewport.
+    assert all(x + cw <= 500.0 + 1e-9 for x, cw in lay['chips'])
+    # The bar encloses every row: 3 * 26 + 2 * 6.
+    assert abs(lay['bar'][3] - (3 * 26.0 + 2 * 6.0)) < 1e-9
+    assert lay['bar'][1] == 14.0 and lay['row_height'] == 26.0
+    # Each row is centered on its own, so rows of equal width share a left edge.
+    assert abs(lay['chips'][0][0] - lay['chips'][4][0]) < 1e-9
+
+
+def test_shortcut_bar_layout_single_row_has_no_rows_offset():
+    # The common case must stay a plain centered single row (row 0 for every
+    # chip), so the renderer's vertical offset is a no-op.
+    lay = hud.shortcut_bar_layout([80.0, 80.0], 1000.0, gap=8.0)
+    assert lay['rows'] == [0, 0]
+    assert abs(lay['bar'][3] - 26.0) < 1e-9
+
+
 def test_shortcut_bar_layout_empty():
     lay = hud.shortcut_bar_layout([], 800.0)
     assert lay['chips'] == [] and lay['bar'][2] == 0.0

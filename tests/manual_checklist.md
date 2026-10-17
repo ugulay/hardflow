@@ -993,6 +993,69 @@ was measured through the Blender MCP; the rest still needs a human.
 - [ ] Turn the pref on: Push/Pull now *starts* in Manifold mode and `D` turns it
       off.
 
+## 25. Modal teardown + persistent draw tool (review pass)
+
+The headless suite cannot reach any of this: it needs a live modal and a real
+window.
+
+### Teardown — nothing may survive a torn-down modal
+
+Each case: start the tool, place a point or two so the overlay is up, then
+trigger the teardown **without** pressing Esc or Enter.
+
+- [ ] **File load mid-draw** (Ctrl+O → open any .blend) while Draw Cut is
+      running: no traceback spam in the System Console, no leftover overlay
+      drawn on the new file, the status bar back to Blender's own hint, and no
+      `HF_LivePreview` modifier or `hf_cutter` object in the loaded scene.
+- [ ] Same with **Push/Pull**, **Offset**, **Edge Bevel**, **Loop Cut** (the
+      shared `_FaceDragModal`): the mesh must not stay half-extruded, and
+      `bpy.data.meshes` must hold no `hf_*` snapshot (check the Blender File
+      outliner view → Meshes).
+- [ ] Same with **Pipe / Cable / Sweep**: no stray preview curve left behind.
+- [ ] Same with **HardFlow Mode**, and with the **Trim Sheet editor** (the
+      carved regions roll back to what they were on entry, like Esc).
+- [ ] Same with **Place Decal** and **Place Asset** — the hardest case: no
+      preview object, no orphan material in the .blend afterwards.
+- [ ] **Cutter Scroll**, then load a file: every cutter's visibility is back and
+      the status banner is gone (previously it stayed stuck with all but one
+      cutter hidden).
+- [ ] **Editor-type change mid-modal** (drag the 3D-View corner to a UV editor
+      while drawing) and **window close** of a second 3D-View window: same
+      expectations, no console traceback.
+- [ ] Push/Pull **gizmo** (toolbar) dragged, then a file load mid-drag: no
+      orphan `hf_gizmo_pushpull` mesh and no half-extruded object.
+
+### Persistent draw tool
+
+- [ ] Toolbar (T) shows **Hardflow Draw Cut** directly under the built-in
+      transform tools — not nested inside the Scale dropdown, no double
+      separator (issue #4 regression guard).
+- [ ] Pick it, then click-drag on a mesh: the cut happens and **the tool stays
+      active**. Cut five bolt holes in a row without re-invoking anything.
+- [ ] Change the N-panel **Mode** dropdown to *Slice*, draw again: the toolbar
+      tool follows the dropdown.
+- [ ] Set an array (`A`/`D`), a mirror (`M`) and an inset (`-`/`=`) mid-draw,
+      commit, then draw again: those settings are **still set** (session
+      carry-over). Ctrl+Z undoes each cut as **one** step, and the second cut
+      does not merge into the first.
+- [ ] Turn **Remember Draw Settings** off in preferences: the next draw starts
+      from the preference defaults again.
+- [ ] **Ctrl+S** while drawing reports "draw settings saved as default"; a bare
+      **S** now does nothing (it used to silently rewrite the preferences).
+
+### Overlay + preview
+
+- [ ] At **UI scale 1.5** with the sidebar and toolbar open, the bottom shortcut
+      bar **wraps onto two rows** instead of running off the right edge; every
+      chip is readable and the backdrop encloses both rows.
+- [ ] Live boolean preview is **on by default** on a fresh install (the `J` chip
+      lit) and the real hole appears while dragging.
+- [ ] A target with a **Subdivision modifier** pushing it past the vertex cap:
+      the preview now correctly falls back to the wire cage (it used to measure
+      the base cage and try the boolean on millions of evaluated verts).
+- [ ] Delete the active object mid-draw, then press Enter: a clean
+      "No mesh target to cut" warning, no traceback.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`
