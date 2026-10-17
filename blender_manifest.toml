@@ -13,3 +13,32 @@ blender_version_min = "4.2.0"
 license = ["SPDX:GPL-3.0-or-later"]
 
 tags = ["Modeling", "Mesh", "Object"]
+
+copyright = ["2025-2026 Ugur Gulay"]
+
+# Declared resource access, required by the extensions platform for any add-on
+# that touches the filesystem. Hardflow reads decal/trim images and .blend kit
+# parts from a library folder (its own bundled one, or yours), saves baked and
+# created decals, and exports asset packs. No network, clipboard, camera or
+# microphone access anywhere in the add-on.
+[permissions]
+files = "Load decal images and .blend kit parts, save bakes and exports"
+
+# Keep a local `blender --command extension build` producing the same payload as
+# the release workflow: code, the manifest and the bundled library/, without the
+# development material. (The workflow does its own rsync with this same list.)
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/.github/",
+  "/.claude/",
+  "/promo/",
+  "/tools/",
+  "/tests/",
+  "/docs/",
+  "*.zip",
+  "*.md",
+  "/.gitignore",
+  "/.gitattributes",
+]
