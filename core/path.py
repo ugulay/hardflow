@@ -12,6 +12,28 @@ def _dist(a, b):
     return math.sqrt(sum((a[i] - b[i]) ** 2 for i in range(len(a))))
 
 
+def px_dist2(a, b):
+    """Squared screen-pixel distance between two 2D points. Squared on purpose:
+    gesture gates compare against a threshold, and skipping the square root
+    keeps it exact and cheap on every mouse-move."""
+    dx, dy = a[0] - b[0], a[1] - b[1]
+    return dx * dx + dy * dy
+
+
+def is_drag(press_px, now_px, gate_px):
+    """Whether a held pointer has travelled far enough to count as a DRAG rather
+    than a click.
+
+    This is the whole click-vs-drag decision for the modal tools: press and
+    release within `gate_px` is a click (so the click-click flow is untouched),
+    anything further is a drag gesture. Shared by the draw tool's
+    press-drag-release and the curve tools' freehand stroke, so the two feel
+    identical. Missing endpoints are 'not a drag', never an error."""
+    if press_px is None or now_px is None:
+        return False
+    return px_dist2(press_px, now_px) >= gate_px * gate_px
+
+
 def _lerp(a, b, t):
     return tuple(a[i] + (b[i] - a[i]) * t for i in range(len(a)))
 

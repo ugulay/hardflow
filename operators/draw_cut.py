@@ -20,7 +20,7 @@ from bpy.props import BoolProperty, EnumProperty
 from mathutils import Vector
 
 from ..core import (raycast, geometry, boolean, grid, snap, decal_math, command,
-                    preview_cache)
+                    preview_cache, path)
 from ..preferences import get_prefs
 from ..ui import draw as hud
 from . import base
@@ -179,6 +179,7 @@ class HARDFLOW_OT_draw(Operator):
         self.grid_origin = None     # H: re-anchor the snap grid to a chosen point
         self._preview = None        # live 3D cutter/face volume object
         self._preview_sig = None    # last-built preview signature (dirty check)
+        self._press_px = None       # LMB press position; None = button is up
         self._collect_snap_geometry(context)
 
         # Carry the previous draw's live settings over (toolbar tool stays
@@ -195,6 +196,22 @@ class HARDFLOW_OT_draw(Operator):
             self._edges_basis = self._capture_edges_basis(context)
             if self._edges_basis is not None:
                 self.plane = 'EDGES'
+
+        # Launched by the toolbar tool's own LMB press? That press IS the first
+        # corner -- without seeding it here the gesture would start a click
+        # short (invoke eats the press, so a press-drag-release would place
+        # nothing and the user would have to click again). use_scene_mode is
+        # set only by the tool keymap, so a pie / menu / panel button -- whose
+        # invoking click happens over the menu, not the model -- never seeds.
+        if (self.use_scene_mode and event.type == 'LEFTMOUSE'
+                and event.value == 'PRESS'):
+            press_px = (event.mouse_region_x, event.mouse_region_y)
+            self._raw_cursor = self._snap_screen(context, press_px)
+            self._apply_numeric(context)         # -> self.cursor
+            if self.plane == 'SURFACE' and self._surface_basis is None:
+                self._lock_surface_basis(context, self.cursor)
+            self._place_point(context, self.cursor)
+            self._press_px = press_px
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_px, (context,), 'WINDOW', 'POST_PIXEL')
@@ -271,8 +288,27 @@ class HARDFLOW_OT_draw(Operator):
                 self._lock_surface_basis(context, p)
             self._place_point(context, p)
             self.typed = ""   # next POLY segment starts a fresh numeric entry
+            # Remember where the button went down, so the matching release can
+            # tell a click from a drag (see the RELEASE branch below).
+            self._press_px = (event.mouse_region_x, event.mouse_region_y)
             # BOX / CIRCLE / NGON finish on the second click; POLY keeps going.
             if self.shape != 'POLY' and len(self.points) >= 2:
+                return self._commit(context)
+
+        # Press-drag-release: one gesture draws the shape, which is the first
+        # muscle memory a BoxCutter/Fluent user brings -- the press placed the
+        # first corner, and if the pointer travelled past the gate before the
+        # button came up, this release places the opposite one and commits.
+        # A shorter travel is just a click, so the original click-click flow is
+        # untouched (and a drag that returns to where it started is a click
+        # too). POLY stays click-click: there, dragging means "place a point
+        # and keep going", and its close gestures are Enter / Z / double-click.
+        elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            finish = self._is_drag_release(
+                (event.mouse_region_x, event.mouse_region_y))
+            self._press_px = None            # the button is up either way
+            if finish:
+                self._place_point(context, self.cursor)
                 return self._commit(context)
 
         # Double-click closes an in-progress polyline (parity with Blender's
@@ -637,6 +673,18 @@ class HARDFLOW_OT_draw(Operator):
                 region, rv3d, screen_co, origin, raycast.view_direction(rv3d))
         self._record_placement((screen_co[0], screen_co[1]), w)
 
+    def _is_drag_release(self, now_px):
+        """Whether this left-button release should finish the shape in one
+        press-drag-release gesture.
+
+        True only when a two-point shape already has its first corner down and
+        the pointer travelled past the gate since the press; everything else is
+        a plain click, which leaves the original click-click flow alone. No bpy
+        or context here -- just the operator's own state, so it is unit-testable
+        on a stand-in self (same trick as _record_placement)."""
+        return (self.shape != 'POLY' and len(self.points) == 1
+                and path.is_drag(self._press_px, now_px, self._DRAG_GATE_PX))
+
     def _record_placement(self, screen_pt, world_pt):
         """Append one click to the screen + world point lists as a single journal
         entry (a two-child MacroCommand), so Backspace (undo) removes both
@@ -695,6 +743,11 @@ class HARDFLOW_OT_draw(Operator):
         return (screen_co[0], screen_co[1])
 
     # --- numeric size entry (type an exact dimension) -------------------
+
+    # Implicit click-vs-drag gate (screen px). Deliberately the same value and
+    # the same core.path.is_drag test the curve tools use for their freehand
+    # stroke, so a press-drag means the same thing in every Hardflow tool.
+    _DRAG_GATE_PX = 8
 
     _DIGIT_KEYS = {
         'ZERO': '0', 'ONE': '1', 'TWO': '2', 'THREE': '3', 'FOUR': '4',

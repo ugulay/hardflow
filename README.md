@@ -51,7 +51,8 @@ pick the `hardflow` zip.
 
 1. Add a cube and stay in **Object Mode**, with the cube selected.
 2. Press **Ctrl+Shift+D** (or **Alt+Q** → *Cut*).
-3. Drag a box on the front face. Release. The hole is cut.
+3. Drag a box on the front face. Release. The hole is cut. (Prefer
+   click-click? That still works: click one corner, click the other.)
 4. Still drawing? **Tab** switches Cut → Slice → Make → Join → Intersect →
    Face → Knife, and **Q W E R T Y U I** switch the shape.
 
@@ -150,7 +151,8 @@ step**.
 
 | Key | Function |
 |-----|-----------|
-| Left click | Place point / start-finish shape |
+| Left drag | Press, drag, release: draws the shape in one gesture |
+| Left click | Place point / start-finish shape (click-click also works) |
 | Enter / double-click | Close the POLY shape and apply |
 | Backspace | Delete the last POLY point |
 | Q W E R T Y U I | Shape: Box / Circle / Polygon / N-gon / Slot / Star / Arc / Vent |
@@ -189,8 +191,8 @@ work in **Edit Mode**.
 
 Under active development, and usable today — every planned feature through
 **v1.22** is implemented, plus the one-press Mirror. The pure logic core has
-**161/161** unit tests that run without Blender, and the Blender-dependent paths
-have **163/163** headless tests, verified in Blender 5.2.2 LTS against the 4.2
+**164/164** unit tests that run without Blender, and the Blender-dependent paths
+have **165/165** headless tests, verified in Blender 5.2.2 LTS against the 4.2
 LTS baseline. Interactive feel is checked by hand against
 [tests/manual_checklist.md](tests/manual_checklist.md).
 

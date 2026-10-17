@@ -19,6 +19,15 @@ Blender 5.2.2 LTS.
   about an origin) or the active object. F9-redoable, batched per object, and it
   refuses to mirror an object away when nothing is on the kept side. All the
   decision math is pure in the new `core/mirror.py`.
+- **Press-drag-release drawing**: press a corner, drag, release and the shape
+  is drawn in one gesture -- the first muscle memory a BoxCutter/Fluent user
+  brings, and until now a dead movement (the press placed a point, the release
+  did nothing). Click-click is unchanged: a release within the 8 px gate is
+  still a click, and POLY keeps its click-click flow. Launched from the toolbar
+  tool, the tool's own press seeds the first corner so the whole gesture works
+  from a cold start. The gate is the pure `core.path.is_drag` the curve tools
+  already used for their freehand stroke, so a drag now means the same thing in
+  every Hardflow tool (and `pipe`'s private copy of the maths is gone).
 - **Bundled starter library**: 16 hard-surface decals, a 4x4 trim sheet and 8
   INSERT kit parts ship with the add-on, so the decal, trim-sheet, parallax,
   atlas and INSERT features are usable on a fresh install instead of opening as

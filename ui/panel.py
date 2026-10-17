@@ -326,6 +326,8 @@ class HARDFLOW_PT_help(Panel):
         box = layout.box()
         box.label(text="While drawing", icon='MOD_BOOLEAN')
         col = box.column(align=True)
+        self._kv(col, "LMB drag", "Draw the shape in one gesture")
+        self._kv(col, "LMB click x2", "Corner, then corner (also works)")
         self._kv(col, "Tab", "Cut / Slice / Make / …")
         self._kv(col, "Q W E R T Y U I", "Shape (…I = Vent)")
         self._kv(col, "type number", "Exact size (0-9 and .)")

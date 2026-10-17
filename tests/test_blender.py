@@ -3858,6 +3858,57 @@ def test_bundled_library_files_are_flagged_read_only():
         hardflow.unregister()
 
 
+def test_draw_press_drag_release_decision():
+    # Press-drag-release finishes a box in one gesture, while a plain click
+    # must still fall through to the click-click flow. The modal needs a real
+    # viewport, but the decision is pure state -- drive it on a stand-in self,
+    # the same way test_draw_placement_journal does.
+    import types
+    from hardflow.operators import draw_cut
+    cls = draw_cut.HARDFLOW_OT_draw
+    decide = cls._is_drag_release
+    gate = cls._DRAG_GATE_PX
+
+    def state(shape='BOX', points=1, press=(100, 100)):
+        return types.SimpleNamespace(shape=shape, points=[(0, 0)] * points,
+                                     _press_px=press,
+                                     _DRAG_GATE_PX=gate)
+
+    # Dragged well past the gate with the first corner down -> commit.
+    assert decide(state(), (100 + gate + 4, 100)) is True
+    # Barely moved -> a click; the second click will finish it as before.
+    assert decide(state(), (102, 101)) is False
+    # Released back where it started -> a click, not a zero-size cut.
+    assert decide(state(), (100, 100)) is False
+    # POLY keeps click-click: dragging there means "place a point, keep going".
+    assert decide(state(shape='POLY'), (300, 300)) is False
+    # Nothing placed yet (a release with no press, e.g. the button came up
+    # after a tool-start click) must not commit an empty shape.
+    assert decide(state(points=0), (300, 300)) is False
+    assert decide(state(press=None), (300, 300)) is False
+    # A second corner already down is handled by the press branch, not here.
+    assert decide(state(points=2), (300, 300)) is False
+    # Every non-POLY shape gets the gesture, not just BOX.
+    for shape in ('CIRCLE', 'NGON', 'SLOT', 'STAR', 'ARC', 'VENT'):
+        assert decide(state(shape=shape), (300, 300)) is True, shape
+
+
+def test_draw_operator_tracks_the_press_position():
+    # The gate needs the press position on the operator; guard the attribute
+    # and the shared gate constant against a silent rename.
+    _reset()
+    from hardflow.operators import draw_cut
+    from hardflow.core import path as hpath
+    cls = draw_cut.HARDFLOW_OT_draw
+    assert isinstance(cls._DRAG_GATE_PX, int) and cls._DRAG_GATE_PX > 0
+    assert hasattr(cls, "_is_drag_release")
+    # draw_cut and the curve tools must share one definition of "a drag".
+    from hardflow.operators import pipe
+    assert hpath.is_drag((0, 0), (pipe._CurveDraw._STROKE_START_PX, 0),
+                         pipe._CurveDraw._STROKE_START_PX) is True
+    assert not hasattr(pipe, "_px_dist2"), "pipe kept its own copy of the gate"
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

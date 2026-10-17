@@ -1876,6 +1876,38 @@ def test_library_is_inside_guards_the_bundled_folder():
 
 
 
+# --- path: click-vs-drag gesture gate (shared by draw + curve tools) --------
+
+def test_path_px_dist2_is_squared_distance():
+    assert path.px_dist2((0, 0), (3, 4)) == 25
+    assert path.px_dist2((10, 10), (10, 10)) == 0
+    assert path.px_dist2((-2, -2), (1, 2)) == 25
+
+
+def test_path_is_drag_gate():
+    # Exactly on the gate counts as a drag (>=), just inside does not.
+    assert path.is_drag((100, 100), (108, 100), 8) is True
+    assert path.is_drag((100, 100), (107, 100), 8) is False
+    assert path.is_drag((100, 100), (100, 100), 8) is False
+    # Diagonal: 5-6-? -> (6,6) is 8.49 px, past a gate of 8.
+    assert path.is_drag((0, 0), (6, 6), 8) is True
+    assert path.is_drag((0, 0), (5, 5), 8) is False
+    # A drag that returns to where it started is a click, not a drag -- the
+    # gate compares the endpoints, never the travelled distance.
+    assert path.is_drag((50, 50), (50, 50), 8) is False
+
+
+def test_path_is_drag_handles_missing_endpoints():
+    # The modal passes None when no button is down; that must not raise.
+    assert path.is_drag(None, (10, 10), 8) is False
+    assert path.is_drag((10, 10), None, 8) is False
+    assert path.is_drag(None, None, 8) is False
+    # A zero gate makes everything a drag, stationary pointer included -- the
+    # test is >= so there is no dead zone left to fall into.
+    assert path.is_drag((0, 0), (1, 0), 0) is True
+    assert path.is_drag((0, 0), (0, 0), 0) is True
+
+
 def _run_all():
     """Standalone run: find test_* functions, run them, print a summary."""
     fns = sorted((n, f) for n, f in globals().items()

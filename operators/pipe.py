@@ -49,11 +49,6 @@ from ..ui import draw as hud
 from . import hardops
 
 
-def _px_dist2(a, b):
-    dx, dy = a[0] - b[0], a[1] - b[1]
-    return dx * dx + dy * dy
-
-
 def surface_collider(context, lift):
     """Push-out collider for the cable gravity settle: a particle inside -- or
     hovering closer to -- the nearest visible surface than `lift` is moved onto
@@ -390,11 +385,13 @@ class _CurveDraw:
             self._cursor3d = self._sample(context, event)
             if self._press_px is not None and self._cursor3d is not None:
                 px = (event.mouse_region_x, event.mouse_region_y)
-                if (not self._stroking and _px_dist2(px, self._press_px)
-                        >= self._STROKE_START_PX ** 2):
+                if (not self._stroking
+                        and path.is_drag(self._press_px, px,
+                                         self._STROKE_START_PX)):
                     self._stroking = True   # the press became a freehand drag
-                if (self._stroking and _px_dist2(px, self._last_stroke_px)
-                        >= self._STROKE_GATE_PX ** 2):
+                if (self._stroking
+                        and path.is_drag(self._last_stroke_px, px,
+                                         self._STROKE_GATE_PX)):
                     self._stroke.append(self._cursor3d.copy())
                     self._last_stroke_px = px
             dirty = True

@@ -1115,6 +1115,33 @@ The axis decision needs a real viewport, so none of this is reachable headless.
 - [ ] Install the built zip on a clean Blender: `library/` is inside it and the
       grids are populated; `tools/` is not.
 
+## 28. Press-drag-release drawing
+
+The one-gesture draw and the click-click fall-back were both driven through a
+real window with simulated events (one gesture -> one cut, release-in-place ->
+no premature commit). What still needs hands on the mouse is the feel and the
+combinations:
+
+- [ ] Press, drag, release on a face: the box is cut on release, and the drag
+      felt like dragging a box (the preview tracked the pointer the whole way).
+- [ ] Click a corner, release without moving, move, click the other corner:
+      still works exactly as before. A twitchy click (a pixel or two of
+      movement) must NOT commit a sliver.
+- [ ] Press, drag out, drag back to where you started, release: treated as a
+      click, no zero-size cut.
+- [ ] Same gesture for Circle / N-gon / Slot / Star / Arc / Vent.
+- [ ] **POLY** is unchanged: dragging places a point and keeps going; Enter /
+      `Z` / double-click still close it.
+- [ ] From the **toolbar tool** (not the shortcut): press-drag-release in one
+      motion from a cold start cuts, i.e. the tool's own press seeds the first
+      corner rather than being swallowed.
+- [ ] Hold **Shift** while dragging: the angle lock still applies.
+- [ ] Drag on the **SURFACE** plane: the plane locks to the face under the
+      press, not the one under the release.
+- [ ] Mid-drag modifiers still work: Ctrl (force grid snap), `[ ]`, PgUp/PgDn
+      depth, and `Tab` to change mode -- then release and the cut matches.
+- [ ] Undo after a drag-cut is a single step.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`
