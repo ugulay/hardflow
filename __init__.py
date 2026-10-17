@@ -7,7 +7,7 @@ from . import preferences, keymaps, gizmos, translations
 from .operators import (draw_cut, cutters, pipe, decals,
                         boolean_ops, assets, push_pull, offset,
                         construction, hardops, edge_tool, hardflow_mode,
-                        trim_editor, mirror)
+                        trim_editor, mirror, drop)
 from .ui import (pie, menu, panel, decal_panel, decal_library, asset_panel,
                  trim_panel)
 
@@ -107,6 +107,10 @@ _classes = (
     trim_panel.HARDFLOW_PT_trim,
     asset_panel.HARDFLOW_PT_assets,
     asset_panel.HARDFLOW_PT_asset_library,
+    # Drag-and-drop handlers last: each names an import operator by idname, so
+    # the operators it points at must already be registered.
+    drop.HARDFLOW_FH_decal_image,
+    drop.HARDFLOW_FH_asset_blend,
 )
 
 def register():

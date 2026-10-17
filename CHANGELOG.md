@@ -28,6 +28,13 @@ Blender 5.2.2 LTS.
   from a cold start. The gate is the pure `core.path.is_drag` the curve tools
   already used for their freehand stroke, so a drag now means the same thing in
   every Hardflow tool (and `pipe`'s private copy of the maths is gone).
+- **Drag and drop into the viewport**: drag a PNG out of the file manager onto
+  a model and it becomes a decal under the cursor; drag a `.blend` and it
+  becomes an INSERT. Both start the normal placement modal, so the drop is a
+  faster way into the existing tool rather than a separate path. Implemented as
+  two `FileHandler`s pointing at the operators the library grids already use;
+  Blender shows its usual pick menu when several handlers match a drop (it
+  registers two image handlers for the 3D view itself).
 - **Bundled starter library**: 16 hard-surface decals, a 4x4 trim sheet and 8
   INSERT kit parts ship with the add-on, so the decal, trim-sheet, parallax,
   atlas and INSERT features are usable on a fresh install instead of opening as

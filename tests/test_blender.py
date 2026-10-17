@@ -3909,6 +3909,105 @@ def test_draw_operator_tracks_the_press_position():
     assert not hasattr(pipe, "_px_dist2"), "pipe kept its own copy of the gate"
 
 
+def test_drop_handlers_are_registered_and_wired():
+    # Drag-and-drop goes through FileHandler: each handler ties extensions to an
+    # import operator. A handler pointing at a renamed operator fails silently
+    # at drop time (nothing happens, no error), so check the wiring here.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import drop
+        subs = []
+
+        def walk(cls):
+            for c in cls.__subclasses__():
+                subs.append(c)
+                walk(c)
+
+        walk(bpy.types.FileHandler)
+        ours = {c.bl_idname: c for c in subs
+                if c.__name__.startswith("HARDFLOW_FH_")}
+        assert set(ours) == {"HARDFLOW_FH_decal_image",
+                             "HARDFLOW_FH_asset_blend"}, sorted(ours)
+        for cls in ours.values():
+            area, op = cls.bl_import_operator.split(".", 1)
+            assert hasattr(getattr(bpy.ops, area), op), cls.bl_import_operator
+            # Both targets must carry SKIP_SAVE on filepath, which the
+            # drag-and-drop API requires: without it a dropped path is
+            # remembered and replayed the next time the operator runs.
+            rna = getattr(getattr(bpy.ops, area), op).get_rna_type()
+            assert rna.properties["filepath"].is_skip_save, cls.bl_idname
+        assert all(c.is_registered for c in ours.values())
+    finally:
+        hardflow.unregister()
+    # Deregistered with the add-on, so no handler is left pointing at an
+    # operator that no longer exists. (The Python classes stay importable --
+    # unregister_class drops the RNA registration, not the subclass link.)
+    from hardflow.operators import drop as drop_mod
+    assert not drop_mod.HARDFLOW_FH_decal_image.is_registered
+    assert not drop_mod.HARDFLOW_FH_asset_blend.is_registered
+
+
+def test_drop_extensions_cannot_drift_from_the_loaders():
+    # The formats offered on drop are derived from the same constants the
+    # loaders validate against, so advertising a format Hardflow cannot open
+    # (or failing to offer one it can) is impossible by construction.
+    from hardflow.operators import drop
+    from hardflow.core import asset_lib, decal_image
+    img = set(drop.HARDFLOW_FH_decal_image.bl_file_extensions.split(";"))
+    assert img == set(decal_image.IMAGE_EXTS), img ^ set(decal_image.IMAGE_EXTS)
+    blend = set(drop.HARDFLOW_FH_asset_blend.bl_file_extensions.split(";"))
+    assert blend == set(asset_lib.ASSET_EXTS), blend
+    # Every entry is a real extension spelling (leading dot, lower case).
+    for ext in img | blend:
+        assert ext.startswith(".") and ext == ext.lower(), ext
+
+
+def test_drop_is_offered_in_the_viewport_only():
+    # The drop starts a modal placement tool that needs a viewport and a
+    # surface under the cursor, so offering it in the Outliner (which
+    # bpy_extras' default poll would) could only produce a warning.
+    import types
+    from hardflow.operators import drop
+    for cls in (drop.HARDFLOW_FH_decal_image, drop.HARDFLOW_FH_asset_blend):
+        def ctx(kind):
+            return types.SimpleNamespace(
+                area=types.SimpleNamespace(type=kind) if kind else None)
+        assert cls.poll_drop(ctx('VIEW_3D')) is True, cls.bl_idname
+        assert cls.poll_drop(ctx('OUTLINER')) is False, cls.bl_idname
+        assert cls.poll_drop(ctx('IMAGE_EDITOR')) is False, cls.bl_idname
+        # No area at all (a drop resolved outside any editor) must not raise.
+        assert cls.poll_drop(ctx(None)) is False, cls.bl_idname
+        assert cls.poll_drop(types.SimpleNamespace()) is False, cls.bl_idname
+
+
+def test_drop_target_places_from_a_bare_filepath():
+    # What Blender's drop machinery actually does: run the handler's import
+    # operator with nothing but the dropped path. Background Blender still has
+    # a VIEW_3D area, so the whole path is reachable here -- and this is the
+    # bundled library's own file, so a drop of shipped content is covered too.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow import preferences
+        folder, _bundled = preferences.library_dir(bpy.context, 'decals')
+        path = os.path.join(folder, "panel_seam.png")
+        assert os.path.isfile(path), path
+        before = set(bpy.data.images.keys())
+        res = bpy.ops.object.hardflow_library_place(filepath=path)
+        assert res == {'FINISHED'}, res
+        # The dropped file was loaded as an image for the decal material.
+        assert set(bpy.data.images.keys()) - before, "image never loaded"
+        # An empty path is a no-op, not a crash (a drop that resolves to
+        # nothing, or the operator replayed from the F9 panel).
+        assert bpy.ops.object.hardflow_library_place(
+            filepath="") == {'CANCELLED'}
+    finally:
+        hardflow.unregister()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

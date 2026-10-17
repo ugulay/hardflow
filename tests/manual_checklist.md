@@ -1142,6 +1142,31 @@ combinations:
       depth, and `Tab` to change mode -- then release and the cut matches.
 - [ ] Undo after a drag-cut is a single step.
 
+## 29. Drag and drop into the viewport
+
+Everything after the drop was driven in a real window (the import operator run
+with a bare filepath places a decal / INSERT). The OS-level drag itself cannot
+be synthesised, so the gesture needs a human:
+
+- [ ] Drag a **PNG** from the file manager onto a model: Blender's drop menu
+      offers **Hardflow Decal** beside its own *Reference* / *Background*
+      entries. Pick it -> the placement tool starts under the cursor (wheel
+      scales, `[ ]` rolls, click places, Esc cancels).
+- [ ] The decal lands where the mouse was released, not at the world origin.
+- [ ] Drag a **.blend**: Blender's native *Open / Append / Link* menu must
+      still appear, with **Hardflow INSERT** alongside. Native Open still
+      opens the file (this must not be hijacked).
+- [ ] Drop an image **into the Outliner / Properties / Image editor**: no
+      Hardflow entry is offered there (viewport only).
+- [ ] Drop onto empty space with no mesh under the cursor: a clean warning,
+      no stray object left behind.
+- [ ] Esc during a drop-started placement leaves nothing behind (no image
+      datablock orphan beyond Blender's normal load, no preview object).
+- [ ] Drop a format Hardflow does not handle (e.g. `.psd`): only Blender's own
+      entries are offered, no Hardflow one.
+- [ ] After a drop-place, the F9 redo panel does not replay a stale path: run
+      another Hardflow operator and confirm nothing re-places the dropped file.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

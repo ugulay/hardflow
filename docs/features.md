@@ -94,6 +94,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | PBR shader | Base / metallic / roughness / AO / normal / height+depth / emission / alpha | `core/decal.py HF_DecalShader` |
 | Bake into mesh | Bake Normal / Combined detail into the target's texture | `core/decal.py bake_image` |
 | Image library | Folder of PNG/JPG/TGA placed from an icon grid | `core/decal_image.py`, `ui/decal_library.py` |
+| **Drag & drop (v1.23)** | Drag a PNG from the file manager onto a model -> decal under the cursor; drag a `.blend` -> INSERT. The drop starts the existing placement modal (wheel scale / `[ ]` roll / click place), VIEW_3D only | `operators/drop.py`, `operators/decals.py`, `operators/assets.py` |
 | **Bundled starter library (v1.23)** | Ships 16 hard-surface decals, a 4x4 trim sheet and 8 INSERT kit parts, so the decal / trim / POM / atlas / INSERT features are usable on a fresh install instead of opening as empty grids. The user's own folder replaces it; a stale path falls back to it. All generated in-house by `tools/make_library.py` (GPLv3, no third-party assets) and treated as read-only | `core/library.py`, `preferences.library_dir`, `library/` |
 | Trim sheets | Slice a sheet into a grid; place / cycle individual cells | `core/atlas.py slice_grid` |
 | Trim sheet UV editor (v1.16) | Carve a sheet into free, unequal named UV rectangles (draw / resize / move / split) stored on the image; place any region as a decal | `operators/trim_editor.py`, `core/atlas.py`, `ui/trim_panel.py` |

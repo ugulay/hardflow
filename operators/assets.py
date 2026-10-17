@@ -350,7 +350,9 @@ class HARDFLOW_OT_asset_library_place(Operator):
     bl_description = "Place this library .blend as an INSERT on the surface"
     bl_options = {'REGISTER', 'UNDO'}
 
-    filepath: StringProperty(subtype='FILE_PATH')
+    # SKIP_SAVE is required of a drag-and-drop target (see operators/drop.py):
+    # the dropped path must not be remembered and replayed on a later run.
+    filepath: StringProperty(subtype='FILE_PATH', options={'SKIP_SAVE'})
 
     def execute(self, context):
         if not self.filepath:

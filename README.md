@@ -107,6 +107,11 @@ N-panel, and can be shown, re-selected, re-ordered or baked later. Booleans pick
 their own solver, retry on failure, and tell you *which* geometry broke instead
 of silently doing nothing.
 
+**Drag and drop.** Drag a PNG out of your file manager onto a model and it
+becomes a decal under the cursor; drag a `.blend` and it becomes an INSERT.
+The drop starts the normal placement tool — wheel to scale, `[ ]` to roll,
+click to place — so it is the fast way in, not a separate workflow.
+
 **Starts with content.** A starter library ships with the add-on: 16
 hard-surface decals (seams, vents, fasteners, hatches, hazard markings), a 4×4
 trim sheet to learn the trim editor on, and 8 INSERT kit parts (bolts, vents, a
@@ -192,7 +197,7 @@ work in **Edit Mode**.
 Under active development, and usable today — every planned feature through
 **v1.22** is implemented, plus the one-press Mirror. The pure logic core has
 **164/164** unit tests that run without Blender, and the Blender-dependent paths
-have **165/165** headless tests, verified in Blender 5.2.2 LTS against the 4.2
+have **169/169** headless tests, verified in Blender 5.2.2 LTS against the 4.2
 LTS baseline. Interactive feel is checked by hand against
 [tests/manual_checklist.md](tests/manual_checklist.md).
 
