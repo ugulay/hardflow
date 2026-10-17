@@ -1167,6 +1167,33 @@ be synthesised, so the gesture needs a human:
 - [ ] After a drop-place, the F9 redo panel does not replay a stale path: run
       another Hardflow operator and confirm nothing re-places the dropped file.
 
+## 30. Viewport Asset Shelf
+
+The shelf was opened in a real viewport and screenshotted with all 24 shipped
+assets previewed in it, and the library registers/unregisters cleanly. What
+needs a human is the click-through and the coexistence with your own assets:
+
+- [ ] **View > Asset Shelf** in the 3D viewport (Object Mode) shows the shelf
+      with the Hardflow decals and kit parts, each with a preview thumbnail.
+      It must NOT appear on its own before you open it.
+- [ ] Click a **decal** asset: the decal placement tool starts under the
+      cursor (wheel scales, `[ ]` rolls, click places, Esc cancels).
+- [ ] Click an **INSERT** asset: the part placement tool starts the same way,
+      and only that one part is appended (not every object in its .blend).
+- [ ] The shelf's library dropdown (header) can be switched to **All** / your
+      own library; your own image and object assets are clickable too.
+- [ ] A **material** or **brush** asset in the same library is not shown
+      (Hardflow only offers what it can place).
+- [ ] Preferences > Add-ons > Hardflow: turning **Register Bundled Asset
+      Library** off removes the entry from Preferences > File Paths > Asset
+      Libraries immediately, and the shelf loses the shipped assets. Turning
+      it back on restores it. Disabling the add-on removes it too.
+- [ ] If you had already added that folder as your own asset library, enabling
+      Hardflow does not add a second entry, and disabling it does not remove
+      yours.
+- [ ] The assets also show up in the **Asset Browser** under the
+      Hardflow/Decals and Hardflow/INSERTs catalogs.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

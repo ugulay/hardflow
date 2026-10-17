@@ -13,6 +13,70 @@ from .core import library as _library
 ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+# Name of the asset-library entry this add-on contributes, so it is
+# recognisable in Preferences > File Paths and removable again on unregister.
+ASSET_LIBRARY_NAME = "Hardflow Library"
+
+
+def _bundled_library_root():
+    """Absolute path of the shipped library folder, or "" when it is absent."""
+    root = os.path.join(ADDON_DIR, _library.ROOT_DIRNAME)
+    return root if os.path.isdir(root) else ""
+
+
+def _find_asset_library(root):
+    """An existing asset-library entry pointing at `root`, or None. Matched by
+    path rather than name, so a library the user added themselves is found (and
+    therefore never duplicated, and never removed by us)."""
+    for lib in bpy.context.preferences.filepaths.asset_libraries:
+        if _library.is_inside(lib.path or "", root) and \
+                _library.is_inside(root, lib.path or ""):
+            return lib
+    return None
+
+
+def register_asset_library():
+    """Add the bundled library to Blender's asset libraries.
+
+    This is what makes the shipped decals and INSERTs show up in the viewport
+    Asset Shelf and the Asset Browser -- the asset system only sees registered
+    library folders. It is a change to the user's preferences, so it is
+    skipped when the folder is missing, never duplicated when an entry already
+    points there, and undone on unregister."""
+    root = _bundled_library_root()
+    if not root or _find_asset_library(root) is not None:
+        return None
+    try:
+        return bpy.context.preferences.filepaths.asset_libraries.new(
+            name=ASSET_LIBRARY_NAME, directory=root)
+    except Exception as ex:  # noqa: BLE001 -- never block add-on registration
+        print("Hardflow: could not register the asset library (%s)" % ex)
+        return None
+
+
+def unregister_asset_library():
+    """Remove the entry again, but only the one we added: an entry the user
+    renamed or pointed somewhere else is theirs to keep."""
+    root = _bundled_library_root()
+    if not root:
+        return
+    libs = bpy.context.preferences.filepaths.asset_libraries
+    lib = _find_asset_library(root)
+    if lib is not None and lib.name == ASSET_LIBRARY_NAME:
+        try:
+            libs.remove(lib)
+        except Exception as ex:  # noqa: BLE001
+            print("Hardflow: could not remove the asset library (%s)" % ex)
+
+
+def _update_asset_library(self, context):
+    """Preference toggle: add or remove the entry as soon as it is flipped."""
+    if self.use_asset_library:
+        register_asset_library()
+    else:
+        unregister_asset_library()
+
+
 def library_dir(context=None, kind=_library.DECALS):
     """The folder to scan for a library `kind` ('decals' / 'assets' / 'trims'),
     as ``(path, is_bundled)``.
@@ -338,6 +402,14 @@ class HARDFLOW_Preferences(AddonPreferences):
         description="Maximum width (px) when packing image decals into a single "
                     "atlas texture; the atlas height grows to fit",
         default=2048, min=64, max=8192,
+    )
+    use_asset_library: BoolProperty(
+        name="Register Bundled Asset Library",
+        description="Add Hardflow's bundled library to Blender's asset "
+                    "libraries, so the shipped decals and INSERTs appear in the "
+                    "viewport Asset Shelf (View > Asset Shelf) and the Asset "
+                    "Browser. Turn off to keep your File Paths untouched",
+        default=True, update=_update_asset_library,
     )
     asset_library_path: StringProperty(
         name="Asset Library",
@@ -677,6 +749,7 @@ class HARDFLOW_Preferences(AddonPreferences):
                             'FILE_BLEND')
         if col:
             col.prop(self, "asset_library_path")
+            col.prop(self, "use_asset_library")
             col.prop(self, "asset_as_cutter")
             col.prop(self, "asset_boolean")
             col.separator()

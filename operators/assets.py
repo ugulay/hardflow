@@ -51,6 +51,13 @@ class HARDFLOW_OT_place_asset(Operator):
         description="Library file whose objects are appended as the INSERT",
         subtype='FILE_PATH',
     )
+    object_name: StringProperty(
+        name="Object",
+        description="Append only this object from the library file, instead of "
+                    "everything in it -- the Asset Shelf passes the clicked "
+                    "asset's name, since one .blend can hold many assets",
+        default="", options={'SKIP_SAVE'},
+    )
     size: FloatProperty(name="Scale", default=1.0, min=0.001, soft_max=20.0)
     roll: FloatProperty(name="Roll (rad)", default=0.0)
 
@@ -73,12 +80,18 @@ class HARDFLOW_OT_place_asset(Operator):
         self._finalized = False
         self._auto_scaled = False  # auto-scale fires once, on the first hit
         try:
-            self._objects = asset.load_blend_objects(self.filepath, link=False)
+            self._objects = asset.load_blend_objects(
+                self.filepath, link=False,
+                names=[self.object_name] if self.object_name else None)
         except Exception as ex:   # noqa: BLE001
             self.report({'ERROR'}, "Could not load asset: %s" % ex)
             return {'CANCELLED'}
         if not self._objects:
-            self.report({'WARNING'}, "Asset .blend has no objects")
+            if self.object_name:
+                self.report({'WARNING'}, "Asset '%s' is not in that .blend"
+                                         % self.object_name)
+            else:
+                self.report({'WARNING'}, "Asset .blend has no objects")
             return {'CANCELLED'}
 
         self._handle = bpy.types.SpaceView3D.draw_handler_add(

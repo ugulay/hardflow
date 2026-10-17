@@ -26,13 +26,23 @@ def asset_collection(context):
     return coll
 
 
-def load_blend_objects(filepath, link=False):
-    """Append (link=False) or link (link=True) every object from a .blend library
-    and return the new object data-blocks. They are NOT yet in any scene
-    collection -- the caller links them where it wants. Returns [] if the file
-    has no objects."""
+def load_blend_objects(filepath, link=False, names=None):
+    """Append (link=False) or link (link=True) objects from a .blend library and
+    return the new object data-blocks. They are NOT yet in any scene collection
+    -- the caller links them where it wants. Returns [] if the file has no
+    objects.
+
+    `names` restricts the load to those object names, which is what the Asset
+    Shelf needs: a library .blend can hold many assets and clicking one must
+    bring in that one, not the whole file. Names the file does not contain are
+    ignored, so a stale reference loads nothing instead of raising."""
     with bpy.data.libraries.load(filepath, link=link) as (data_from, data_to):
-        data_to.objects = list(data_from.objects)
+        available = list(data_from.objects)
+        if names is None:
+            data_to.objects = available
+        else:
+            wanted = set(names)
+            data_to.objects = [n for n in available if n in wanted]
     return [o for o in data_to.objects if o is not None]
 
 

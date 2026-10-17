@@ -9,7 +9,7 @@ from .operators import (draw_cut, cutters, pipe, decals,
                         construction, hardops, edge_tool, hardflow_mode,
                         trim_editor, mirror, drop)
 from .ui import (pie, menu, panel, decal_panel, decal_library, asset_panel,
-                 trim_panel)
+                 trim_panel, shelf)
 
 # Registration order doesn't matter, but keep it tidy:
 _classes = (
@@ -107,6 +107,10 @@ _classes = (
     trim_panel.HARDFLOW_PT_trim,
     asset_panel.HARDFLOW_PT_assets,
     asset_panel.HARDFLOW_PT_asset_library,
+    # Viewport Asset Shelf: the operator first, so the shelf's
+    # bl_activate_operator resolves to something that exists.
+    shelf.HARDFLOW_OT_shelf_place,
+    shelf.HARDFLOW_AST_library,
     # Drag-and-drop handlers last: each names an import operator by idname, so
     # the operators it points at must already be registered.
     drop.HARDFLOW_FH_decal_image,
@@ -127,6 +131,10 @@ def register():
     decal_library.register()
     menu.register()        # header dropdown (after the menu classes exist)
     keymaps.register_keymaps()
+    # Point Blender's asset system at the bundled library so the Asset Shelf
+    # and the Asset Browser can see the shipped content (preference-gated).
+    if preferences.get_prefs().use_asset_library:
+        preferences.register_asset_library()
     # Gizmos last + guarded: gizmo/Workspace-Tool registration can raise in
     # headless or edge contexts, and that must not strand the rest of the add-on
     # half-registered (menus/keymaps already wired up above).
@@ -137,6 +145,7 @@ def register():
 
 
 def unregister():
+    preferences.unregister_asset_library()
     keymaps.unregister_keymaps()
     menu.unregister()
     decal_library.unregister()

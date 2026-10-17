@@ -28,6 +28,18 @@ Blender 5.2.2 LTS.
   from a cold start. The gate is the pure `core.path.is_drag` the curve tools
   already used for their freehand stroke, so a drag now means the same thing in
   every Hardflow tool (and `pipe`'s private copy of the maths is gone).
+- **Viewport Asset Shelf**: the decal and INSERT library in Blender's own
+  preview strip along the bottom of the viewport (View > Asset Shelf) --
+  click an image asset to start sticking a decal, an object asset to place an
+  INSERT. One shelf handles both and dispatches on the clicked asset's type,
+  and your own image/object assets appear there alongside the shipped ones.
+  To make that possible the bundled folder is registered as an asset library
+  (new `use_asset_library` preference, added on register and removed on
+  unregister, matched by path so an entry you added yourself is never
+  duplicated or deleted), the kit parts are marked as assets with previews,
+  and the decal PNGs are republished as packed image assets in
+  `library/catalog/decals.blend` -- an asset shelf browses assets inside
+  .blend files and cannot see loose image files.
 - **Drag and drop into the viewport**: drag a PNG out of the file manager onto
   a model and it becomes a decal under the cursor; drag a `.blend` and it
   becomes an INSERT. Both start the normal placement modal, so the drop is a

@@ -4008,6 +4008,186 @@ def test_drop_target_places_from_a_bare_filepath():
         hardflow.unregister()
 
 
+def test_asset_shelf_is_registered_and_filters():
+    # The shelf is how the library reaches the viewport. A shelf whose
+    # bl_activate_operator does not resolve just does nothing when clicked.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.ui import shelf
+        cls = shelf.HARDFLOW_AST_library
+        assert cls.is_registered
+        assert cls.bl_space_type == 'VIEW_3D'
+        area, op = cls.bl_activate_operator.split(".", 1)
+        assert hasattr(getattr(bpy.ops, area), op), cls.bl_activate_operator
+        # Not DEFAULT_VISIBLE: an add-on must not push a shelf into every
+        # viewport unasked (View > Asset Shelf opens it).
+        assert 'DEFAULT_VISIBLE' not in getattr(cls, 'bl_options', set())
+
+        # Exactly the two kinds Hardflow can place, nothing else.
+        import types
+        for kind, want in (('IMAGE', True), ('OBJECT', True),
+                           ('MATERIAL', False), ('BRUSH', False),
+                           ('NODETREE', False), ('WORLD', False)):
+            asset = types.SimpleNamespace(id_type=kind)
+            assert cls.asset_poll(asset) is want, kind
+    finally:
+        hardflow.unregister()
+    assert not shelf.HARDFLOW_AST_library.is_registered
+
+
+def test_bundled_asset_library_registers_and_cleans_up():
+    # Registering the library is a change to the USER's preferences, so it has
+    # to be exact: added once, pointed at the bundled folder, removed again,
+    # and the user's own entries left alone.
+    _reset()
+    import hardflow
+    from hardflow import preferences
+    libs = bpy.context.preferences.filepaths.asset_libraries
+    before = [(lib.name, lib.path) for lib in libs]
+
+    hardflow.register()
+    try:
+        after = [(lib.name, lib.path) for lib in libs]
+        added = [e for e in after if e not in before]
+        assert len(added) == 1, (before, after)
+        name, path = added[0]
+        assert name == preferences.ASSET_LIBRARY_NAME, name
+        from hardflow.core import library as libmod
+        root = os.path.join(preferences.ADDON_DIR, libmod.ROOT_DIRNAME)
+        assert libmod.is_inside(path, root) and libmod.is_inside(root, path)
+        # Re-registering must not add a second entry.
+        preferences.register_asset_library()
+        assert len([e for e in [(x.name, x.path) for x in libs]
+                    if e not in before]) == 1
+    finally:
+        hardflow.unregister()
+    assert [(lib.name, lib.path) for lib in libs] == before, "entry not removed"
+
+
+def test_asset_library_leaves_a_user_entry_alone():
+    # If the user already points an entry at that folder (or renames ours),
+    # it is theirs: we must neither duplicate it nor delete it.
+    _reset()
+    import hardflow
+    from hardflow import preferences
+    from hardflow.core import library as libmod
+    libs = bpy.context.preferences.filepaths.asset_libraries
+    root = os.path.join(preferences.ADDON_DIR, libmod.ROOT_DIRNAME)
+    mine = libs.new(name="My Own Hardflow", directory=root)
+    count = len(libs)
+    try:
+        hardflow.register()
+        assert len(libs) == count, "duplicated an existing entry"
+        hardflow.unregister()
+        assert len(libs) == count, "removed the user's own entry"
+        assert any(lib.name == "My Own Hardflow" for lib in libs)
+    finally:
+        for lib in list(libs):
+            if lib.name == "My Own Hardflow":
+                libs.remove(lib)
+
+
+def test_shelf_resolves_an_image_asset_from_the_bundled_library():
+    # The activate operator's half that can be driven headless: turning an
+    # asset into an image datablock, appending it when it is not local yet.
+    _reset()
+    import types
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.ui import shelf
+        from hardflow import preferences
+        from hardflow.core import library as libmod
+        blend = os.path.join(preferences.ADDON_DIR, libmod.ROOT_DIRNAME,
+                             "catalog", "decals.blend")
+        assert os.path.isfile(blend), blend
+
+        # Not in this file yet -> appended from the library .blend.
+        asset = types.SimpleNamespace(name="panel_seam", local_id=None,
+                                      id_type='IMAGE',
+                                      full_library_path=blend)
+        img = shelf._asset_image(asset)
+        assert img is not None and img.name.startswith("panel_seam")
+        assert img.size[0] > 0 and img.size[1] > 0, "appended image is empty"
+
+        # Already local -> handed straight back, nothing appended.
+        local = types.SimpleNamespace(name=img.name, local_id=img,
+                                      id_type='IMAGE', full_library_path=blend)
+        assert shelf._asset_image(local) is img
+        # A nameless / pathless asset resolves to None instead of raising.
+        assert shelf._asset_image(
+            types.SimpleNamespace(name="nope", local_id=None,
+                                  id_type='IMAGE', full_library_path="")) is None
+        assert shelf._asset_image(
+            types.SimpleNamespace(name="not_in_file", local_id=None,
+                                  id_type='IMAGE',
+                                  full_library_path=blend)) is None
+    finally:
+        hardflow.unregister()
+
+
+def test_load_blend_objects_can_append_one_named_object():
+    # A library .blend can hold many assets; clicking one in the shelf must
+    # bring in that one, not the whole file.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow import preferences
+        from hardflow.core import asset as core_asset
+        folder, _bundled = preferences.library_dir(bpy.context, 'assets')
+        path = os.path.join(folder, "heatsink.blend")
+        every = core_asset.load_blend_objects(path)
+        assert every, "kit part has no objects"
+        name = every[0].name
+        for ob in every:
+            bpy.data.objects.remove(ob, do_unlink=True)
+
+        one = core_asset.load_blend_objects(path, names=[name])
+        assert [o.name.split('.')[0] for o in one] == [name], [o.name for o in one]
+        # A name the file does not hold loads nothing rather than raising.
+        assert core_asset.load_blend_objects(path, names=["no_such_object"]) == []
+    finally:
+        hardflow.unregister()
+
+
+def test_bundled_decal_assets_are_marked_and_catalogued():
+    # The shelf browses assets, not loose files: the decal PNGs are also
+    # published as marked image assets with previews, in the catalog the
+    # library's blender_assets.cats.txt declares.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow import preferences
+        from hardflow.core import library as libmod
+        root = os.path.join(preferences.ADDON_DIR, libmod.ROOT_DIRNAME)
+        cats = os.path.join(root, "blender_assets.cats.txt")
+        assert os.path.isfile(cats), cats
+        text = open(cats, encoding="utf-8").read()
+        assert "VERSION 1" in text
+        assert "Hardflow/Decals" in text and "Hardflow/INSERTs" in text
+
+        blend = os.path.join(root, "catalog", "decals.blend")
+        with bpy.data.libraries.load(blend) as (src, dst):
+            dst.images = list(src.images)
+        imgs = [i for i in dst.images if i is not None]
+        assert len(imgs) >= 12, len(imgs)
+        catalog_ids = set()
+        for img in imgs:
+            assert img.asset_data is not None, img.name
+            assert img.preview is not None and tuple(img.preview.image_size) \
+                != (0, 0), "asset without a preview is a blank shelf square"
+            catalog_ids.add(img.asset_data.catalog_id)
+        # All filed under one catalog, and that id is the one in the cats file.
+        assert len(catalog_ids) == 1, catalog_ids
+        assert catalog_ids.pop() in text
+    finally:
+        hardflow.unregister()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
