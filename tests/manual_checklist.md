@@ -1279,6 +1279,39 @@ itself, which no assertion can judge:
       along the cut seams (check the seams exist afterwards), and the UV row
       turns OK.
 
+## 34. Cage high-to-low bake
+
+A real Cycles cage bake runs in the headless suite (a domed high over a flat
+low produces a genuinely tilted normal map, the engine is restored, the image
+is reused and resized on a re-bake). What needs eyes is bake quality, which
+no assertion can judge:
+
+- [ ] Model a bevelled hard-surface piece as high poly and a simplified low
+      poly over it. Unwrap the low (Game-Ready > Hard-Surface Unwrap), select
+      the high, then the low LAST, and **Bake High>Low**.
+- [ ] The normal map has no skew or smearing at the bevelled corners -- that
+      is the whole reason for the cage. Compare against **Use Cage** off:
+      the ray-distance version should look visibly worse there.
+- [ ] No holes or black patches where the high poly pokes out: the cage is
+      supposed to be widened automatically until it encloses it. Try a high
+      poly with a spike and confirm.
+- [ ] **Build Bake Cage** on its own shows a wire cage around the low poly;
+      it does not render, does not clutter the outliner (helper collection),
+      and re-running refreshes the same cage rather than stacking them.
+- [ ] Set the standoff by hand to something tiny: the bake visibly degrades
+      (proving the standoff is actually in use), and to something huge: the
+      cage starts catching neighbouring parts.
+- [ ] Bake **AO** and **Roughness** too; both land as Non-Color images named
+      after the asset (`<asset>_ao`, not `<asset>_low_ao`).
+- [ ] Re-bake at a different resolution: the SAME image resizes, no
+      `image.001` appears, and the material still points at it.
+- [ ] After the bake your render engine, samples and bake settings are
+      exactly as you left them (check Render Properties).
+- [ ] The result is deliberately unsaved: the report says so, and saving the
+      image from the Image editor works normally.
+- [ ] Baking with the low poly NOT unwrapped gives a clear error telling you
+      to unwrap first, rather than a black image.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

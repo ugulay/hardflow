@@ -4650,6 +4650,184 @@ def test_audit_uv_fix_uses_the_cut_aware_unwrap():
         hardflow.unregister()
 
 
+def _bake_pair(size=1.0):
+    """A flat low poly and a domed high poly over it -- the minimal case where
+    a normal bake has something real to record."""
+    import bmesh
+
+    def grid(name, bumpy):
+        me = bpy.data.meshes.new(name)
+        bm = bmesh.new()
+        bmesh.ops.create_grid(bm, x_segments=2, y_segments=2, size=size)
+        if bumpy:
+            bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=6,
+                                      use_grid_fill=True)
+            for v in bm.verts:
+                r = min(1.0, (v.co.x ** 2 + v.co.y ** 2) / (size * size))
+                v.co.z += 0.15 * size * (1.0 - r)
+        bm.to_mesh(me)
+        bm.free()
+        ob = bpy.data.objects.new(name, me)
+        bpy.context.scene.collection.objects.link(ob)
+        return ob
+
+    low = grid("asset_low", False)
+    high = grid("asset_high", True)
+    bpy.context.view_layer.objects.active = low
+    low.select_set(True)
+    bpy.ops.mesh.hardflow_unwrap()
+    # Selected-to-active: the highs are selected, the low is active and last.
+    high.select_set(True)
+    low.select_set(True)
+    bpy.context.view_layer.objects.active = low
+    return low, high
+
+
+def test_bake_cage_encloses_and_is_parked():
+    # The cage is a copy pushed out along the SMOOTH normals -- on face
+    # normals it would split at every hard edge, which is exactly where the
+    # cage is supposed to keep the rays coherent.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import bake as b
+        from hardflow.core import bake as bc, boolean
+        low = _add_cube("asset_low", size=2.0)
+        bpy.context.view_layer.objects.active = low
+        low.select_set(True)
+        cage = b.build_cage(bpy.context, low, 0.25)
+        assert cage.name == bc.cage_name(low.name)
+        # Bigger than the low on every axis, by roughly twice the standoff.
+        for i in range(3):
+            assert cage.dimensions[i] > low.dimensions[i] + 0.2, (
+                i, cage.dimensions[i], low.dimensions[i])
+        # Same topology, so it is a valid cage for the baker.
+        assert len(cage.data.vertices) == len(low.data.vertices)
+        assert len(cage.data.polygons) == len(low.data.polygons)
+        # Parked out of the way: wire, never rendered, in the helper
+        # collection rather than the user's scene.
+        assert cage.display_type == 'WIRE' and cage.hide_render is True
+        assert cage.name in bpy.data.collections[
+            boolean.HELPER_COLLECTION].objects
+        # Rebuilding refreshes in place instead of piling up cages.
+        again = b.build_cage(bpy.context, low, 0.5)
+        assert again is cage
+        assert len([o for o in bpy.data.objects
+                    if o.name.startswith(low.name + "_cage")]) == 1
+    finally:
+        hardflow.unregister()
+
+
+def test_bake_cage_operator_derives_the_standoff():
+    # With no standoff given, it has to be worked out from how far the high
+    # poly sticks out -- a cage flush with the low bakes nothing.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.core import bake as bc
+        low = _add_cube("auto_low", size=2.0)
+        high = _add_cube("auto_high", size=2.6)
+        bpy.context.view_layer.objects.active = low
+        low.select_set(True)
+        high.select_set(True)
+        assert bpy.ops.object.hardflow_make_cage(extrusion=0.0) == {'FINISHED'}
+        cage = bpy.data.objects[bc.cage_name(low.name)]
+        # The cage must ENCLOSE the high poly. A standoff derived from the
+        # per-axis overhang is not enough on its own: the push runs along the
+        # vertex normal, which on a box corner is the diagonal, so the first
+        # build grows each axis by only 1/sqrt(3) of the standoff. fit_cage
+        # measures that shortfall and scales once.
+        for i in range(3):
+            assert cage.dimensions[i] >= high.dimensions[i], (
+                i, cage.dimensions[i], high.dimensions[i])
+    finally:
+        hardflow.unregister()
+
+
+def test_bake_refuses_without_uvs_or_a_high_poly():
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        low = _add_cube("nouv_low", size=2.0)
+        high = _add_cube("nouv_high", size=2.2)
+        bpy.context.view_layer.objects.active = low
+        low.select_set(True)
+        high.select_set(True)
+        try:
+            bpy.ops.object.hardflow_bake_highlow()
+        except RuntimeError as ex:
+            assert "no UV map" in str(ex), str(ex)
+        else:
+            assert False, "baking without UVs must be refused"
+        # And with nothing but the low selected, the poll keeps it disabled.
+        high.select_set(False)
+        assert not bpy.ops.object.hardflow_bake_highlow.poll()
+    finally:
+        hardflow.unregister()
+
+
+def test_bake_highlow_writes_a_real_normal_map():
+    # The end-to-end bake. Small and few-sampled so it runs in the suite, but
+    # it is the real path: Cycles, selected-to-active, through the cage.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.core import bake as bc
+        low, _high = _bake_pair()
+        engine_before = bpy.context.scene.render.engine
+        res = bpy.ops.object.hardflow_bake_highlow(
+            bake_type='NORMAL', size=64, samples=1, margin_px=2)
+        assert res == {'FINISHED'}, res
+
+        img = bpy.data.images.get(bc.image_name(low.name, 'NORMAL'))
+        assert img is not None, sorted(bpy.data.images.keys())
+        assert tuple(img.size) == (64, 64)
+        # A normal map is DATA: read through sRGB it is silently wrong.
+        assert img.colorspace_settings.name == 'Non-Color'
+        # The dome really got recorded: a flat bake would be a uniform
+        # (0.5, 0.5, 1.0) everywhere.
+        px = img.pixels[:]
+        tilted = sum(1 for i in range(0, len(px), 4)
+                     if abs(px[i] - 0.5) > 0.02 or abs(px[i + 1] - 0.5) > 0.02)
+        assert tilted > 100, tilted
+        # The render engine is put back, whatever it was.
+        assert bpy.context.scene.render.engine == engine_before
+    finally:
+        hardflow.unregister()
+
+
+def test_bake_reuses_its_image_and_restores_settings():
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.core import bake as bc
+        low, _high = _bake_pair()
+        bpy.ops.object.hardflow_bake_highlow(bake_type='NORMAL', size=32,
+                                             samples=1)
+        name = bc.image_name(low.name, 'NORMAL')
+        first = bpy.data.images[name]
+        # Re-baking at another size resizes in place rather than littering
+        # image.001, .002...
+        bpy.ops.object.hardflow_bake_highlow(bake_type='NORMAL', size=64,
+                                             samples=1)
+        assert bpy.data.images[name] is first
+        assert tuple(first.size) == (64, 64)
+        assert name + ".001" not in bpy.data.images
+
+        # Bake settings are left exactly as they were found.
+        settings = bpy.context.scene.render.bake
+        assert settings.use_selected_to_active is False
+        assert settings.use_cage is False
+        assert settings.cage_object is None
+    finally:
+        hardflow.unregister()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

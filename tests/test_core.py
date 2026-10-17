@@ -49,6 +49,7 @@ library = _load("library")
 shapes = _load("shapes", "gizmos")
 gameready = _load("gameready")
 unwrap = _load("unwrap")
+bake = _load("bake")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -2203,6 +2204,110 @@ def test_unwrap_describe_is_stable_and_readable():
     text = unwrap.describe({unwrap.BY_ANGLE: 8, unwrap.BY_SHARP: 30,
                             unwrap.BY_BOUNDARY: 4})
     assert text == "42 seam(s): 30 sharp, 8 angle, 4 boundary", text
+
+
+# --- bake: high-to-low pairing, cage standoff and naming -------------------
+
+def test_bake_types_metadata():
+    assert bake.blender_type('NORMAL') == 'NORMAL'
+    assert bake.blender_type('AO') == 'AO'
+    # An unknown type degrades to the one bake that is always meaningful.
+    assert bake.blender_type('NOPE') == 'NORMAL'
+    # Normal / AO / roughness are DATA: read through sRGB they are silently
+    # wrong, which is the classic broken bake.
+    assert bake.is_data('NORMAL') is True
+    assert bake.is_data('AO') is True
+    assert bake.is_data('ROUGHNESS') is True
+    assert bake.is_data('COMBINED') is False
+    assert bake.suffix('AO') == 'ao'
+
+
+def test_bake_base_name_strips_suffix_and_duplicate_tail():
+    assert bake.base_name('bolt_low') == 'bolt'
+    assert bake.base_name('bolt_high') == 'bolt'
+    # Case-insensitive, because nobody is consistent about it.
+    assert bake.base_name('Bolt_LOW') == 'Bolt'
+    # Blender's .001 duplicate tail must not orphan the pairing.
+    assert bake.base_name('bolt_high.001') == 'bolt'
+    assert bake.base_name('bolt_low.042') == 'bolt'
+    # Nothing to strip.
+    assert bake.base_name('bolt') == 'bolt'
+    assert bake.base_name('') == ''
+
+
+def test_bake_pairing_by_suffix():
+    names = ['bolt_low', 'bolt_high', 'panel_low', 'panel_high',
+             'panel_high.001', 'orphan_low', 'Camera', 'stray_high']
+    pairs, unpaired = bake.pair_by_suffix(names)
+    as_dict = dict(pairs)
+    assert set(as_dict) == {'bolt_low', 'panel_low'}, as_dict
+    assert as_dict['bolt_low'] == ['bolt_high']
+    # Several highs can feed one low -- detail modelled in pieces.
+    assert sorted(as_dict['panel_low']) == ['panel_high', 'panel_high.001']
+    # Lows with no high, and everything else, are reported rather than
+    # silently dropped.
+    assert 'orphan_low' in unpaired and 'Camera' in unpaired
+    assert 'stray_high' in unpaired
+    # Order follows the lows as given.
+    assert [p[0] for p in pairs] == ['bolt_low', 'panel_low']
+
+
+def test_bake_pairing_handles_custom_suffixes_and_nothing():
+    pairs, unpaired = bake.pair_by_suffix(['a_lo', 'a_hi'],
+                                          low_suffix='_lo', high_suffix='_hi')
+    assert pairs == [('a_lo', ['a_hi'])] and unpaired == []
+    assert bake.pair_by_suffix([]) == ([], [])
+    pairs, unpaired = bake.pair_by_suffix(['Cube', 'Light'])
+    assert pairs == [] and unpaired == ['Cube', 'Light']
+
+
+def test_bake_cage_standoff_covers_the_overhang():
+    # High sticks out 0.4 m on one axis -> half of that, times the margin.
+    d = bake.suggested_extrusion((1.0, 1.0, 1.0), (1.0, 1.4, 1.0), margin=1.25)
+    assert abs(d - 0.25) < 1e-9, d
+    # The largest overhang wins, not the last one.
+    d = bake.suggested_extrusion((1.0, 1.0, 1.0), (1.2, 1.4, 1.1), margin=1.0)
+    assert abs(d - 0.2) < 1e-9, d
+    # Same silhouette (a decimated low): fall back to a fraction of the size,
+    # never zero -- a cage flush with the low bakes nothing.
+    d = bake.suggested_extrusion((2.0, 2.0, 2.0), (2.0, 2.0, 2.0))
+    assert d > 0.0 and abs(d - 0.04) < 1e-9, d
+    # A high SMALLER than the low still gets a usable standoff.
+    assert bake.suggested_extrusion((1.0, 1.0, 1.0), (0.5, 0.5, 0.5)) > 0.0
+    # Degenerate sizes never return zero.
+    assert bake.suggested_extrusion((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)) > 0.0
+
+
+def test_bake_corrected_extrusion_scales_the_growth_not_the_total():
+    # A 2 m cube pushed 0.375 along its diagonal vertex normals grows to
+    # 2.433; the high poly is 2.6. Scaling by 2.6/2.433 under-corrects,
+    # because the 2 m base does not move with the standoff -- the scale has
+    # to be taken on the growth (0.433 -> 0.6).
+    base = (2.0, 2.0, 2.0)
+    got = (2.433, 2.433, 2.433)
+    need = (2.6, 2.6, 2.6)
+    d = bake.corrected_extrusion(0.375, base, got, need, margin=1.0)
+    assert abs(d - 0.375 * (0.6 / 0.433)) < 1e-6, d
+    # Scaling the totals would have given this far-too-small answer.
+    assert d > 0.375 * (2.6 / 2.433)
+    # Already covering -> unchanged.
+    assert bake.corrected_extrusion(0.5, base, need, got) == 0.5
+    assert bake.corrected_extrusion(0.5, base, need, need) == 0.5
+    # A tiny measured growth would scale enormously, so `limit` caps it.
+    assert bake.corrected_extrusion(0.1, base, (2.001, 2.0, 2.0),
+                                    (99.0, 2.0, 2.0), limit=8.0) == 0.8
+    # NO measured growth means there is no ratio to scale by (the push did
+    # nothing, or the standoff was zero): leave it alone rather than invent a
+    # factor. suggested_extrusion already guarantees a non-zero standoff.
+    assert bake.corrected_extrusion(0.1, base, base, (99.0, 2.0, 2.0)) == 0.1
+
+
+def test_bake_output_naming():
+    # The map belongs to the ASSET, so the _low suffix comes off.
+    assert bake.image_name('bolt_low', 'NORMAL') == 'bolt_normal'
+    assert bake.image_name('bolt_low', 'AO') == 'bolt_ao'
+    assert bake.image_name('bolt', 'NORMAL') == 'bolt_normal'
+    assert bake.cage_name('bolt_low') == 'bolt_low_cage'
 
 
 def _run_all():

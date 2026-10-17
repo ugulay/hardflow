@@ -28,6 +28,17 @@ Blender 5.2.2 LTS.
   from a cold start. The gate is the pure `core.path.is_drag` the curve tools
   already used for their freehand stroke, so a drag now means the same thing in
   every Hardflow tool (and `pipe`'s private copy of the maths is gone).
+- **Cage-based high-to-low baking**: bake the detailed mesh onto the game
+  mesh through a real cage instead of a ray distance. The cage matters --
+  with a plain ray distance the rays fan out along the low poly's own
+  normals exactly at the bevelled corners where they need to stay parallel,
+  which is where skewed, smeared normal maps come from. Hardflow builds the
+  cage from the low poly along its smooth normals (face normals would split
+  it at every hard edge), measures whether it actually encloses the high
+  poly and widens it once if it falls short, bakes Normal / AO / Roughness /
+  Combined, and puts the render engine and every bake setting back
+  afterwards. The output is named after the asset and written non-colour
+  where it has to be. `Build Bake Cage` is also available on its own.
 - **Cut-aware seams and hard-surface unwrap**: on a boolean model the UV
   seams belong on the cut boundaries, and Hardflow already knows where those
   are -- Smart Sharpen marks every cut edge sharp and bevel-weighted while

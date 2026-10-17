@@ -8,7 +8,7 @@ from .operators import (draw_cut, cutters, pipe, decals,
                         boolean_ops, assets, push_pull, offset,
                         construction, hardops, edge_tool, hardflow_mode,
                         trim_editor, mirror, drop, gameready,
-                        unwrap)
+                        unwrap, bake)
 from .ui import (pie, menu, panel, decal_panel, decal_library, asset_panel,
                  trim_panel, shelf)
 
@@ -26,6 +26,8 @@ _classes = (
     edge_tool.HARDFLOW_OT_edge_bevel,
     edge_tool.HARDFLOW_OT_loop_cut,
     mirror.HARDFLOW_OT_mirror,
+    bake.HARDFLOW_OT_make_cage,
+    bake.HARDFLOW_OT_bake_highlow,
     unwrap.HARDFLOW_OT_mark_seams,
     unwrap.HARDFLOW_OT_unwrap,
     gameready.HARDFLOW_OT_audit,

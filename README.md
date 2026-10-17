@@ -113,6 +113,13 @@ N-panel, and can be shown, re-selected, re-ordered or baked later. Booleans pick
 their own solver, retry on failure, and tell you *which* geometry broke instead
 of silently doing nothing.
 
+**Bake the detail down.** **Bake High to Low** takes your detailed mesh onto
+the game mesh through a real **cage** — a copy of the low poly pushed out along
+its normals — so the rays stay parallel across bevelled corners instead of
+fanning out and smearing the normal map. The cage is built for you, checked
+against the high poly and widened if it falls short. Normal, AO, roughness or
+combined.
+
 **Unwrap along your cuts.** On a boolean model the UV seams belong on the cut
 boundaries — and Hardflow already marked those while cutting, so
 **Hard-Surface Unwrap** reads its own marks instead of guessing: seams, unwrap,
@@ -219,8 +226,8 @@ work in **Edit Mode**.
 
 Under active development, and usable today — every planned feature through
 **v1.22** is implemented, plus the one-press Mirror. The pure logic core has
-**185/185** unit tests that run without Blender, and the Blender-dependent paths
-have **193/193** headless tests, verified in Blender 5.2.2 LTS against the 4.2
+**192/192** unit tests that run without Blender, and the Blender-dependent paths
+have **198/198** headless tests (a real Cycles cage bake among them), verified in Blender 5.2.2 LTS against the 4.2
 LTS baseline. Interactive feel is checked by hand against
 [tests/manual_checklist.md](tests/manual_checklist.md).
 

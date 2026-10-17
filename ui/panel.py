@@ -427,6 +427,11 @@ class HARDFLOW_PT_gameready(Panel):
         row.operator("mesh.hardflow_unwrap", icon='UV')
         row.operator("mesh.hardflow_mark_seams", text="Seams", icon='UV_DATA')
         layout.operator("object.hardflow_audit", icon='CHECKMARK')
+        bake_row = layout.row(align=True)
+        bake_row.operator("object.hardflow_bake_highlow", text="Bake High>Low",
+                          icon='RENDER_STILL')
+        bake_row.operator("object.hardflow_make_cage", text="Cage",
+                          icon='MESH_ICOSPHERE')
 
         rows = gr_ops.report_for(obj)
         if rows is None:
