@@ -91,8 +91,8 @@ cable's `G` **gravity settle** with scene collision (pure `core/physics.py`),
 **CUSTOM profiles** (mesh outline or curve bevel-object) and the
 **Detail Along Path** operator, described below.
 Code is syntax-verified with pure +
-headless tests (144 pure + 142 headless, run live against a standalone `bpy`
-build); the new bpy paths are also live-verified in Blender 5.1.2, and full GUI
+headless tests (146 pure + 146 headless, run live against a standalone `bpy`
+build); the new bpy paths are also live-verified in Blender 5.2.2, and full GUI
 verification of the modal interactions is tracked in `tests/manual_checklist.md`.
 Roadmap: `ROADMAP.md`.
 
