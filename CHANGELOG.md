@@ -3,6 +3,53 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic: minor versions add features, patch versions fix bugs.
 
+## [Unreleased]
+
+Review pass: modal-teardown hardening, the artist-facing UX gaps, and the
+Mirror that v1.13 removed. Pure suite 158 tests, headless 158, verified in
+Blender 5.2.2 LTS.
+
+### Added
+- **Mirror / symmetry** (`object.hardflow_mirror`, **Alt+X**): one press mirrors
+  the selected mesh(es) — the axis comes from the view's left-right axis, the
+  half you can see is the one kept, and the managed `HF_Mirror` lands in the
+  stack position `core/modifiers` prescribes. Modes: live **Modifier** or
+  **Bisect+Mirror** (real welded geometry). Pivot: object origin, the 3D cursor
+  (via a reused hidden helper empty, since a Mirror modifier can only mirror
+  about an origin) or the active object. F9-redoable, batched per object, and it
+  refuses to mirror an object away when nothing is on the kept side. All the
+  decision math is pure in the new `core/mirror.py`.
+- **Persistent draw tool** (`HARDFLOW_T_draw` in the toolbar) plus in-session
+  **draw settings memory** (pref `draw_remember_session`), so a row of cuts is
+  one click each and keeps the array / mirror / inset already dialed in.
+- `cancel()` on every modal operator, so an external teardown (file read, window
+  close, editor-type change, quit) cannot leave a GPU draw handler firing
+  against a dead operator, a stuck status bar, temp modifiers, snapshot meshes
+  or preview objects behind.
+
+### Changed
+- **Live boolean preview is on by default**, and its vertex cap now measures the
+  *evaluated* mesh — a target carrying Subdivision/Array/Mirror used to sail
+  past the cap on its base cage.
+- **Save-draw-defaults moved from bare `S` to `Ctrl+S`**: `S` is Blender's Scale
+  key and a reflex press silently rewrote preferences with no undo.
+- The shortcut bar **wraps** instead of running off the right edge, and the
+  in-app cheat-sheet matches the code again (it was missing `I`/Vent and every
+  mid-draw key).
+- The README is rewritten for modelers (564 → ~220 lines); the full feature
+  matrix moved to `docs/features.md` and the source tree to `CONTRIBUTING.md`.
+
+### Fixed
+- The live-boolean preview silently ignored the requested solver on Blender 5.x
+  (`FAST` was renamed to `FLOAT`, the assignment raised and was swallowed); it
+  goes through `core.boolean.coerce_solver` now.
+- `modal()` is exception-guarded in every tool, `context.area` is never
+  dereferenced blind, the Push/Pull gizmo no longer orphans its mesh snapshot on
+  a raise, and `HARDFLOW_OT_extract_cutter` no longer strands the user in Object
+  Mode when it fails.
+- A draw commit with no valid target reports it instead of raising inside the
+  preview (`_targets` now guarantees real meshes).
+
 ## [1.22.0] — 2026-10-18
 
 Feature release. Pure suite 146 tests, headless 146, verified in Blender

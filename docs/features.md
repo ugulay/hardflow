@@ -67,8 +67,11 @@ it brings to Blender for free. The right column points at the implementing modul
 > **v1.13** removed the bevel / mirror / array / radial / symmetrize / sharpen /
 > dice / clean modifier operators and the step / taper / knurl greeble. The
 > Object-Mode **Edge Bevel** and **Loop Cut** (Direct modeling section) cover edge work
-> without Edit Mode; Blender's own Bevel / Mirror / Array / Symmetrize modifiers
-> cover the rest. The remaining mesh-management helpers:
+> without Edit Mode; Blender's own Bevel / Array modifiers cover the rest.
+> **Mirror came back in v1.23** — not as a wrapper around the modifier panel,
+> but as the one-keystroke decision (axis from the view, keep the visible half,
+> sorted stack position) the paid tools are pressed for. The remaining
+> mesh-management helpers:
 
 | Feature | What it does | Where |
 |---------|--------------|-------|
@@ -77,6 +80,7 @@ it brings to Blender for free. The right column points at the implementing modul
 | Display toggles | Wireframe / sharp-edge / cutter-visibility viewport toggles | `operators/hardops.py` |
 | Material helpers | Random viewport colors, copy active material to selection | `operators/hardops.py` |
 | Recalculate normals | One-click outward-normal fix for booleans that won't cut | `operators/hardops.py recalc_normals` |
+| Mirror / symmetry (v1.23) | One press: the axis comes from the view's left-right axis, the half you can see is the one kept, and the live `HF_Mirror` lands in the sorted stack position. Modes: live modifier or Bisect+Mirror (real welded geometry); pivot = object origin / 3D cursor (hidden helper empty) / active object. Alt+X, F9-redoable, refuses to mirror an object away | `operators/mirror.py HARDFLOW_OT_mirror`, `core/mirror.py` |
 | Panel Lines (v1.20) | Selected edges → ordered chains swept into a **groove** seam or a raised **weld bead** (Edit Mode); open strips / closed loops / T-X junctions resolve cleanly; destructive or stashed as a live cutter | `operators/hardops.py HARDFLOW_OT_panel_line`, `core/transform.py order_edge_paths` |
 | Modifier-stack manager | N-panel list with move / toggle / apply / remove | `ui/panel.py` |
 

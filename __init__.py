@@ -7,7 +7,7 @@ from . import preferences, keymaps, gizmos, translations
 from .operators import (draw_cut, cutters, pipe, decals,
                         boolean_ops, assets, push_pull, offset,
                         construction, hardops, edge_tool, hardflow_mode,
-                        trim_editor)
+                        trim_editor, mirror)
 from .ui import (pie, menu, panel, decal_panel, decal_library, asset_panel,
                  trim_panel)
 
@@ -24,6 +24,7 @@ _classes = (
     offset.HARDFLOW_OT_offset,
     edge_tool.HARDFLOW_OT_edge_bevel,
     edge_tool.HARDFLOW_OT_loop_cut,
+    mirror.HARDFLOW_OT_mirror,
     hardflow_mode.HARDFLOW_OT_mode_knife,
     hardflow_mode.HARDFLOW_OT_mode_extrude,
     hardflow_mode.HARDFLOW_OT_mode_cut,

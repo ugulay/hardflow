@@ -2595,8 +2595,10 @@ def test_menu_items_resolve():
         icons = {e.identifier for e in
                  bpy.types.UILayout.bl_rna.functions['operator']
                  .parameters['icon'].enum_items}
+        # Every table, including _EDIT_ITEMS -- which was missing here, so the
+        # Edit submenu's operators and icons went unchecked.
         tables = (menu._BUILD_ITEMS, menu._BOOLEAN_ITEMS, menu._DISPLAY_ITEMS,
-                  menu._CURVE_ITEMS, menu._ASSET_ITEMS)
+                  menu._CURVE_ITEMS, menu._ASSET_ITEMS, menu._EDIT_ITEMS)
         for table in tables:
             for entry in table:
                 if entry is None:
@@ -3492,6 +3494,214 @@ def test_draw_operator_has_scene_mode_flag():
         assert hasattr(bpy.context.scene, "hardflow_draw_mode")
     finally:
         hardflow.unregister()
+
+
+def _half_cube(name, size=1.0, offset=1.0):
+    """A cube sitting entirely on +X, so a mirror has something to copy."""
+    ob = _add_cube(name, size=size)
+    for v in ob.data.vertices:
+        v.co.x += offset
+    ob.data.update()
+    return ob
+
+
+def test_mirror_modifier_is_managed_and_sorted():
+    # The live mode: one managed HF_Mirror, the right axis flag, and sorted into
+    # the hard-surface stack position (core/modifiers puts Mirror below the
+    # booleans) -- the integration that makes this Hardflow's mirror and not
+    # just Blender's button.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import mirror as mop
+        obj = _half_cube("MirrorMod")
+        obj.modifiers.new("HF_Bevel", 'BEVEL')
+        cutter = _add_cube("MirrorCutter", size=0.5, location=(2, 0, 0))
+        b = obj.modifiers.new("HF_Bool", 'BOOLEAN')
+        b.object = cutter
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        res = bpy.ops.object.hardflow_mirror(mode='MODIFIER', axis='Y')
+        assert res == {'FINISHED'}, res
+        mod = obj.modifiers.get(mop.MIRROR_NAME)
+        assert mod is not None and mod.type == 'MIRROR'
+        assert tuple(mod.use_axis) == (False, True, False), tuple(mod.use_axis)
+        assert mod.mirror_object is None          # ORIGIN pivot needs no helper
+        order = [m.type for m in obj.modifiers]
+        assert order.index('BOOLEAN') < order.index('MIRROR'), order
+        assert order.index('MIRROR') < order.index('BEVEL'), order
+
+        # Re-run / F9 updates in place: still exactly one Mirror.
+        bpy.ops.object.hardflow_mirror(mode='MODIFIER', axis='Z')
+        mirrors = [m for m in obj.modifiers if m.type == 'MIRROR']
+        assert len(mirrors) == 1, [m.name for m in mirrors]
+        assert tuple(mirrors[0].use_axis) == (False, False, True)
+
+        # Booleans First off -> the Mirror moves above the booleans.
+        bpy.ops.object.hardflow_mirror(mode='MODIFIER', axis='Z',
+                                       booleans_first=False)
+        order = [m.type for m in obj.modifiers]
+        assert order.index('MIRROR') < order.index('BOOLEAN'), order
+    finally:
+        hardflow.unregister()
+
+
+def test_mirror_modifier_cursor_pivot_uses_a_helper():
+    # A Mirror modifier can only mirror about an origin, so mirroring about the
+    # 3D cursor needs a helper empty -- and only when the cursor is actually off
+    # the object's origin.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import mirror as mop
+        obj = _half_cube("MirrorCursor")
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        bpy.context.scene.cursor.location = (0.0, 0.0, 0.0)   # == origin
+        bpy.ops.object.hardflow_mirror(mode='MODIFIER', axis='X',
+                                       pivot='CURSOR')
+        assert obj.modifiers[mop.MIRROR_NAME].mirror_object is None
+
+        bpy.context.scene.cursor.location = (0.75, 0.0, 0.0)  # off origin
+        bpy.ops.object.hardflow_mirror(mode='MODIFIER', axis='X',
+                                       pivot='CURSOR')
+        helper = obj.modifiers[mop.MIRROR_NAME].mirror_object
+        assert helper is not None and helper.type == 'EMPTY'
+        assert helper.name.startswith(mop.PIVOT_PREFIX)
+        assert abs(helper.location.x - 0.75) < 1e-6
+        # Parked in the hidden helper collection, not the user's scene root.
+        from hardflow.core import boolean as hf_boolean
+        assert helper.name in bpy.data.collections[
+            hf_boolean.HELPER_COLLECTION].objects
+    finally:
+        hardflow.unregister()
+
+
+def test_mirror_bisect_makes_real_symmetric_geometry():
+    # The destructive mode: a box sitting on +X comes back spanning both sides,
+    # and the result is genuinely symmetric by the pure predicate.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.core import mirror as mmath
+        obj = _half_cube("MirrorBisect", size=1.0, offset=1.0)
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        xs = [v.co.x for v in obj.data.vertices]
+        assert min(xs) > 0.0                      # starts entirely on +X
+
+        res = bpy.ops.object.hardflow_mirror(mode='BISECT', axis='X')
+        assert res == {'FINISHED'}, res
+        xs = [v.co.x for v in obj.data.vertices]
+        assert min(xs) < 0.0 and max(xs) > 0.0, (min(xs), max(xs))
+        pts = [tuple(v.co) for v in obj.data.vertices]
+        assert mmath.is_symmetric(pts, 'X', tol=1e-5)
+        # No modifier was added -- this mode is geometry, not a live stack.
+        assert not [m for m in obj.modifiers if m.type == 'MIRROR']
+    finally:
+        hardflow.unregister()
+
+
+def test_mirror_bisect_about_an_off_origin_pivot():
+    # Mirroring about the 3D cursor must reflect across THAT plane, not the
+    # object origin (the shift/unshift round trip in make_symmetric).
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.core import mirror as mmath
+        obj = _half_cube("MirrorPivotGeo", size=1.0, offset=1.0)
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        bpy.context.scene.cursor.location = (2.0, 0.0, 0.0)
+        # The box (x in [0.5, 1.5]) lies entirely on the MINUS side of x = 2, so
+        # the kept half has to be the minus one -- flip, since the headless
+        # fallback keeps plus.
+        res = bpy.ops.object.hardflow_mirror(mode='BISECT', axis='X',
+                                             pivot='CURSOR', flip=True)
+        assert res == {'FINISHED'}, res
+        pts = [tuple(v.co) for v in obj.data.vertices]
+        # Symmetric about x = 2, and NOT about the origin.
+        assert mmath.is_symmetric(pts, 'X', (2.0, 0.0, 0.0), tol=1e-5)
+        assert not mmath.is_symmetric(pts, 'X', tol=1e-5)
+        xs = [p[0] for p in pts]
+        assert max(xs) > 2.0, max(xs)       # the copy landed past the plane
+    finally:
+        hardflow.unregister()
+
+
+def test_mirror_never_deletes_the_whole_object():
+    # Keeping the side that holds no geometry would clear every vertex and hand
+    # back an empty mesh -- easy to hit with an off-origin pivot. The mesh must
+    # come back untouched instead, with a warning.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import mirror as mop
+        obj = _half_cube("MirrorEmptyGuard", size=1.0, offset=1.0)
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        before = [tuple(v.co) for v in obj.data.vertices]
+        bpy.context.scene.cursor.location = (2.0, 0.0, 0.0)
+        # keep_positive (headless default) with everything on the minus side.
+        assert mop.make_symmetric(obj, 'X', (2.0, 0.0, 0.0), True) == 0
+        after = [tuple(v.co) for v in obj.data.vertices]
+        assert after == before, "the mesh must be left alone, not emptied"
+        # The operator surfaces it rather than silently doing nothing harmful.
+        # A reported ERROR makes bpy.ops raise, which is the loud outcome we
+        # want here -- the user pressed mirror and must learn why nothing moved.
+        try:
+            bpy.ops.object.hardflow_mirror(mode='BISECT', axis='X',
+                                           pivot='CURSOR', flip=False)
+        except RuntimeError as ex:
+            assert "nothing mirrored" in str(ex), str(ex)
+        else:
+            assert False, "an all-skipped mirror must report an error"
+        assert len(obj.data.vertices) == len(before)
+    finally:
+        hardflow.unregister()
+
+
+def test_mirror_poll_and_keymap():
+    # Object Mode + a mesh selection only, and the Alt+X default binding exists.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import mirror as mop
+        assert not mop.HARDFLOW_OT_mirror.poll(bpy.context)   # empty scene
+        obj = _add_cube("MirrorPoll")
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        assert mop.HARDFLOW_OT_mirror.poll(bpy.context)
+
+        from hardflow import keymaps
+        bound = [kmi for _km, kmi in keymaps.addon_keymaps
+                 if kmi.idname == "object.hardflow_mirror"]
+        assert len(bound) == 1, bound
+        kmi = bound[0]
+        assert (kmi.type, kmi.alt, kmi.ctrl, kmi.shift) == ('X', True, False,
+                                                            False)
+    finally:
+        hardflow.unregister()
+
+
+def test_mirror_axis_and_half_resolve_without_a_viewport():
+    # Headless / F9-from-script has no region_3d: the resolvers must fall back
+    # deterministically instead of raising.
+    _reset()
+    from hardflow.operators import mirror as mop
+    assert mop.view_direction(bpy.context) is None
+    assert mop.resolve_axis(bpy.context, 'VIEW') == 'X'
+    assert mop.resolve_axis(bpy.context, 'Z') == 'Z'
+    assert mop.resolve_keep_positive(bpy.context, 'X') is True
+    assert mop.resolve_keep_positive(bpy.context, 'X', flip=True) is False
 
 
 def _run():

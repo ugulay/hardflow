@@ -215,6 +215,16 @@ class HARDFLOW_PT_edit(Panel):
                      icon='MOD_BEVEL')
         row.operator("mesh.hardflow_loop_cut", text="Loop Cut",
                      icon='MOD_MULTIRES')
+        # Symmetry: one press mirrors on the view's left-right axis and keeps
+        # the half you can see. The two modes get their own buttons so neither
+        # costs an F9 trip.
+        row = col.row(align=True)
+        op = row.operator("object.hardflow_mirror", text="Mirror",
+                          icon='MOD_MIRROR')
+        op.mode = 'MODIFIER'
+        op = row.operator("object.hardflow_mirror", text="Bisect+Mirror",
+                          icon='MOD_MIRROR')
+        op.mode = 'BISECT'
         # One-shot hard-surface init: sharpen + bevel + weighted normal.
         col.operator("object.hardflow_smart_sharpen", text="Smart Sharpen",
                      icon='MOD_BEVEL')
@@ -309,6 +319,7 @@ class HARDFLOW_PT_help(Panel):
         self._kv(col, "Alt+Q", "Pie menu")
         self._kv(col, "Ctrl+Shift+D", "Draw / Cut")
         self._kv(col, "Ctrl+Shift+X", "HardFlow Mode")
+        self._kv(col, "Alt+X", "Mirror (view axis, visible half)")
 
         # Keep this list in step with README.md's "Drawing shortcuts" table and
         # with HARDFLOW_OT_draw._modal -- a stale cheat-sheet is worse than none.

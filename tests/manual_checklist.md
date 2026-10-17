@@ -1056,6 +1056,42 @@ trigger the teardown **without** pressing Esc or Enter.
 - [ ] Delete the active object mid-draw, then press Enter: a clean
       "No mesh target to cut" warning, no traceback.
 
+## 26. Mirror / symmetry (Alt+X)
+
+The axis decision needs a real viewport, so none of this is reachable headless.
+
+- [ ] Model half a shape sitting on +X. **Front view** (numpad 1), **Alt+X**:
+      it mirrors across **X** and keeps the half you can see. The report line
+      names the axis and the kept side.
+- [ ] **Right view** (numpad 3), Alt+X on a fresh half: mirrors across **Y**.
+      **Top view** (numpad 7): across X. In no view does it fold the model
+      toward or away from the camera (that would be the depth axis).
+- [ ] Orbit so you are looking at the **other** side, then Alt+X: the kept half
+      is the one now facing you. **F9 ▸ Flip Side** swaps it.
+- [ ] F9 ▸ **Axis** set to an explicit X/Y/Z overrides the view pick.
+- [ ] Modifier mode on an object that already has booleans + a bevel: exactly
+      one `HF_Mirror`, and the stack reads Boolean(s) → Mirror → Bevel. Re-run
+      Alt+X: still one Mirror, updated in place. F9 ▸ **Booleans First** off
+      moves it above the booleans.
+- [ ] **Pivot ▸ 3D Cursor** with the cursor off the origin: a hidden
+      `HF_MirrorPivot_<obj>` empty appears in the Hardflow helper collection and
+      the mirror happens about the cursor. Move the cursor, re-run: the same
+      empty moves (no second one).
+- [ ] **Pivot ▸ Active Object** with two objects selected: the non-active one
+      mirrors about the active one's origin, and the active object itself is not
+      modified.
+- [ ] **Bisect+Mirror** on a half shape: real welded geometry, symmetric, no
+      modifier added, and the seam has no doubled vertices (Merge Distance).
+      Ctrl+Z restores it in one step.
+- [ ] Put the 3D cursor beyond the object and run Bisect+Mirror **without**
+      Flip: it refuses with "nothing on the + side … try Flip Side" and the mesh
+      is **untouched** (it must never mirror the object away).
+- [ ] A rotated object (rotate 30 deg on Z, then Alt+X): the modifier and
+      Bisect+Mirror modes agree — both mirror about the object's own axis.
+- [ ] N-panel ▸ Edit shows **Mirror** and **Bisect+Mirror** buttons; the Edit
+      pie and the header menu ▸ Edit both list Mirror; the Help panel lists
+      **Alt+X**. Rebinding Alt+X in Preferences ▸ Keymap sticks.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

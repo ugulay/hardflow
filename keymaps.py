@@ -1,6 +1,7 @@
 # Keymap registration + rebind UI for preferences.
 #
-# Defaults: pie menu = Alt+Q, direct cut = Ctrl+Shift+D.
+# Defaults: pie menu = Alt+Q, direct cut = Ctrl+Shift+D,
+# HardFlow Mode = Ctrl+Shift+X, mirror = Alt+X.
 # The user can change these from the standard Blender keymap editor in
 # Edit > Preferences > Add-ons > Hardflow; changes are written to the user
 # keyconfig and persist across sessions.
@@ -17,6 +18,7 @@ _OWNED = (
     ('wm.call_menu_pie', 'HARDFLOW_MT_pie'),
     ('mesh.hardflow_draw', None),
     ('mesh.hardflow_mode_knife', None),
+    ('object.hardflow_mirror', None),
 )
 
 
@@ -25,7 +27,7 @@ def register_keymaps():
     kc = wm.keyconfigs.addon
     if not kc:
         return
-    from .operators import draw_cut, hardflow_mode
+    from .operators import draw_cut, hardflow_mode, mirror
     from .ui import pie
 
     km = kc.keymaps.new(name='3D View', space_type='VIEW_3D')
@@ -45,6 +47,13 @@ def register_keymaps():
     kmi = km.keymap_items.new(
         hardflow_mode.HARDFLOW_OT_mode_knife.bl_idname, 'X', 'PRESS',
         ctrl=True, shift=True)
+    addon_keymaps.append((km, kmi))
+
+    # Mirror -> Alt+X, the shortcut a HardOps user already has in their fingers.
+    # Object Mode only (the operator polls for it), and Blender itself binds
+    # nothing to Alt+X in the 3D View.
+    kmi = km.keymap_items.new(
+        mirror.HARDFLOW_OT_mirror.bl_idname, 'X', 'PRESS', alt=True)
     addon_keymaps.append((km, kmi))
 
 

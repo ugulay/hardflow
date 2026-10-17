@@ -68,6 +68,7 @@ _EDIT_ITEMS = (
     ("mesh.hardflow_panel_line", "Panel Line (Edit)", 'MOD_SCREW', {}),
     ("mesh.hardflow_extract_cutter", "Extract Cutter (Edit)", 'MOD_BOOLEAN', {}),
     None,
+    ("object.hardflow_mirror", "Mirror (Alt+X)", 'MOD_MIRROR', {}),
     ("object.hardflow_smart_sharpen", "Smart Sharpen", 'MOD_BEVEL', {}),
     ("object.hardflow_fix_shading", "Fix Boolean Shading", 'NODE_MATERIAL', {}),
     ("object.hardflow_sort_modifiers", "Sort Modifier Stack", 'SORTSIZE', {}),

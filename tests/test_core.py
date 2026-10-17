@@ -42,6 +42,7 @@ topology = _load("topology")
 modifiers = _load("modifiers")
 path = _load("path")
 physics = _load("physics")
+mirror = _load("mirror")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1723,6 +1724,105 @@ def test_chain_rest_lengths():
     pts = [(0, 0, 0), (1, 0, 0), (1, 2, 0)]
     assert physics.chain_rest_lengths(pts) == [1.0, 2.0]
     assert physics.chain_rest_lengths(pts, slack=1.5) == [1.5, 3.0]
+
+
+# --- mirror: axis / half / bisect decision math (hard-surface symmetry) ------
+
+def test_mirror_axis_index_and_flags():
+    assert [mirror.axis_index(a) for a in ('X', 'Y', 'Z')] == [0, 1, 2]
+    assert mirror.use_axis_flags('Y') == (False, True, False)
+    try:
+        mirror.axis_index('W')
+    except ValueError:
+        pass
+    else:
+        assert False, "a bad axis must raise, not default to X"
+
+
+def test_mirror_axis_from_direction_dominant_and_ties():
+    # the axis you are looking ALONG
+    assert mirror.axis_from_direction((0.0, -1.0, 0.0)) == 'Y'
+    assert mirror.axis_from_direction((0.2, -0.3, 0.9)) == 'Z'
+    assert mirror.axis_from_direction((-0.8, 0.1, 0.2)) == 'X'
+    # a perfect 45 deg view is deterministic (X > Y > Z)
+    assert mirror.axis_from_direction((0.7071, -0.7071, 0.0)) == 'X'
+
+
+def test_mirror_screen_axis_is_never_the_view_axis():
+    # Front view (looking along -Y): mirroring across Y would fold the model
+    # toward the camera; the left-right axis is X.
+    assert mirror.screen_axis((0.0, -1.0, 0.0)) == 'X'
+    # Side view (looking along X): left-right is Y.
+    assert mirror.screen_axis((1.0, 0.0, 0.0)) == 'Y'
+    # Top view (looking down -Z): X wins the tie over Y.
+    assert mirror.screen_axis((0.0, 0.0, -1.0)) == 'X'
+    # A tilted 3/4 view: depth is Z, so the mirror axis is the bigger of X/Y.
+    assert mirror.screen_axis((0.3, -0.5, -0.8)) == 'Y'
+    for d in ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, -1.0),
+              (0.3, -0.5, -0.8), (-0.9, 0.1, 0.0)):
+        assert mirror.screen_axis(d) != mirror.axis_from_direction(d)
+
+
+def test_mirror_keep_positive_side_follows_the_camera():
+    # Looking along -X means the camera is on the +X side: keep +X.
+    assert mirror.keep_positive_side((-1.0, 0.0, 0.0), 'X') is True
+    assert mirror.keep_positive_side((1.0, 0.0, 0.0), 'X') is False
+    # Edge-on to the axis: deterministic, keeps +.
+    assert mirror.keep_positive_side((0.0, -1.0, 0.0), 'X') is True
+
+
+def test_mirror_bisect_normal_points_at_the_discarded_half():
+    # Keeping +X -> the normal points at -X (the half bmesh clears).
+    assert mirror.bisect_normal('X', True) == (-1.0, 0.0, 0.0)
+    assert mirror.bisect_normal('X', False) == (1.0, 0.0, 0.0)
+    assert mirror.bisect_normal('Z', True) == (0.0, 0.0, -1.0)
+
+
+def test_mirror_symmetrize_direction_is_the_bmesh_spelling():
+    # bmesh.ops.symmetrize takes ['-X','-Y','-Z','X','Y','Z'] and RAISES on
+    # 'POSITIVE_X' (verified in Blender 5.2.2); the long spelling is the
+    # bpy.ops.mesh.symmetrize one. Keeping them apart is the point of two names.
+    assert mirror.symmetrize_direction('X', True) == 'X'
+    assert mirror.symmetrize_direction('Y', False) == '-Y'
+    assert mirror.symmetrize_enum('X', True) == 'POSITIVE_X'
+    assert mirror.symmetrize_enum('Y', False) == 'NEGATIVE_Y'
+
+
+def test_mirror_point_reflects_about_the_pivot():
+    assert mirror.mirror_point((2.0, 1.0, 0.5), 'X') == (-2.0, 1.0, 0.5)
+    # about a pivot off the origin (the 3D-cursor case)
+    assert mirror.mirror_point((2.0, 1.0, 0.5), 'X', (1.0, 0.0, 0.0))         == (0.0, 1.0, 0.5)
+    # on-plane points are fixed
+    assert mirror.mirror_point((1.0, 7.0, 7.0), 'X', (1.0, 0.0, 0.0))         == (1.0, 7.0, 7.0)
+
+
+def test_mirror_is_symmetric_detects_both_cases():
+    sym = [(1.0, 0.0, 0.0), (-1.0, 0.0, 0.0), (0.0, 2.0, 0.0)]
+    assert mirror.is_symmetric(sym, 'X') is True
+    assert mirror.is_symmetric(sym, 'Y') is False      # (0,2,0) has no partner
+    half = [(1.0, 0.0, 0.0), (2.0, 1.0, 0.0)]
+    assert mirror.is_symmetric(half, 'X') is False
+    # about an off-origin pivot
+    shifted = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)]
+    assert mirror.is_symmetric(shifted, 'X', (1.0, 0.0, 0.0)) is True
+
+
+def test_mirror_pivot_helper_only_when_off_origin():
+    assert mirror.pivot_offset((1.0, 2.0, 3.0), (1.0, 0.0, 3.0)) == (0.0, 2.0, 0.0)
+    assert mirror.needs_pivot_helper((1.0, 2.0, 3.0), (1.0, 0.0, 3.0)) is True
+    # cursor sitting on the origin -> mirror about the object itself, no helper
+    assert mirror.needs_pivot_helper((1.0, 2.0, 3.0), (1.0, 2.0, 3.0)) is False
+    assert mirror.needs_pivot_helper((1.0, 2.0, 3.0),
+                                     (1.0, 2.0 + 1e-9, 3.0)) is False
+
+
+def test_mirror_bisect_angle_ok_flags_walls_on_the_seam():
+    # A face whose normal is perpendicular to the mirror axis is safe to bisect.
+    assert mirror.bisect_angle_ok('X', (0.0, 1.0, 0.0)) is True
+    # One pointing along the axis sits flat on the seam -> not safe.
+    assert mirror.bisect_angle_ok('X', (1.0, 0.0, 0.0)) is False
+    # Degenerate normals never raise.
+    assert mirror.bisect_angle_ok('X', (0.0, 0.0, 0.0)) is True
 
 
 def _run_all():

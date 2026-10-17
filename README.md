@@ -61,6 +61,7 @@ array, mirror and inset you dialed in. The N-panel **Mode** dropdown drives it.
 
 Everything also lives in the **N-panel ▸ Hardflow** tab, the **Alt+Q** pie menu
 and the 3D-View header menu, so you never have to memorise a key to find a tool.
+The three global keys: **Alt+Q** pie · **Ctrl+Shift+D** draw · **Alt+X** mirror.
 
 ## What you can do
 
@@ -78,6 +79,12 @@ mirror it across the model, inset or bevel the cut, and stamp the last shape
 again with one key. The **Vent** shape turns one drawn rectangle into a full
 louvre grill. **Panel Lines** sweep selected edges into a recessed seam or a
 raised weld bead.
+
+**Mirror in one press** (**Alt+X**). Model half a part; Hardflow picks the
+mirror axis from the way you are looking, keeps the half you can see, and drops
+a live Mirror into the right place in the modifier stack — or, with
+*Bisect+Mirror*, welds it into real symmetric geometry. Mirror about the object
+origin, the 3D cursor, or another object entirely.
 
 **Model directly.** **Push/Pull** a face along its normal with grid snap,
 numeric entry and vertex/edge inference — and with Manifold on, pushing inward
@@ -174,9 +181,9 @@ work in **Edit Mode**.
 ## Status
 
 Under active development, and usable today — every planned feature through
-**v1.22** is implemented, including the Manifold push. The pure logic core has
-**146/146** unit tests that run without Blender, and the Blender-dependent paths
-have **146/146** headless tests, verified in Blender 5.2.2 LTS against the 4.2
+**v1.22** is implemented, plus the one-press Mirror. The pure logic core has
+**158/158** unit tests that run without Blender, and the Blender-dependent paths
+have **158/158** headless tests, verified in Blender 5.2.2 LTS against the 4.2
 LTS baseline. Interactive feel is checked by hand against
 [tests/manual_checklist.md](tests/manual_checklist.md).
 

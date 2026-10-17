@@ -100,6 +100,7 @@ class HARDFLOW_MT_pie_edit(Menu):
         _open(pie, "HARDFLOW_MT_pie", "◂ Back", 'LOOP_BACK')
         # HardFlow Mode (enters on Knife; Tab -> Extrude in-session).
         _draw(pie, "mesh.hardflow_mode_knife", "HardFlow Mode", 'MOD_LINEART')
+        _draw(pie, "object.hardflow_mirror", "Mirror", 'MOD_MIRROR')
 
 
 class HARDFLOW_MT_pie_curves(Menu):
