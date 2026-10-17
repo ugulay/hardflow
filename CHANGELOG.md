@@ -28,6 +28,21 @@ Blender 5.2.2 LTS.
   from a cold start. The gate is the pure `core.path.is_drag` the curve tools
   already used for their freehand stroke, so a drag now means the same thing in
   every Hardflow tool (and `pipe`'s private copy of the maths is gone).
+- **Game-Ready audit**: a new N-panel section that checks the selected mesh
+  for what an engine will object to -- unapplied or non-uniform scale,
+  inverted normals, non-manifold geometry, n-gons, loose verts and wire
+  edges, missing or partial UVs, UVs outside 0-1, and texel density against
+  a target -- and puts a Fix button next to each finding it can safely
+  repair (apply scale, recalculate normals, triangulate, delete loose, Smart
+  UV Project), re-measuring afterwards so the panel shows the result. Two
+  deliberate restraints: non-manifold geometry is **selected** rather than
+  repaired, because merging or deleting it is a modelling decision, and
+  texel density is reported but never corrected, because fixing it means
+  rescaling UV islands against some reference object. Inverted normals are
+  detected by the sign of the enclosed volume, which is exact for a closed
+  shell, instead of the usual guess of comparing normals against the
+  centroid -- and an open mesh is reported as "not checked" rather than
+  judged wrongly.
 - **Mirror, Offset and Loop-Slide gizmos**: three more viewport handles, all
   opt-in (N-panel > Gizmos) and each also available as a toolbar tool.
   Object-Mode **mirror plane** handles -- one per axis, click to mirror across

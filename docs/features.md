@@ -85,6 +85,14 @@ it brings to Blender for free. The right column points at the implementing modul
 | Panel Lines (v1.20) | Selected edges → ordered chains swept into a **groove** seam or a raised **weld bead** (Edit Mode); open strips / closed loops / T-X junctions resolve cleanly; destructive or stashed as a live cutter | `operators/hardops.py HARDFLOW_OT_panel_line`, `core/transform.py order_edge_paths` |
 | Modifier-stack manager | N-panel list with move / toggle / apply / remove | `ui/panel.py` |
 
+### Game-ready (v1.23)
+
+| Feature | What it does | Where |
+|---------|--------------|-------|
+| Game-Ready audit | One panel listing what an engine will object to on the selected mesh: unapplied / non-uniform scale, inverted normals (by signed volume, so it is exact rather than a centroid guess), non-manifold vs merely open, tri/quad/n-gon budget, loose geometry, missing or partial UVs, UVs outside 0-1, and texel density against a target | `core/gameready.py`, `operators/gameready.py`, `ui/panel.py HARDFLOW_PT_gameready` |
+| One-click fixes | Apply scale, recalculate normals, triangulate n-gons, delete loose geometry, Smart UV Project. The report re-measures after each fix. Non-manifold geometry is **selected**, not repaired -- merging or deleting it is a modelling decision | `operators/gameready.py HARDFLOW_OT_audit_fix` |
+| Texel density | px/m measured from UV area vs world area, against the object's own texture size when it has one; compared to a target with a fractional tolerance. Report-only on purpose | `core/gameready.py texel_density/check_texel` |
+
 ### Decals (v0.7–v0.9 / v1.7)
 
 | Feature | What it does | Where |

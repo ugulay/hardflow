@@ -3,6 +3,7 @@ import bpy
 from bpy.types import Panel
 from bpy.props import EnumProperty, PointerProperty
 
+from .. import preferences
 from ..preferences import get_prefs
 from ..core import boolean
 
@@ -396,6 +397,76 @@ class HARDFLOW_PT_gizmos(Panel):
                  toggle=True)
         layout.label(text="Or pick a Hardflow tool in the toolbar (T)",
                      icon='TOOL_SETTINGS')
+
+
+class HARDFLOW_PT_gameready(Panel):
+    """The hand-off check: everything an engine will object to, in one list,
+    each row with the button that fixes it."""
+
+    bl_label = "Game-Ready"
+    bl_idname = "HARDFLOW_PT_gameready"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    _ICONS = {
+        'OK': 'CHECKMARK',
+        'WARN': 'ERROR',
+        'FAIL': 'CANCEL',
+    }
+
+    def draw(self, context):
+        from ..core import gameready as gr
+        from ..operators import gameready as gr_ops
+
+        layout = self.layout
+        obj = context.active_object
+        layout.operator("object.hardflow_audit", icon='CHECKMARK')
+
+        rows = gr_ops.report_for(obj)
+        if rows is None:
+            layout.label(text="Run the audit on a selected mesh", icon='INFO')
+            return
+
+        level, ok, warn, fail = gr.summary(rows)
+        box = layout.box()
+        head = box.row(align=True)
+        head.label(text=obj.name, icon='OUTLINER_OB_MESH')
+        head.label(text="%d ok  %d warn  %d fail" % (ok, warn, fail),
+                   icon=self._ICONS[level])
+
+        col = box.column(align=True)
+        for _key, lvl, label, detail, fix in rows:
+            # The finding gets the full width -- a Fix button sharing this row
+            # truncates the label at sidebar widths. The button goes on the
+            # detail line below instead, where there is room for both.
+            col.label(text=label, icon=self._ICONS[lvl])
+            actionable = bool(fix) and lvl != gr.OK
+            if not detail and not actionable:
+                continue
+            sub = col.row(align=True)
+            text_part = sub.row()
+            text_part.active = False            # dim the detail, not the button
+            text_part.label(text="    " + detail)
+            if actionable:
+                # Non-manifold is selected, not repaired: merging or deleting
+                # it is a modelling decision, so the button says so.
+                text = ("Select" if fix == gr.FIX_SELECT_NONMANIFOLD
+                        else "Fix")
+                sub.operator("object.hardflow_audit_fix",
+                             text=text, icon='TOOL_SETTINGS').fix = fix
+
+        # The texel target lives in preferences, so it is adjustable right
+        # where the result is read. Guarded: get_prefs() falls back to a plain
+        # defaults namespace when the package is imported rather than enabled
+        # as an add-on, and UILayout.prop() cannot take that.
+        prefs = get_prefs(context)
+        if preferences.is_real_prefs(prefs):
+            foot = layout.column(align=True)
+            foot.prop(prefs, "gameready_texel_target")
+            foot.prop(prefs, "gameready_texture_size")
 
 
 class HARDFLOW_PT_snap(Panel):

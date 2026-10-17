@@ -4295,6 +4295,191 @@ def test_offset_gizmo_shape_and_slots():
     assert custom._ARROW != custom._RING
 
 
+def _broken_mesh(name="Broken", invert=True, loose=True, ngon=False):
+    """A cube with the defects the audit exists to catch."""
+    import bmesh
+    me = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=2.0)
+    if invert:
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
+    if ngon:
+        bm.faces.ensure_lookup_table()
+        f = bm.faces[0]
+        # Split one edge so a quad becomes a 5-gon.
+        bmesh.ops.subdivide_edges(bm, edges=[f.edges[0]], cuts=1)
+    if loose:
+        bm.verts.new((5.0, 5.0, 5.0))
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(ob)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    return ob
+
+
+def test_gameready_measure_reads_a_clean_cube():
+    # The measurement half: the rules are unit-tested, this checks the numbers
+    # handed to them are right.
+    _reset()
+    from hardflow.operators import gameready as g
+    ob = _add_cube("Clean", size=2.0)
+    bpy.context.view_layer.objects.active = ob
+    m = g.measure(ob)
+    assert m['total_faces'] == 6 and m['quads'] == 6 and m['ngons'] == 0
+    assert m['closed'] is True
+    assert m['volume'] > 0.0, m['volume']          # wound outward
+    assert abs(m['volume'] - 8.0) < 1e-6, m['volume']
+    assert abs(m['world_area'] - 24.0) < 1e-6, m['world_area']
+    assert m['non_manifold_edges'] == 0 and m['boundary_edges'] == 0
+    assert m['loose_verts'] == 0 and m['loose_edges'] == 0
+    assert m['has_uv'] is False
+
+
+def test_gameready_measure_scales_area_by_object_scale():
+    # Texel density has to be measured against what the engine sees, so an
+    # unapplied scale must grow the world area.
+    _reset()
+    from hardflow.operators import gameready as g
+    ob = _add_cube("Scaled", size=2.0)
+    before = g.measure(ob)['world_area']
+    ob.scale = (2.0, 2.0, 2.0)
+    after = g.measure(ob)['world_area']
+    assert after > before * 3.5, (before, after)   # ~4x for a 2x scale
+    assert g.measure(ob)['scale'] == (2.0, 2.0, 2.0)
+
+
+def test_gameready_measure_catches_inverted_and_loose():
+    _reset()
+    from hardflow.operators import gameready as g
+    ob = _broken_mesh(invert=True, loose=True)
+    m = g.measure(ob)
+    assert m['closed'] is True            # a loose vert adds no boundary edge
+    assert m['volume'] < 0.0, m['volume']
+    assert m['loose_verts'] == 1
+
+
+def test_gameready_audit_operator_reports_and_caches():
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import gameready as g
+        from hardflow.core import gameready as gr
+        g.clear_reports()
+        ob = _broken_mesh()
+        ob.scale = (1.0, 2.0, 3.0)
+        assert g.report_for(ob) is None
+        assert bpy.ops.object.hardflow_audit() == {'FINISHED'}
+        rows = g.report_for(ob)
+        assert rows is not None and len(rows) == 7
+        by_key = {r[0]: r for r in rows}
+        assert by_key['scale'][1] == gr.FAIL
+        assert by_key['normals'][1] == gr.FAIL
+        assert by_key['uv'][1] == gr.FAIL
+        assert by_key['loose'][1] == gr.WARN
+        assert gr.worst(rows) == gr.FAIL
+    finally:
+        hardflow.unregister()
+
+
+def test_gameready_fixes_resolve_their_findings():
+    # Each fix must actually clear the row it is offered for, and the report
+    # must be re-measured so the panel shows the result and not the problem.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import gameready as g
+        from hardflow.core import gameready as gr
+        g.clear_reports()
+        ob = _broken_mesh(invert=True, loose=True, ngon=True)
+        ob.scale = (1.0, 2.0, 3.0)
+        bpy.ops.object.hardflow_audit()
+
+        for fix, key in ((gr.FIX_SCALE, 'scale'),
+                         (gr.FIX_NORMALS, 'normals'),
+                         (gr.FIX_LOOSE, 'loose'),
+                         (gr.FIX_NGONS, 'faces'),
+                         (gr.FIX_UNWRAP, 'uv')):
+            assert bpy.ops.object.hardflow_audit_fix(fix=fix) == {'FINISHED'}, fix
+            row = {r[0]: r for r in g.report_for(ob)}[key]
+            assert row[1] == gr.OK, (fix, row)
+
+        assert tuple(ob.scale) == (1.0, 1.0, 1.0)
+        assert g.measure(ob)['volume'] > 0.0
+        assert g.measure(ob)['loose_verts'] == 0
+        assert g.measure(ob)['ngons'] == 0
+        assert g.measure(ob)['has_uv'] is True
+    finally:
+        try:
+            if bpy.context.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except RuntimeError:
+            pass
+        hardflow.unregister()
+
+
+def test_gameready_unknown_fix_is_refused():
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        _broken_mesh()
+        try:
+            bpy.ops.object.hardflow_audit_fix(fix="NOT_A_FIX")
+        except RuntimeError as ex:
+            assert "Unknown fix" in str(ex), str(ex)
+        else:
+            assert False, "an unknown fix key must be refused"
+    finally:
+        hardflow.unregister()
+
+
+def test_gameready_panel_icons_and_prefs_guard():
+    # Icons and prefs rows are the two things that only fail when a panel
+    # actually draws. The icon ids are checked the same way the menu tables
+    # are; the prefs guard exists because get_prefs() can hand back a plain
+    # defaults namespace, which UILayout.prop() rejects with a TypeError
+    # (found by rendering this panel for real).
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.ui.panel import HARDFLOW_PT_gameready as P
+        from hardflow import preferences
+        icons = {e.identifier for e in
+                 bpy.types.UILayout.bl_rna.functions['operator']
+                 .parameters['icon'].enum_items}
+        for icon in list(P._ICONS.values()) + ['OUTLINER_OB_MESH',
+                                               'TOOL_SETTINGS', 'INFO',
+                                               'CHECKMARK']:
+            assert icon in icons, icon
+
+        import types
+        assert preferences.is_real_prefs(types.SimpleNamespace()) is False
+        assert preferences.is_real_prefs(
+            bpy.context.scene.hardflow_gizmos) is True
+    finally:
+        hardflow.unregister()
+
+
+def test_gameready_panel_is_registered():
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        assert hasattr(bpy.types, "HARDFLOW_PT_gameready")
+        prefs_rna = bpy.types.AddonPreferences.bl_rna
+        from hardflow.preferences import get_prefs
+        p = get_prefs(bpy.context)
+        assert hasattr(p, "gameready_texel_target")
+        assert hasattr(p, "gameready_texture_size")
+    finally:
+        hardflow.unregister()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

@@ -113,6 +113,12 @@ N-panel, and can be shown, re-selected, re-ordered or baked later. Booleans pick
 their own solver, retry on failure, and tell you *which* geometry broke instead
 of silently doing nothing.
 
+**Hand it to an engine.** The **Game-Ready** panel checks the things that bite
+you after export — unapplied scale, inverted normals, non-manifold shells,
+n-gons, loose geometry, missing UVs and texel density — and puts a Fix button
+next to each one it can safely repair. Non-manifold geometry is selected for
+you rather than silently "fixed", because that one is a modelling decision.
+
 **Asset Shelf.** The decals and kit parts also live in Blender's own asset
 shelf — the wide preview strip along the bottom of the viewport (*View ▸ Asset
 Shelf*). Click a decal to start sticking it, click a part to place it. Your own
@@ -207,8 +213,8 @@ work in **Edit Mode**.
 
 Under active development, and usable today — every planned feature through
 **v1.22** is implemented, plus the one-press Mirror. The pure logic core has
-**167/167** unit tests that run without Blender, and the Blender-dependent paths
-have **179/179** headless tests, verified in Blender 5.2.2 LTS against the 4.2
+**178/178** unit tests that run without Blender, and the Blender-dependent paths
+have **187/187** headless tests, verified in Blender 5.2.2 LTS against the 4.2
 LTS baseline. Interactive feel is checked by hand against
 [tests/manual_checklist.md](tests/manual_checklist.md).
 

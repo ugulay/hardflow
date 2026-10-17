@@ -112,6 +112,16 @@ def get_prefs(context=None):
     return _default_prefs()
 
 
+def is_real_prefs(prefs):
+    """True when `prefs` is the registered AddonPreferences rather than the
+    defaults stand-in `_default_prefs()` returns.
+
+    Operators can read either (that is the whole point of the stand-in), but
+    `UILayout.prop()` needs a real RNA struct and raises TypeError on a plain
+    namespace -- so a panel that draws a preference has to check first."""
+    return hasattr(prefs, "bl_rna")
+
+
 def _default_prefs():
     """A throwaway object exposing each preference at its declared default,
     read from the registered class's RNA so the defaults never drift."""
@@ -402,6 +412,20 @@ class HARDFLOW_Preferences(AddonPreferences):
         description="Maximum width (px) when packing image decals into a single "
                     "atlas texture; the atlas height grows to fit",
         default=2048, min=64, max=8192,
+    )
+    gameready_texel_target: FloatProperty(
+        name="Target Texel Density",
+        description="Texels per metre the Game-Ready audit measures against. "
+                    "512 px/m is a common character/prop standard; set 0 to "
+                    "report the measured density without judging it",
+        default=512.0, min=0.0, soft_max=4096.0,
+    )
+    gameready_texture_size: IntProperty(
+        name="Assumed Texture Size",
+        description="Texture resolution used for the texel-density figure when "
+                    "the object has no image texture yet; when it does, the "
+                    "audit measures against that image instead",
+        default=1024, min=16, max=16384,
     )
     use_asset_library: BoolProperty(
         name="Register Bundled Asset Library",

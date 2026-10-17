@@ -47,6 +47,7 @@ physics = _load("physics")
 mirror = _load("mirror")
 library = _load("library")
 shapes = _load("shapes", "gizmos")
+gameready = _load("gameready")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1960,6 +1961,155 @@ def test_shapes_ring_tris_degenerate_width_is_safe():
     import math as _m
     assert min(_m.hypot(p[0], p[1]) for p in v) == 0.0
     assert shapes.ring_tris(segments=3) != ()
+
+
+# --- gameready: the game-ready audit rules ---------------------------------
+
+def test_gameready_scale_rule():
+    assert gameready.check_scale((1.0, 1.0, 1.0))[1] == gameready.OK
+    # Uniform but not 1 -> still has to be applied.
+    f = gameready.check_scale((2.0, 2.0, 2.0))
+    assert f[1] == gameready.FAIL and f[4] == gameready.FIX_SCALE
+    assert "Scale not applied" in f[2]
+    # Non-uniform is called out separately: it also skews normals/physics.
+    f = gameready.check_scale((1.0, 2.0, 1.0))
+    assert f[1] == gameready.FAIL and "Non-uniform" in f[2]
+    # Floating-point noise from an applied scale must not trip it.
+    assert gameready.check_scale((1.0, 1.00000001, 0.99999999))[1] \
+        == gameready.OK
+
+
+def test_gameready_signed_volume_sign_flips_with_winding():
+    # A unit tetrahedron, wound outward then inward.
+    a, b, c, d = (0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)
+    outward = [(a, c, b), (a, b, d), (a, d, c), (b, c, d)]
+    v = gameready.signed_volume(outward)
+    assert abs(abs(v) - 1.0 / 6.0) < 1e-9, v
+    flipped = [(t[0], t[2], t[1]) for t in outward]
+    assert abs(gameready.signed_volume(flipped) + v) < 1e-12
+    assert gameready.signed_volume([]) == 0.0
+
+
+def test_gameready_normals_rule_needs_a_closed_mesh():
+    # Open mesh: say it was not checked rather than guess.
+    f = gameready.check_normals(False, -5.0)
+    assert f[1] == gameready.OK and "not checked" in f[2]
+    f = gameready.check_normals(True, -2.0)
+    assert f[1] == gameready.FAIL and f[4] == gameready.FIX_NORMALS
+    assert gameready.check_normals(True, 2.0)[1] == gameready.OK
+
+
+def test_gameready_watertight_rule_separates_open_from_broken():
+    f = gameready.check_watertight(3, 0)
+    assert f[1] == gameready.FAIL and f[4] == gameready.FIX_SELECT_NONMANIFOLD
+    # A flat panel is legitimately open -- a mention, not a failure.
+    assert gameready.check_watertight(0, 12)[1] == gameready.WARN
+    assert gameready.check_watertight(0, 0)[1] == gameready.OK
+    # Non-manifold outranks open when both are true.
+    assert gameready.check_watertight(2, 12)[1] == gameready.FAIL
+
+
+def test_gameready_face_budget_rule():
+    assert gameready.check_faces(0, 6, 0)[1] == gameready.OK
+    f = gameready.check_faces(2, 4, 1)
+    assert f[1] == gameready.WARN and f[4] == gameready.FIX_NGONS
+    assert "1 n-gon" in f[3]
+    # An empty mesh is a failure, and offers no triangulate button.
+    f = gameready.check_faces(0, 0, 0)
+    assert f[1] == gameready.FAIL and f[4] == ""
+
+
+def test_gameready_loose_and_uv_rules():
+    assert gameready.check_loose(0, 0)[1] == gameready.OK
+    f = gameready.check_loose(3, 1)
+    assert f[1] == gameready.WARN and f[4] == gameready.FIX_LOOSE
+
+    f = gameready.check_uv(False)
+    assert f[1] == gameready.FAIL and f[4] == gameready.FIX_UNWRAP
+    # A UV map that misses some faces is still a failure.
+    f = gameready.check_uv(True, uv_faces=4, total_faces=6)
+    assert f[1] == gameready.FAIL and "2 of 6" in f[3]
+    # Outside 0-1 is legal when tiling, so it only warns.
+    assert gameready.check_uv(True, 6, 6, out_of_bounds=2)[1] == gameready.WARN
+    assert gameready.check_uv(True, 6, 6)[1] == gameready.OK
+
+
+def test_gameready_texel_density_formula():
+    # A 1 m^2 face filling the whole 0-1 square at 1024 px -> 1024 px/m.
+    assert abs(gameready.texel_density(1.0, 1.0, 1024) - 1024.0) < 1e-9
+    # Four times the area at the same UV coverage halves the density.
+    assert abs(gameready.texel_density(4.0, 1.0, 1024) - 512.0) < 1e-9
+    # Half the UV square on 1 m^2 -> 1024 * sqrt(0.5).
+    import math as _m
+    assert abs(gameready.texel_density(1.0, 0.5, 1024)
+               - 1024.0 * _m.sqrt(0.5)) < 1e-9
+    # Degenerate input reports nothing instead of raising.
+    for args in ((0.0, 1.0, 1024), (1.0, 0.0, 1024), (1.0, 1.0, 0),
+                 (-2.0, 1.0, 1024)):
+        assert gameready.texel_density(*args) == 0.0
+
+
+def test_gameready_texel_rule_uses_a_fractional_tolerance():
+    assert gameready.check_texel(512.0, 512.0)[1] == gameready.OK
+    # Default tolerance is +/-25% of the target.
+    assert gameready.check_texel(640.0, 512.0)[1] == gameready.OK      # 125%
+    assert gameready.check_texel(641.0, 512.0)[1] == gameready.WARN
+    assert gameready.check_texel(384.0, 512.0)[1] == gameready.OK      # 75%
+    assert gameready.check_texel(300.0, 512.0)[1] == gameready.WARN
+    # No target set -> report the number, never complain.
+    assert gameready.check_texel(123.0, 0.0)[1] == gameready.OK
+    assert gameready.check_texel(0.0, 512.0)[1] == gameready.OK
+    # Density is never auto-fixed: rescaling islands is the user's call.
+    assert gameready.check_texel(300.0, 512.0)[4] == ""
+
+
+def test_gameready_summary_and_actionable_rows():
+    rows = [
+        gameready.finding('a', gameready.OK, "fine"),
+        gameready.finding('b', gameready.WARN, "meh", "", gameready.FIX_NGONS),
+        gameready.finding('c', gameready.FAIL, "bad", "", gameready.FIX_SCALE),
+        gameready.finding('d', gameready.FAIL, "bad too"),          # no fix
+    ]
+    assert gameready.worst(rows) == gameready.FAIL
+    assert gameready.summary(rows) == (gameready.FAIL, 1, 1, 2)
+    assert gameready.worst([]) == gameready.OK
+    assert gameready.summary([]) == (gameready.OK, 0, 0, 0)
+    # Only rows with a button, worst first, and never an OK row.
+    keys = [f[0] for f in gameready.needs_fixing(rows)]
+    assert keys == ['c', 'b'], keys
+
+
+def test_gameready_audit_runs_every_rule_in_order():
+    clean = dict(scale=(1.0, 1.0, 1.0), closed=True, volume=8.0,
+                 non_manifold_edges=0, boundary_edges=0,
+                 tris=0, quads=6, ngons=0, loose_verts=0, loose_edges=0,
+                 has_uv=True, uv_faces=6, total_faces=6, uv_out_of_bounds=0,
+                 world_area=24.0, uv_area=1.0)
+    rows = gameready.audit(clean, target_texel=0.0)
+    assert [f[0] for f in rows] == ['scale', 'normals', 'manifold', 'faces',
+                                    'loose', 'uv', 'texel']
+    assert gameready.worst(rows) == gameready.OK, rows
+
+    broken = dict(clean, scale=(1.0, 2.0, 3.0), volume=-8.0,
+                  non_manifold_edges=4, ngons=3, loose_verts=2,
+                  has_uv=False)
+    rows = gameready.audit(broken)
+    assert gameready.worst(rows) == gameready.FAIL
+    _lvl, _ok, warn, fail = gameready.summary(rows)
+    assert fail >= 4 and warn >= 1, (fail, warn)
+    # Everything broken that CAN be fixed offers a button.
+    fixes = {f[0]: f[4] for f in gameready.needs_fixing(rows)}
+    assert fixes['scale'] == gameready.FIX_SCALE
+    assert fixes['normals'] == gameready.FIX_NORMALS
+    assert fixes['uv'] == gameready.FIX_UNWRAP
+    assert fixes['faces'] == gameready.FIX_NGONS
+
+
+def test_gameready_audit_tolerates_missing_measurements():
+    # A measurement dict from a future/partial gatherer must not raise.
+    rows = gameready.audit({})
+    assert len(rows) == 7
+    assert all(len(f) == 5 for f in rows)
 
 
 def _run_all():

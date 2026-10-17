@@ -1222,6 +1222,35 @@ mirror handle's operator call was driven live. The dragging itself needs hands:
       Offset and Hardflow Loop Slide; picking each shows only its own handle.
       No tool is buried in a built-in dropdown (issue #4).
 
+## 32. Game-Ready audit
+
+The audit and every fix were driven on a deliberately broken mesh (FAIL ->
+all fixes -> OK), and the panel was rendered in a real sidebar. What needs a
+human is the judgement: are the verdicts right on YOUR models?
+
+- [ ] N-panel > Game-Ready > **Game-Ready Audit** on a finished asset: the
+      verdicts match what you would say by hand. Anything it calls FAIL
+      really would be a problem in an engine.
+- [ ] A mesh with unapplied non-uniform scale: FAIL, and **Fix** applies it
+      without moving the object.
+- [ ] An inverted-normal closed mesh: FAIL; the same mesh with a face
+      deleted (so it is open) reports "not checked" instead of guessing.
+- [ ] A boolean result with n-gons: WARN, and Fix triangulates only the
+      n-gons (quads survive).
+- [ ] A mesh with non-manifold geometry: the button says **Select**, drops
+      you into Edit Mode with those edges selected, and changes nothing.
+- [ ] **No UV map** -> Fix runs Smart UV Project and the row turns OK; the
+      texel row then reports a real number.
+- [ ] Texel density: set the target to match your project, check the figure
+      against a known-good asset. With an image texture assigned, the figure
+      uses that texture's size rather than the preference.
+- [ ] Run the audit on several selected objects: the panel shows the ACTIVE
+      one, and selecting another previously-audited object shows its report.
+- [ ] Edit the mesh after an audit: the shown report is stale until you run
+      it again (expected) -- and running a Fix re-measures immediately.
+- [ ] Panel readability at a narrow sidebar width: the finding labels are
+      not truncated (the Fix button sits on the detail line below).
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`
