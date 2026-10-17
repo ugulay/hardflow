@@ -389,7 +389,11 @@ class HARDFLOW_PT_gizmos(Panel):
         row.prop(s, "rotate", toggle=True)
         row.prop(s, "scale", toggle=True)
         col.prop(s, "bevel", text="Bevel Width (Object Mode)", toggle=True)
+        col.prop(s, "mirror", text="Mirror Axes (Object Mode)", toggle=True)
         col.prop(s, "push_pull", text="Push/Pull (Edit Mode faces)", toggle=True)
+        col.prop(s, "offset", text="Offset Ring (Edit Mode faces)", toggle=True)
+        col.prop(s, "loop_slide", text="Loop Slide (Edit Mode edges)",
+                 toggle=True)
         layout.label(text="Or pick a Hardflow tool in the toolbar (T)",
                      icon='TOOL_SETTINGS')
 

@@ -36,6 +36,18 @@ class HARDFLOW_GizmoSettings(PropertyGroup):
     push_pull: BoolProperty(
         name="Push/Pull", default=False, update=_redraw,
         description="Edit Mode: drag the selected faces along their normal")
+    mirror: BoolProperty(
+        name="Mirror", default=False, update=_redraw,
+        description="Object Mode: click an axis plane to mirror across it "
+                    "(adds / updates the managed HF_Mirror modifier)")
+    offset: BoolProperty(
+        name="Offset", default=False, update=_redraw,
+        description="Edit Mode: drag the ring inward to inset the selected "
+                    "face border")
+    loop_slide: BoolProperty(
+        name="Loop Slide", default=False, update=_redraw,
+        description="Edit Mode: drag to slide the selected edge loop "
+                    "(Blender's Edge Slide)")
 
 
 # Gizmo + GizmoGroup classes (the Gizmo type must come before the groups that
@@ -43,12 +55,16 @@ class HARDFLOW_GizmoSettings(PropertyGroup):
 _classes = (
     HARDFLOW_GizmoSettings,
     custom.HARDFLOW_GT_drag_extrude,
+    custom.HARDFLOW_GT_drag_inset,
     groups.HARDFLOW_GGT_persistent,
     groups.HARDFLOW_GGT_move,
     groups.HARDFLOW_GGT_rotate,
     groups.HARDFLOW_GGT_scale,
     groups.HARDFLOW_GGT_bevel,
     groups.HARDFLOW_GGT_push_pull,
+    groups.HARDFLOW_GGT_mirror,
+    groups.HARDFLOW_GGT_offset,
+    groups.HARDFLOW_GGT_loop_slide,
 )
 
 

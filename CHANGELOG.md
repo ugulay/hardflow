@@ -28,6 +28,14 @@ Blender 5.2.2 LTS.
   from a cold start. The gate is the pure `core.path.is_drag` the curve tools
   already used for their freehand stroke, so a drag now means the same thing in
   every Hardflow tool (and `pipe`'s private copy of the maths is gone).
+- **Mirror, Offset and Loop-Slide gizmos**: three more viewport handles, all
+  opt-in (N-panel > Gizmos) and each also available as a toolbar tool.
+  Object-Mode **mirror plane** handles -- one per axis, click to mirror across
+  it through the managed HF_Mirror modifier (so the F9 panel still works); an
+  Edit-Mode **Offset ring** that lies in the selected face's plane and insets
+  its border as you drag it inward, with the same live-preview rollback the
+  Push/Pull gizmo uses; and an Edit-Mode **Loop Slide** arrow wrapping
+  Blender's own Edge Slide, which is the slide half of Loop Cut.
 - **Viewport Asset Shelf**: the decal and INSERT library in Blender's own
   preview strip along the bottom of the viewport (View > Asset Shelf) --
   click an image asset to start sticking a decal, an object asset to place an

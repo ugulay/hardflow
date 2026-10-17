@@ -1194,6 +1194,34 @@ needs a human is the click-through and the coexistence with your own assets:
 - [ ] The assets also show up in the **Asset Browser** under the
       Hardflow/Decals and Hardflow/INSERTs catalogs.
 
+## 31. Mirror / Offset / Loop-Slide gizmos
+
+All three groups were instantiated in a real viewport and screenshotted (the
+mirror planes draw in Object Mode, the Offset ring in Edit Mode), and the
+mirror handle's operator call was driven live. The dragging itself needs hands:
+
+- [ ] N-panel > Gizmos: the three new toggles are **off** on a fresh install
+      and each one shows/hides its handle immediately.
+- [ ] **Mirror** (Object Mode): three coloured plane handles sit around the
+      origin, offset along their own axis so they do not pile up. Clicking the
+      red one mirrors across X and adds a single `HF_Mirror`; clicking it
+      again updates in place. F9 after the click shows the Mirror redo panel.
+- [ ] The planes scale with the object: check on a 1 cm bolt and a 10 m hull.
+- [ ] **Offset** (Edit Mode, face selected): the ring lies flat IN the face,
+      not sticking out of it. Dragging it toward the face centre insets the
+      border, the HUD reads the thickness, and Ctrl inverts the grid snap.
+- [ ] Release confirms the inset; **Esc mid-drag rolls the mesh back** and
+      leaves no `hf_gizmo_inset` mesh behind (check the Blender File outliner).
+- [ ] The ring is visible when the selected face points **away** from you
+      (it is drawn double-sided on purpose).
+- [ ] Deselect everything: the ring and the slide handle disappear.
+- [ ] **Loop Slide** (Edit Mode): cut a loop, keep it selected, drag the
+      handle -- the loop slides with Blender's own snapping and numeric entry,
+      and Esc cancels the slide.
+- [ ] Toolbar (T): Object Mode lists Hardflow Mirror, Edit Mesh lists Hardflow
+      Offset and Hardflow Loop Slide; picking each shows only its own handle.
+      No tool is buried in a built-in dropdown (issue #4).
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

@@ -15,9 +15,11 @@ import tempfile
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _load(name):
-    """Load core/<name>.py from file without importing the package (or bpy)."""
-    path = os.path.join(_ROOT, "core", name + ".py")
+def _load(name, package="core"):
+    """Load <package>/<name>.py from file without importing the package (or
+    bpy). `package` is "core" for the pure math layer; gizmos/shapes.py is the
+    one other stdlib-only module, so it is testable the same way."""
+    path = os.path.join(_ROOT, package, name + ".py")
     spec = importlib.util.spec_from_file_location("hf_" + name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -44,6 +46,7 @@ path = _load("path")
 physics = _load("physics")
 mirror = _load("mirror")
 library = _load("library")
+shapes = _load("shapes", "gizmos")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -1906,6 +1909,57 @@ def test_path_is_drag_handles_missing_endpoints():
     # test is >= so there is no dead zone left to fall into.
     assert path.is_drag((0, 0), (1, 0), 0) is True
     assert path.is_drag((0, 0), (0, 0), 0) is True
+
+
+# --- gizmos/shapes: pure custom-gizmo geometry ------------------------------
+
+def _tris(verts):
+    """Group a flat vertex tuple into triangles, asserting it divides evenly."""
+    assert len(verts) % 3 == 0, len(verts)
+    return [verts[i:i + 3] for i in range(0, len(verts), 3)]
+
+
+def test_shapes_arrow_tris_is_a_valid_z_arrow():
+    v = shapes.arrow_tris(segments=8)
+    tris = _tris(v)
+    assert tris, "no geometry"
+    assert all(len(p) == 3 for p in v), "vertices must be 3-tuples"
+    zs = [p[2] for p in v]
+    # Spans z in [0, shaft + head] and points along +Z (the tip is the max).
+    assert abs(min(zs)) < 1e-9, min(zs)
+    assert abs(max(zs) - (0.62 + 0.42)) < 1e-9, max(zs)
+    # The widest point is the cone base, not the tip.
+    tip = [p for p in v if abs(p[2] - max(zs)) < 1e-9]
+    assert all(abs(p[0]) < 1e-9 and abs(p[1]) < 1e-9 for p in tip)
+
+
+def test_shapes_ring_tris_is_flat_and_annular():
+    r, w = 0.9, 0.09
+    v = shapes.ring_tris(segments=12, radius=r, width=w)
+    tris = _tris(v)
+    assert tris, "no geometry"
+    # Flat in the local XY plane: the Offset handle lies in the face it insets.
+    assert all(abs(p[2]) < 1e-9 for p in v), "ring must be flat"
+    import math as _m
+    radii = sorted({round(_m.hypot(p[0], p[1]), 9) for p in v})
+    assert len(radii) == 2, radii            # exactly an inner and outer rim
+    assert abs(radii[0] - (r - w)) < 1e-9 and abs(radii[1] - r) < 1e-9
+    # Wound both ways, so the handle is visible from either side of the face:
+    # every triangle has a mirror with the opposite winding.
+    def area2(t):
+        (ax, ay, _), (bx, by, _), (cx, cy, _) = t
+        return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+    signs = [area2(t) for t in tris]
+    assert sum(1 for a in signs if a > 0) == sum(1 for a in signs if a < 0)
+
+
+def test_shapes_ring_tris_degenerate_width_is_safe():
+    # A width wider than the radius must not produce a negative inner radius
+    # (which would turn the ring inside out).
+    v = shapes.ring_tris(segments=6, radius=0.5, width=2.0)
+    import math as _m
+    assert min(_m.hypot(p[0], p[1]) for p in v) == 0.0
+    assert shapes.ring_tris(segments=3) != ()
 
 
 def _run_all():

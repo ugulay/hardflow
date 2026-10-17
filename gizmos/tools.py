@@ -87,6 +87,36 @@ class HARDFLOW_T_push_pull(WorkSpaceTool):
     )
 
 
+class HARDFLOW_T_mirror(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'OBJECT'
+    bl_idname = "hardflow.mirror"
+    bl_label = "Hardflow Mirror"
+    bl_description = "Click an axis plane to mirror the object across it"
+    bl_icon = "ops.mesh.bisect"
+    bl_widget = "HARDFLOW_GGT_mirror"
+
+
+class HARDFLOW_T_offset_edit(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'EDIT_MESH'
+    bl_idname = "hardflow.offset_edit"
+    bl_label = "Hardflow Offset"
+    bl_description = "Drag the ring inward to inset the selected face border"
+    bl_icon = "ops.mesh.inset"
+    bl_widget = "HARDFLOW_GGT_offset"
+
+
+class HARDFLOW_T_loop_slide_edit(WorkSpaceTool):
+    bl_space_type = 'VIEW_3D'
+    bl_context_mode = 'EDIT_MESH'
+    bl_idname = "hardflow.loop_slide_edit"
+    bl_label = "Hardflow Loop Slide"
+    bl_description = "Drag the handle to slide the selected edge loop"
+    bl_icon = "ops.mesh.offset_edge_loops_slide"
+    bl_widget = "HARDFLOW_GGT_loop_slide"
+
+
 class HARDFLOW_T_push_pull_edit(WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'EDIT_MESH'
@@ -118,7 +148,10 @@ _TOOLS = (
     (HARDFLOW_T_scale, {"after": {"hardflow.rotate"}}),
     (HARDFLOW_T_push_pull, {"after": {"hardflow.scale"}}),
     (HARDFLOW_T_bevel, {"after": {"hardflow.push_pull"}}),
+    (HARDFLOW_T_mirror, {"after": {"hardflow.bevel"}}),
     (HARDFLOW_T_push_pull_edit, {"separator": True}),
+    (HARDFLOW_T_offset_edit, {"after": {"hardflow.push_pull_edit"}}),
+    (HARDFLOW_T_loop_slide_edit, {"after": {"hardflow.offset_edit"}}),
 )
 
 

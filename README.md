@@ -95,6 +95,12 @@ Bevel** and **Loop Cut** work in Object Mode, on a picked edge or its whole
 loop, right through subdivision and other modifiers. **Smart Bevel** adds the
 support loops that keep the edge crisp under Subdivision.
 
+**Grab handles in the viewport.** Opt-in gizmos (N-panel ▸ Gizmos, or pick the
+matching tool from the toolbar): move/rotate/scale, a bevel-width handle,
+Push/Pull on the selected faces, **mirror plane** handles you click to mirror
+across an axis, an **Offset ring** you drag inward to inset a face, and a
+**loop slide** handle.
+
 **Snap precisely.** Lock to corners, edge midpoints or along an edge, with
 colour-coded cursor feedback (🟡 corner · 🟢 midpoint · 🔵 on edge). Hold
 Shift for angle steps, cycle the drawing plane between view / surface /
@@ -201,8 +207,8 @@ work in **Edit Mode**.
 
 Under active development, and usable today — every planned feature through
 **v1.22** is implemented, plus the one-press Mirror. The pure logic core has
-**164/164** unit tests that run without Blender, and the Blender-dependent paths
-have **175/175** headless tests, verified in Blender 5.2.2 LTS against the 4.2
+**167/167** unit tests that run without Blender, and the Blender-dependent paths
+have **179/179** headless tests, verified in Blender 5.2.2 LTS against the 4.2
 LTS baseline. Interactive feel is checked by hand against
 [tests/manual_checklist.md](tests/manual_checklist.md).
 

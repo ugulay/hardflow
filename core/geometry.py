@@ -840,6 +840,41 @@ def selected_face_basis(obj):
     return center, normal.normalized()
 
 
+def selected_edge_basis(obj):
+    """Average local center + direction of obj's selected edit-mesh edges, as
+    (center, direction) Vectors in object-local space, or None when nothing is
+    selected. Drives where the Edge Slide gizmo handle sits and which way it
+    points. Reads the live edit bmesh; obj must be in Edit Mode.
+
+    Edge directions are sign-aligned to the first edge before averaging: around
+    a loop the vectors run in opposing senses, and averaging them raw would
+    cancel to nothing."""
+    from mathutils import Vector
+    bm = bmesh.from_edit_mesh(obj.data)
+    edges = [e for e in bm.edges if e.select]
+    if not edges:
+        return None
+    center = Vector((0.0, 0.0, 0.0))
+    direction = Vector((0.0, 0.0, 0.0))
+    ref = None
+    for e in edges:
+        a, b = e.verts[0].co, e.verts[1].co
+        center += (a + b) * 0.5
+        vec = (b - a)
+        if vec.length < 1e-12:
+            continue
+        vec = vec.normalized()
+        if ref is None:
+            ref = vec.copy()
+        elif vec.dot(ref) < 0.0:
+            vec = -vec
+        direction += vec
+    center /= len(edges)
+    if direction.length < 1e-9:
+        direction = ref if ref is not None else Vector((0.0, 0.0, 1.0))
+    return center, direction.normalized()
+
+
 def flush_edit_mesh(obj):
     """Write the live edit-mesh (including selection) back to obj.data. Call this
     before snapshot_mesh in Edit Mode so the snapshot captures the current state."""

@@ -4188,6 +4188,113 @@ def test_bundled_decal_assets_are_marked_and_catalogued():
         hardflow.unregister()
 
 
+def test_new_gizmo_groups_and_toggles_are_registered():
+    # Registered gizmo classes are not exposed on bpy.types, so they are looked
+    # up through the RNA subclass registry (see CLAUDE.md).
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from bpy.types import GizmoGroup, Gizmo
+        for name in ("HARDFLOW_GGT_mirror", "HARDFLOW_GGT_offset",
+                     "HARDFLOW_GGT_loop_slide"):
+            assert GizmoGroup.bl_rna_get_subclass_py(name) is not None, name
+        assert Gizmo.bl_rna_get_subclass_py("HARDFLOW_GT_drag_inset") is not None
+
+        s = bpy.context.scene.hardflow_gizmos
+        # Opt-in: new handles must not appear in everyone's viewport.
+        for attr in ("mirror", "offset", "loop_slide"):
+            assert hasattr(s, attr), attr
+            assert getattr(s, attr) is False, attr
+    finally:
+        hardflow.unregister()
+    from bpy.types import GizmoGroup
+    assert GizmoGroup.bl_rna_get_subclass_py("HARDFLOW_GGT_mirror") is None
+
+
+def test_mirror_gizmo_operator_properties_are_valid():
+    # Each mirror handle sets axis + mode on the operator it wraps. A renamed
+    # enum item would only blow up when the group's setup() runs in a live
+    # viewport, which no headless test reaches -- so check the contract here.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        rna = bpy.ops.object.hardflow_mirror.get_rna_type()
+        axes = {i.identifier for i in rna.properties['axis'].enum_items}
+        modes = {i.identifier for i in rna.properties['mode'].enum_items}
+        from hardflow.gizmos import groups
+        for _idx, name, _color in groups._AXES:
+            assert name in axes, (name, axes)
+        assert 'MODIFIER' in modes, modes
+        # The slide handle wraps a built-in operator with release_confirm.
+        slide = bpy.ops.transform.edge_slide.get_rna_type()
+        assert 'release_confirm' in [p.identifier for p in slide.properties]
+    finally:
+        hardflow.unregister()
+
+
+def test_selected_edge_basis_centres_and_aligns():
+    # Drives where the Loop Slide handle sits and which way it points.
+    _reset()
+    import bmesh
+    from hardflow.core import geometry
+    ob = _add_cube("EdgeBasis", size=2.0)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bpy.ops.object.mode_set(mode='EDIT')
+    try:
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.mesh.select_mode(type='EDGE')
+        bm = bmesh.from_edit_mesh(ob.data)
+        bm.edges.ensure_lookup_table()
+        assert geometry.selected_edge_basis(ob) is None   # nothing selected
+
+        # Two parallel edges of one face: the direction is their shared axis
+        # and the centre is midway between them.
+        picked = []
+        for e in bm.edges:
+            a, b = e.verts[0].co, e.verts[1].co
+            if abs((b - a).normalized().z) > 0.99:
+                picked.append(e)
+            if len(picked) == 2:
+                break
+        assert len(picked) == 2
+        for e in picked:
+            e.select = True
+        bmesh.update_edit_mesh(ob.data)
+        center, direction = geometry.selected_edge_basis(ob)
+        assert abs(abs(direction.z) - 1.0) < 1e-6, direction[:]
+        assert abs(center.z) < 1e-6, center[:]
+
+        # Sign alignment: a loop's edges run in opposing senses, and a raw
+        # average would cancel to zero. The result must stay a unit vector.
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bm = bmesh.from_edit_mesh(ob.data)
+        bm.faces.ensure_lookup_table()
+        for e in bm.faces[0].edges:
+            e.select = True
+        bmesh.update_edit_mesh(ob.data)
+        _c, d = geometry.selected_edge_basis(ob)
+        assert abs(d.length - 1.0) < 1e-6, d.length
+    finally:
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def test_offset_gizmo_shape_and_slots():
+    # The custom inset gizmo declares every slot the owning group writes;
+    # a missing __slots__ entry raises AttributeError only at drag time.
+    from hardflow.gizmos import custom
+    cls = custom.HARDFLOW_GT_drag_inset
+    for slot in ("_obj", "_axis_co", "_plane_dir", "_base", "_thickness",
+                 "_d0", "_snap", "_dragging", "custom_shape"):
+        assert slot in cls.__slots__, slot
+    # It draws the pure ring, not the arrow (that one means "extrude").
+    from hardflow.gizmos import shapes
+    assert custom._RING == shapes.ring_tris()
+    assert custom._ARROW != custom._RING
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
