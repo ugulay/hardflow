@@ -367,7 +367,23 @@ class _CurveDraw:
     # --- event loop ------------------------------------------------------
 
     def modal(self, context, event):
-        context.area.tag_redraw()
+        # A raise in the modal body would otherwise leave the registered GPU
+        # draw handler firing against a dead operator, and the in-progress
+        # curve preview stranded in the scene.
+        # Guard it the way draw_cut does: report, clean up and bail.
+        try:
+            return self._modal(context, event)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, "Hardflow: %s" % ex)
+            try:
+                self._cleanup(context)
+            except Exception:  # noqa: BLE001
+                pass
+            return {'CANCELLED'}
+
+    def _modal(self, context, event):
+        if context.area is not None:
+            context.area.tag_redraw()
         dirty = False
 
         if event.type == 'MOUSEMOVE':
@@ -578,6 +594,13 @@ class _CurveDraw:
             self.report({'ERROR'}, "Hardflow %s: %s" % (self._title, ex))
         self._cleanup(context)
         return {'FINISHED'}
+
+    def cancel(self, context):
+        # Blender calls ot->cancel when it tears the modal handler down
+        # externally (file read, window close, editor-type change, quit).
+        # Without this nothing runs: the GPU draw handler stays registered
+        # and fires against a dead operator on every redraw.
+        self._cleanup(context)
 
     def _cleanup(self, context):
         if not self._finalized:

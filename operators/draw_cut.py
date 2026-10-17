@@ -89,7 +89,7 @@ class HARDFLOW_OT_draw(Operator):
                 and context.mode in {'OBJECT', 'EDIT_MESH'})
 
     def invoke(self, context, event):
-        if context.area.type != 'VIEW_3D':
+        if context.area is None or context.area.type != 'VIEW_3D':
             self.report({'WARNING'}, "Run inside View3D")
             return {'CANCELLED'}
 
@@ -183,7 +183,8 @@ class HARDFLOW_OT_draw(Operator):
             return {'CANCELLED'}
 
     def _modal(self, context, event):
-        context.area.tag_redraw()
+        if context.area is not None:
+            context.area.tag_redraw()
         # Re-anchor placed points to the current view before doing anything, so an
         # orbit/zoom on a fixed plane leaves the shape where it was drawn.
         self._sync_points_from_world(context)
@@ -1773,6 +1774,13 @@ class HARDFLOW_OT_draw(Operator):
             for t in affected:
                 sort_modifier_stack(t)
 
+    def cancel(self, context):
+        # Blender calls ot->cancel when it tears the modal handler down
+        # externally (file read, window close, editor-type change, quit).
+        # Without this nothing runs: the GPU draw handler stays registered
+        # and fires against a dead operator on every redraw.
+        self._cleanup(context)
+
     def _cleanup(self, context):
         self._clear_live_boolean(context)  # strip any temp preview mods first
         self._clear_preview()  # discards the cage on cancel; no-op after commit
@@ -1788,4 +1796,5 @@ class HARDFLOW_OT_draw(Operator):
             bpy.types.SpaceView3D.draw_handler_remove(self._handle, 'WINDOW')
         except (ValueError, AttributeError):
             pass
-        context.area.tag_redraw()
+        if context.area is not None:
+            context.area.tag_redraw()

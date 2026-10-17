@@ -163,7 +163,23 @@ class HARDFLOW_OT_trim_editor(Operator):
     # -- modal --
 
     def modal(self, context, event):
-        context.area.tag_redraw()
+        # A raise in the modal body would otherwise leave the registered GPU
+        # draw handler firing against a dead operator, and the carved regions
+        # left half-edited (so roll them back like Esc).
+        # Guard it the way draw_cut does: report, clean up and bail.
+        try:
+            return self._modal(context, event)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, "Hardflow: %s" % ex)
+            try:
+                self._cancel(context)
+            except Exception:  # noqa: BLE001
+                pass
+            return {'CANCELLED'}
+
+    def _modal(self, context, event):
+        if context.area is not None:
+            context.area.tag_redraw()
         region = context.region
 
         if event.type == 'MOUSEMOVE':
@@ -313,6 +329,12 @@ class HARDFLOW_OT_trim_editor(Operator):
         self._trim().active = 0
         self._cleanup(context)
         return {'CANCELLED'}
+
+    def cancel(self, context):
+        # External teardown (file read, window close, editor-type change):
+        # roll the carved regions back exactly like Esc does, and drop the
+        # draw handler so it cannot fire against a dead operator.
+        self._cancel(context)
 
     def _cleanup(self, context):
         try:

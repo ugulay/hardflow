@@ -2493,6 +2493,8 @@ def test_coerce_solver_fast_to_float():
     # EXACT and an unknown solver are unaffected
     assert boolean._coerce_solver('EXACT') == 'EXACT'
     assert boolean._coerce_solver('NOPE') == 'EXACT'
+    # Public name the operator layer uses (the underscore stays as an alias).
+    assert boolean.coerce_solver('FAST') == coerced
 
 
 def test_robust_boolean_succeeds_and_reports():
@@ -2912,6 +2914,10 @@ def test_livepreview_command_lifecycle():
     assert mod is not None and mod.object == cutter
     assert mod.operation == 'DIFFERENCE' and mod.show_render is False
     assert len(target.data.polygons) == tris_before   # base mesh untouched
+    # The requested solver must actually land. Blender 5.0 renamed FAST -> FLOAT,
+    # so assigning the raw identifier raises there; the command coerces it, and
+    # without that the preview silently ran on the modifier's default solver.
+    assert mod.solver == boolean.coerce_solver('FAST')
 
     cmd.refresh([other])                              # retarget: target stripped
     assert target.modifiers.get("HF_LivePreview") is None
@@ -3332,6 +3338,72 @@ def test_workspace_tools_do_not_corrupt_the_toolbar():
         hardflow.unregister()
     # Unregistering restores the toolbar exactly (no leftover separators).
     assert lists() == before, "toolbar not restored after unregister"
+
+
+def test_extract_cutter_operator_keeps_edit_mode_on_failure():
+    # The operator switches to Object Mode so extract_faces can read flushed
+    # coords; a failure must not strand the user there (they invoked it from a
+    # face selection in Edit Mode). Also covers the success path, which
+    # deliberately ENDS in Object Mode with the new cutter active.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        cube = _add_cube("ExCut", size=2.0)
+        bpy.context.view_layer.objects.active = cube
+        cube.select_set(True)
+
+        # Failure path: no face selected -> CANCELLED, still in Edit Mode.
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='DESELECT')
+        res = bpy.ops.mesh.hardflow_extract_cutter()
+        assert res == {'CANCELLED'}, res
+        assert bpy.context.mode == 'EDIT_MESH', bpy.context.mode
+
+        # Success path: one face selected -> a standalone cutter object.
+        import bmesh
+        bm = bmesh.from_edit_mesh(cube.data)
+        bm.faces.ensure_lookup_table()
+        bm.faces[0].select = True
+        bmesh.update_edit_mesh(cube.data)
+        before = set(bpy.data.objects.keys())
+        res = bpy.ops.mesh.hardflow_extract_cutter(thickness=0.1)
+        assert res == {'FINISHED'}, res
+        made = set(bpy.data.objects.keys()) - before
+        assert len(made) == 1, made
+        cutter = bpy.data.objects[made.pop()]
+        assert cutter.type == 'MESH' and len(cutter.data.polygons) > 2
+        # World-aligned to the source, and left active for an immediate grab.
+        assert cutter.matrix_world == cube.matrix_world
+        assert bpy.context.view_layer.objects.active is cutter
+    finally:
+        try:
+            if bpy.context.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except RuntimeError:
+            pass
+        hardflow.unregister()
+
+
+def test_ensure_smooth_by_angle_adds_the_modern_modifier():
+    # Blender 4.1 dropped mesh.use_auto_smooth for a "Smooth by Angle" geometry
+    # nodes modifier; the helper is on the commit path of Pipe/Cable/Sweep and
+    # Fix Shading, where a silent no-op ships flat-shaded geometry unnoticed.
+    _reset()
+    from hardflow.operators import hardops
+    cube = _add_cube("Smooth", size=2.0)
+    bpy.context.view_layer.objects.active = cube
+    cube.select_set(True)
+    angle = math.radians(30.0)
+    assert hardops.ensure_smooth_by_angle(cube, angle) is True
+    if hasattr(cube.data, "use_auto_smooth"):          # legacy (< 4.1)
+        assert cube.data.use_auto_smooth
+        return
+    mods = [m for m in cube.modifiers if m.type == 'NODES']
+    assert mods, [m.type for m in cube.modifiers]
+    # Idempotent: a second call refreshes the angle, never stacks a duplicate.
+    assert hardops.ensure_smooth_by_angle(cube, math.radians(45.0)) is True
+    assert len([m for m in cube.modifiers if m.type == 'NODES']) == len(mods)
 
 
 def _run():

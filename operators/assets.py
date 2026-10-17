@@ -87,7 +87,23 @@ class HARDFLOW_OT_place_asset(Operator):
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
-        context.area.tag_redraw()
+        # A raise in the modal body would otherwise leave the registered GPU
+        # draw handler firing against a dead operator, and the appended INSERT
+        # objects + materials left behind in the .blend.
+        # Guard it the way draw_cut does: report, clean up and bail.
+        try:
+            return self._modal(context, event)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, "Hardflow: %s" % ex)
+            try:
+                self._cleanup(context)
+            except Exception:  # noqa: BLE001
+                pass
+            return {'CANCELLED'}
+
+    def _modal(self, context, event):
+        if context.area is not None:
+            context.area.tag_redraw()
         region, rv3d = context.region, context.region_data
 
         if event.type == 'MOUSEMOVE':
@@ -293,6 +309,13 @@ class HARDFLOW_OT_place_asset(Operator):
         orphans = [d for d in data if getattr(d, "users", 1) == 0]
         if orphans:
             bpy.data.batch_remove(orphans)
+
+    def cancel(self, context):
+        # Blender calls ot->cancel when it tears the modal handler down
+        # externally (file read, window close, editor-type change, quit).
+        # Without this nothing runs: the GPU draw handler stays registered
+        # and fires against a dead operator on every redraw.
+        self._cleanup(context)
 
     def _cleanup(self, context):
         if not self._finalized:                 # cancelled -> discard the preview

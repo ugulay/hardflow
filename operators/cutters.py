@@ -178,21 +178,34 @@ class HARDFLOW_OT_extract_cutter(Operator):
         # Flush the edit to object data so extract_faces reads current coords;
         # the face indices are stable across the mode switch (no topology change).
         bpy.ops.object.mode_set(mode='OBJECT')
-        mesh = geometry.extract_faces(
-            obj.data, sel, thickness=self.thickness, name=obj.name + "_cutter")
-        if mesh is None:
-            bpy.ops.object.mode_set(mode='EDIT')
-            self.report({'WARNING'}, "Nothing extracted")
+        try:
+            mesh = geometry.extract_faces(
+                obj.data, sel, thickness=self.thickness,
+                name=obj.name + "_cutter")
+            if mesh is None:
+                bpy.ops.object.mode_set(mode='EDIT')
+                self.report({'WARNING'}, "Nothing extracted")
+                return {'CANCELLED'}
+            cutter = bpy.data.objects.new(obj.name + "_cutter", mesh)
+            cutter.matrix_world = obj.matrix_world.copy()  # world-aligned
+            context.collection.objects.link(cutter)
+            if self.stash:
+                boolean.stash_cutter(context, cutter, obj)
+            for o in list(context.selected_objects):
+                o.select_set(False)
+            cutter.select_set(True)
+            context.view_layer.objects.active = cutter
+        except Exception as ex:  # noqa: BLE001
+            # The mode switch above is not undone by a raise, so a failure would
+            # strand the user in Object Mode after they invoked this from a face
+            # selection in Edit Mode. Put them back where they were.
+            try:
+                context.view_layer.objects.active = obj
+                bpy.ops.object.mode_set(mode='EDIT')
+            except Exception:  # noqa: BLE001
+                pass
+            self.report({'ERROR'}, "Extract cutter failed: %s" % ex)
             return {'CANCELLED'}
-        cutter = bpy.data.objects.new(obj.name + "_cutter", mesh)
-        cutter.matrix_world = obj.matrix_world.copy()   # world-aligned to source
-        context.collection.objects.link(cutter)
-        if self.stash:
-            boolean.stash_cutter(context, cutter, obj)
-        for o in list(context.selected_objects):
-            o.select_set(False)
-        cutter.select_set(True)
-        context.view_layer.objects.active = cutter
         self.report({'INFO'}, "Extracted %d face(s) into '%s'"
                     % (len(sel), cutter.name))
         return {'FINISHED'}
@@ -261,9 +274,45 @@ class HARDFLOW_OT_cutter_scroll(Operator):
             "Esc restore" % (self.index + 1, len(self.cutters), cur.name))
 
     def _finish(self, context):
-        context.workspace.status_text_set(None)
+        try:
+            context.workspace.status_text_set(None)
+        except Exception:  # noqa: BLE001 -- teardown must never raise
+            pass
+
+    def _restore(self, context):
+        """Put every cutter's original visibility back (non-committal browse)."""
+        for c in self.cutters:
+            prev = self._prev_hide.get(c.name)
+            if prev is not None:
+                try:
+                    c.hide_viewport, hidden = prev[0], prev[1]
+                    c.hide_set(hidden)
+                except (ReferenceError, RuntimeError):
+                    pass            # cutter deleted under us
+        self._finish(context)
+
+    def cancel(self, context):
+        # Blender tears the modal handler down externally (file read, window
+        # close, editor-type change, quit) without running the Esc branch: that
+        # would leave the status banner stuck and every cutter but one hidden.
+        self._restore(context)
 
     def modal(self, context, event):
+        # A raise in the modal body would otherwise leave the registered GPU
+        # draw handler firing against a dead operator, and every cutter but one
+        # left hidden with the status banner stuck.
+        # Guard it the way draw_cut does: report, clean up and bail.
+        try:
+            return self._modal(context, event)
+        except Exception as ex:  # noqa: BLE001
+            self.report({'ERROR'}, "Hardflow: %s" % ex)
+            try:
+                self._restore(context)
+            except Exception:  # noqa: BLE001
+                pass
+            return {'CANCELLED'}
+
+    def _modal(self, context, event):
         if event.type in {'WHEELDOWNMOUSE', 'DOWN_ARROW', 'RIGHT_ARROW'} \
                 and event.value == 'PRESS':
             self.index = (self.index + 1) % len(self.cutters)
@@ -283,13 +332,7 @@ class HARDFLOW_OT_cutter_scroll(Operator):
             self._finish(context)
             return {'FINISHED'}
         if event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
-            # Restore every cutter's original visibility (non-committal browse).
-            for c in self.cutters:
-                prev = self._prev_hide.get(c.name)
-                if prev is not None:
-                    c.hide_viewport, hidden = prev[0], prev[1]
-                    c.hide_set(hidden)
-            self._finish(context)
+            self._restore(context)
             return {'CANCELLED'}
         # Let the viewport navigate while scrolling.
         if event.type in {'MIDDLEMOUSE', 'TRACKPADPAN', 'TRACKPADZOOM'}:

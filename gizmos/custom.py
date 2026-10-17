@@ -73,6 +73,20 @@ class HARDFLOW_GT_drag_extrude(Gizmo):
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event, tweak):
+        # A raise here never reaches exit(), which is the only place the mesh
+        # snapshot is freed and the preview rolled back -- so a failure would
+        # leave an orphan "hf_gizmo_pushpull" mesh in bpy.data and the object
+        # stuck half-extruded. Roll back as if the drag was cancelled.
+        try:
+            return self._modal(context, event, tweak)
+        except Exception:  # noqa: BLE001
+            try:
+                self.exit(context, True)
+            except Exception:  # noqa: BLE001
+                pass
+            return {'FINISHED'}
+
+    def _modal(self, context, event, tweak):
         co = (event.mouse_region_x, event.mouse_region_y)
         d = raycast.closest_axis_distance(
             context.region, context.region_data, co,
@@ -83,8 +97,9 @@ class HARDFLOW_GT_drag_extrude(Gizmo):
         d = grid.snap_scalar(d, get_prefs(context).grid_world, snap)
         self._distance = d
         self._apply()
-        context.area.header_text_set("Hardflow Push/Pull:  %.4f m" % d)
-        context.area.tag_redraw()
+        if context.area is not None:
+            context.area.header_text_set("Hardflow Push/Pull:  %.4f m" % d)
+            context.area.tag_redraw()
         return {'RUNNING_MODAL'}
 
     def _apply(self):
@@ -105,7 +120,8 @@ class HARDFLOW_GT_drag_extrude(Gizmo):
                 geometry.extrude_faces(obj, [self._face_index], local)
 
     def exit(self, context, cancel):
-        context.area.header_text_set(None)
+        if context.area is not None:
+            context.area.header_text_set(None)
         self._dragging = False
         obj = getattr(self, "_obj", None)
         if cancel and getattr(self, "_base", None) is not None and obj is not None:

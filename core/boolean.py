@@ -13,7 +13,7 @@ def _solver_available(solver):
         return False
 
 
-def _coerce_solver(solver):
+def coerce_solver(solver):
     """Map a solver identifier to one this Blender supports. Blender 5.0 renamed
     the FAST solver to FLOAT, so a 'FAST' request prefers 'FLOAT' before giving up
     on the always-present 'EXACT' (assigning an unavailable solver raises). Without
@@ -25,6 +25,10 @@ def _coerce_solver(solver):
     return 'EXACT'
 
 
+
+# Backwards-compatible private alias (the name this started out with).
+_coerce_solver = coerce_solver
+
 # Transient name for the destructive apply modifier. Deliberately DISTINCT from
 # the live "HF_Bool" name the non-destructive path uses: a failed apply must only
 # ever remove the modifier it just added, never the user's existing
@@ -35,7 +39,7 @@ _APPLY_MOD_NAME = "HF_BoolApply"
 def _new_bool(target, cutter, operation, solver, name="HF_Bool"):
     mod = target.modifiers.new(name, 'BOOLEAN')
     mod.operation = operation
-    mod.solver = _coerce_solver(solver)
+    mod.solver = coerce_solver(solver)
     mod.object = cutter
     return mod
 

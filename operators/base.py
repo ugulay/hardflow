@@ -214,7 +214,10 @@ class LivePreviewCommand(HardFlowCommand):
             mod.operation = self.operation
             mod.object = self.cutter
             try:
-                mod.solver = self.solver
+                # Version-safe: Blender 5.0 renamed FAST -> FLOAT, so assigning
+                # the raw identifier raises there and (swallowed) left the
+                # preview on whatever solver the modifier defaulted to.
+                mod.solver = boolean.coerce_solver(self.solver)
             except (TypeError, AttributeError):
                 pass
 
