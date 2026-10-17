@@ -44,6 +44,8 @@ jobs:
           rsync -a ./ "$stage/" \
             --exclude '.git' \
             --exclude '.github' \
+            --exclude '.claude' \
+            --exclude 'promo' \
             --exclude 'tests' \
             --exclude 'docs' \
             --exclude '*.md' \
