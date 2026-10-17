@@ -7,7 +7,8 @@ from . import preferences, keymaps, gizmos, translations
 from .operators import (draw_cut, cutters, pipe, decals,
                         boolean_ops, assets, push_pull, offset,
                         construction, hardops, edge_tool, hardflow_mode,
-                        trim_editor, mirror, drop, gameready)
+                        trim_editor, mirror, drop, gameready,
+                        unwrap)
 from .ui import (pie, menu, panel, decal_panel, decal_library, asset_panel,
                  trim_panel, shelf)
 
@@ -25,6 +26,8 @@ _classes = (
     edge_tool.HARDFLOW_OT_edge_bevel,
     edge_tool.HARDFLOW_OT_loop_cut,
     mirror.HARDFLOW_OT_mirror,
+    unwrap.HARDFLOW_OT_mark_seams,
+    unwrap.HARDFLOW_OT_unwrap,
     gameready.HARDFLOW_OT_audit,
     gameready.HARDFLOW_OT_audit_fix,
     hardflow_mode.HARDFLOW_OT_mode_knife,

@@ -48,6 +48,7 @@ mirror = _load("mirror")
 library = _load("library")
 shapes = _load("shapes", "gizmos")
 gameready = _load("gameready")
+unwrap = _load("unwrap")
 
 
 # --- grid: world-scale snap --------------------------------------------------
@@ -2110,6 +2111,98 @@ def test_gameready_audit_tolerates_missing_measurements():
     rows = gameready.audit({})
     assert len(rows) == 7
     assert all(len(f) == 5 for f in rows)
+
+
+# --- unwrap: cut-aware seam decision ---------------------------------------
+
+def test_unwrap_seam_marks_beat_the_angle_rule():
+    # A mark is a decision somebody (or Smart Sharpen, on a boolean cut)
+    # already made; the angle is only an inference, so marks win and the
+    # reported reason says which one fired.
+    seam, why = unwrap.should_seam(angle=0.0, sharp=True)
+    assert (seam, why) == (True, unwrap.BY_SHARP)
+    seam, why = unwrap.should_seam(angle=0.0, bevel_weight=1.0)
+    assert (seam, why) == (True, unwrap.BY_BEVEL)
+    # Sharp outranks bevel weight when both are set.
+    assert unwrap.should_seam(sharp=True, bevel_weight=1.0)[1] \
+        == unwrap.BY_SHARP
+    # Flat and unmarked -> no seam.
+    assert unwrap.should_seam(angle=0.1) == (False, "")
+
+
+def test_unwrap_angle_rule_threshold():
+    import math as _m
+    limit = _m.radians(60.0)
+    assert unwrap.should_seam(angle=limit, angle_limit=limit)[1] \
+        == unwrap.BY_ANGLE
+    assert unwrap.should_seam(angle=limit - 1e-9, angle_limit=limit)[0] is False
+    # A right-angle boolean cut is a seam at any sane limit.
+    assert unwrap.should_seam(angle=_m.pi / 2, angle_limit=limit)[0] is True
+
+
+def test_unwrap_topology_always_seams():
+    # An island has to end at a boundary, and nothing can be laid flat across
+    # a non-manifold edge -- neither is negotiable by the toggles.
+    assert unwrap.should_seam(boundary=True, use_sharp=False,
+                              use_bevel_weight=False,
+                              use_angle=False) == (True, unwrap.BY_BOUNDARY)
+    assert unwrap.should_seam(non_manifold=True, use_angle=False)[1] \
+        == unwrap.BY_NON_MANIFOLD
+    # Boundary is reported ahead of everything else.
+    assert unwrap.should_seam(boundary=True, sharp=True)[1] \
+        == unwrap.BY_BOUNDARY
+
+
+def test_unwrap_rules_can_be_switched_off():
+    # Turning the angle rule off is what makes the unwrap purely cut-aware:
+    # only the edges Hardflow marked while cutting become seams.
+    import math as _m
+    assert unwrap.should_seam(angle=_m.pi / 2, use_angle=False)[0] is False
+    assert unwrap.should_seam(sharp=True, use_sharp=False)[0] is False
+    assert unwrap.should_seam(bevel_weight=1.0, use_bevel_weight=False)[0] \
+        is False
+    # Bevel weight has a threshold, so a trace of weight is not a seam.
+    assert unwrap.should_seam(bevel_weight=0.001)[0] is False
+    assert unwrap.should_seam(bevel_weight=0.5)[0] is True
+
+
+def test_unwrap_seam_edges_collects_keys_and_reasons():
+    import math as _m
+    edges = [
+        {'key': 1, 'sharp': True},
+        {'key': 2, 'bevel_weight': 1.0},
+        {'key': 3, 'angle': _m.pi / 2},
+        {'key': 4, 'boundary': True},
+        {'key': 5, 'angle': 0.05},                 # flat -> skipped
+        {'key': 6},                                # nothing known -> skipped
+    ]
+    keys, counts = unwrap.seam_edges(edges)
+    assert keys == [1, 2, 3, 4], keys
+    assert counts == {unwrap.BY_SHARP: 1, unwrap.BY_BEVEL: 1,
+                      unwrap.BY_ANGLE: 1, unwrap.BY_BOUNDARY: 1}
+    # Cut-aware only: the angle-derived edge drops out, the marks stay.
+    keys, counts = unwrap.seam_edges(edges, use_angle=False)
+    assert keys == [1, 2, 4], keys
+    assert unwrap.BY_ANGLE not in counts
+
+
+def test_unwrap_pack_margin_converts_pixels():
+    # Artists think in pixels of padding; Blender's packer wants a fraction.
+    assert unwrap.pack_margin(4, 1024) == 4.0 / 1024.0
+    assert unwrap.pack_margin(8, 4096) == 8.0 / 4096.0
+    # Degenerate input yields no margin instead of raising.
+    assert unwrap.pack_margin(0, 1024) == 0.0
+    assert unwrap.pack_margin(4, 0) == 0.0
+    assert unwrap.pack_margin(-4, 1024) == 0.0
+    # Clamped, so an absurd padding cannot swallow the whole UV square.
+    assert unwrap.pack_margin(10000, 64) == 0.25
+
+
+def test_unwrap_describe_is_stable_and_readable():
+    assert unwrap.describe({}) == "no seams"
+    text = unwrap.describe({unwrap.BY_ANGLE: 8, unwrap.BY_SHARP: 30,
+                            unwrap.BY_BOUNDARY: 4})
+    assert text == "42 seam(s): 30 sharp, 8 angle, 4 boundary", text
 
 
 def _run_all():

@@ -28,6 +28,18 @@ Blender 5.2.2 LTS.
   from a cold start. The gate is the pure `core.path.is_drag` the curve tools
   already used for their freehand stroke, so a drag now means the same thing in
   every Hardflow tool (and `pipe`'s private copy of the maths is gone).
+- **Cut-aware seams and hard-surface unwrap**: on a boolean model the UV
+  seams belong on the cut boundaries, and Hardflow already knows where those
+  are -- Smart Sharpen marks every cut edge sharp and bevel-weighted while
+  cutting. **Mark Cut Seams** reads those marks back, so the seams follow the
+  modelling history instead of being inferred from geometry; unmarked edges
+  fall back to the dihedral angle, and turning that fallback off gives a
+  purely cut-aware pass. **Hard-Surface Unwrap** does the whole UV step in
+  one go: seams, unwrap, average island scale, and pack with padding
+  specified in PIXELS of the target texture (which is what actually stops
+  bleeding in a bake) rather than in UV units. The Game-Ready audit's
+  "No UV map" fix now routes through this rather than a bare Smart UV
+  Project.
 - **Game-Ready audit**: a new N-panel section that checks the selected mesh
   for what an engine will object to -- unapplied or non-uniform scale,
   inverted normals, non-manifold geometry, n-gons, loose verts and wire

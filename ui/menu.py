@@ -69,6 +69,8 @@ _EDIT_ITEMS = (
     ("mesh.hardflow_extract_cutter", "Extract Cutter (Edit)", 'MOD_BOOLEAN', {}),
     None,
     ("object.hardflow_mirror", "Mirror (Alt+X)", 'MOD_MIRROR', {}),
+    ("mesh.hardflow_unwrap", "Hard-Surface Unwrap", 'UV', {}),
+    ("mesh.hardflow_mark_seams", "Mark Cut Seams", 'UV_DATA', {}),
     ("object.hardflow_smart_sharpen", "Smart Sharpen", 'MOD_BEVEL', {}),
     ("object.hardflow_fix_shading", "Fix Boolean Shading", 'NODE_MATERIAL', {}),
     ("object.hardflow_sort_modifiers", "Sort Modifier Stack", 'SORTSIZE', {}),

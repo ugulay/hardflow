@@ -286,13 +286,11 @@ class HARDFLOW_OT_audit_fix(Operator):
 
     @staticmethod
     def _unwrap(context, obj):
-        """A Smart UV Project, which is the sane default for hard surface: it
-        cuts along the sharp angles a boolean model is made of."""
+        """Hardflow's own cut-aware unwrap rather than a bare Smart UV
+        Project: on a boolean model the seams belong on the cuts, and the
+        marks that say where those are already exist on the mesh."""
         with context.temp_override(active_object=obj, object=obj,
-                                   selected_objects=[obj]):
-            bpy.ops.object.mode_set(mode='EDIT')
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.uv.smart_project(angle_limit=1.15192,   # 66 deg
-                                     island_margin=0.002)
-            bpy.ops.object.mode_set(mode='OBJECT')
-        return "Unwrapped (Smart UV Project)"
+                                   selected_objects=[obj],
+                                   selected_editable_objects=[obj]):
+            bpy.ops.mesh.hardflow_unwrap()
+        return "Unwrapped along the cut seams"

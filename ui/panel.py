@@ -423,6 +423,9 @@ class HARDFLOW_PT_gameready(Panel):
 
         layout = self.layout
         obj = context.active_object
+        row = layout.row(align=True)
+        row.operator("mesh.hardflow_unwrap", icon='UV')
+        row.operator("mesh.hardflow_mark_seams", text="Seams", icon='UV_DATA')
         layout.operator("object.hardflow_audit", icon='CHECKMARK')
 
         rows = gr_ops.report_for(obj)

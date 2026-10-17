@@ -4480,6 +4480,176 @@ def test_gameready_panel_is_registered():
         hardflow.unregister()
 
 
+def test_unwrap_edge_data_reads_the_mesh():
+    # The measurement half: the rule is unit-tested, this checks the per-edge
+    # facts handed to it. calc_face_angle raises on anything that is not
+    # between exactly two faces, which is the boundary case the rule handles.
+    _reset()
+    import bmesh
+    import math
+    from hardflow.operators import unwrap as u
+    cube = _add_cube("EdgeData", size=2.0)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(cube.data)
+        bm.edges.ensure_lookup_table()
+        rows = u.edge_data(bm)
+        assert len(rows) == 12
+        # Every edge of a cube is a right angle between two faces.
+        assert all(abs(r['angle'] - math.pi / 2) < 1e-5 for r in rows), \
+            [r['angle'] for r in rows]
+        assert not any(r['boundary'] or r['non_manifold'] for r in rows)
+    finally:
+        bm.free()
+
+    # A single face: every edge is a boundary and has no measurable angle.
+    me = bpy.data.meshes.new("Plane")
+    bm = bmesh.new()
+    try:
+        v = [bm.verts.new(c) for c in ((0, 0, 0), (1, 0, 0), (1, 1, 0),
+                                       (0, 1, 0))]
+        bm.faces.new(v)
+        bm.to_mesh(me)
+    finally:
+        bm.free()
+    ob = bpy.data.objects.new("Plane", me)
+    bpy.context.scene.collection.objects.link(ob)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(me)
+        rows = u.edge_data(bm)
+        assert all(r['boundary'] for r in rows), rows
+        assert all(r['angle'] == 0.0 for r in rows)
+    finally:
+        bm.free()
+
+
+def test_unwrap_seams_follow_the_cut_marks():
+    # The whole point: after Smart Sharpen -- which marks every boolean-cut
+    # edge sharp and bevel-weighted -- the seams come from those MARKS, not
+    # from a geometric guess.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import unwrap as u
+        from hardflow.core import unwrap as uc
+        ob = _add_cube("Cuts", size=2.0)
+        bpy.context.view_layer.objects.active = ob
+        ob.select_set(True)
+        assert bpy.ops.object.hardflow_smart_sharpen() == {'FINISHED'}
+
+        _keys, counts = u.mark_seams(ob)
+        assert counts.get(uc.BY_SHARP), counts      # read the marks
+        assert not counts.get(uc.BY_ANGLE), counts  # marks win over the angle
+        assert sum(1 for e in ob.data.edges if e.use_seam) == 12
+
+        # Purely cut-aware on a mesh that was never sharpened: no seams at
+        # all, which is what proves the marks (not the geometry) drove it.
+        plain = _add_cube("Plain", size=2.0)
+        _k, counts = u.mark_seams(plain, use_angle=False)
+        assert counts == {}, counts
+        assert sum(1 for e in plain.data.edges if e.use_seam) == 0
+        # With the angle fallback the same mesh seams on every hard edge.
+        _k, counts = u.mark_seams(plain)
+        assert counts.get(uc.BY_ANGLE) == 12, counts
+    finally:
+        hardflow.unregister()
+
+
+def test_unwrap_mark_seams_can_add_instead_of_replacing():
+    _reset()
+    from hardflow.operators import unwrap as u
+    ob = _add_cube("AddSeams", size=2.0)
+    ob.data.edges[0].use_seam = True
+    # Replace: a rule that matches nothing wipes the hand-made seam.
+    u.mark_seams(ob, clear=True, use_angle=False)
+    assert sum(1 for e in ob.data.edges if e.use_seam) == 0
+    # Add: the hand-made seam survives a rule that matches nothing.
+    ob.data.edges[0].use_seam = True
+    u.mark_seams(ob, clear=False, use_angle=False)
+    assert ob.data.edges[0].use_seam is True
+
+
+def test_unwrap_operator_produces_usable_uvs():
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import gameready as g
+        ob = _add_cube("Unwrapped", size=2.0)
+        bpy.context.view_layer.objects.active = ob
+        ob.select_set(True)
+        assert not ob.data.uv_layers
+        assert bpy.ops.mesh.hardflow_unwrap() == {'FINISHED'}
+        assert len(ob.data.uv_layers) == 1
+        m = g.measure(ob)
+        # Every face carries UV area, and the islands sit inside 0-1.
+        assert m['uv_faces'] == m['total_faces'] == 6, m
+        assert m['uv_area'] > 0.0
+        assert m['uv_out_of_bounds'] == 0, m['uv_out_of_bounds']
+        # Ends in Object Mode, not stranded in Edit.
+        assert bpy.context.mode == 'OBJECT', bpy.context.mode
+    finally:
+        try:
+            if bpy.context.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except RuntimeError:
+            pass
+        hardflow.unregister()
+
+
+def test_unwrap_padding_is_pixels_not_uv_units():
+    # The operator converts px -> UV margin with the texture size from
+    # preferences, so the padding means the same thing at 1k and 4k.
+    _reset()
+    from hardflow.core import unwrap as uc
+    assert uc.pack_margin(4, 1024) == 4 / 1024
+    assert uc.pack_margin(4, 4096) == 4 / 4096
+    import hardflow
+    hardflow.register()
+    try:
+        rna = bpy.ops.mesh.hardflow_unwrap.get_rna_type()
+        props = {p.identifier for p in rna.properties}
+        for want in ("padding_px", "method", "seams", "pack", "average_scale",
+                     "use_sharp", "use_bevel_weight", "use_angle",
+                     "angle_limit", "clear_existing"):
+            assert want in props, want
+        assert rna.properties['padding_px'].default == 4
+    finally:
+        hardflow.unregister()
+
+
+def test_audit_uv_fix_uses_the_cut_aware_unwrap():
+    # The audit's "No UV map" fix routes through the hard-surface unwrap, so
+    # the seams it produces follow the cuts rather than a bare Smart Project.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        from hardflow.operators import gameready as g
+        from hardflow.core import gameready as gr
+        g.clear_reports()
+        ob = _add_cube("AuditUV", size=2.0)
+        bpy.context.view_layer.objects.active = ob
+        ob.select_set(True)
+        bpy.ops.object.hardflow_smart_sharpen()
+        bpy.ops.object.hardflow_audit()
+        assert {r[0]: r[1] for r in g.report_for(ob)}['uv'] == gr.FAIL
+        assert bpy.ops.object.hardflow_audit_fix(
+            fix=gr.FIX_UNWRAP) == {'FINISHED'}
+        assert {r[0]: r[1] for r in g.report_for(ob)}['uv'] == gr.OK
+        # It went through the seam path, so the cut edges carry seams.
+        assert sum(1 for e in ob.data.edges if e.use_seam) > 0
+    finally:
+        try:
+            if bpy.context.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+        except RuntimeError:
+            pass
+        hardflow.unregister()
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

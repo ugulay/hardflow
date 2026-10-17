@@ -1251,6 +1251,34 @@ human is the judgement: are the verdicts right on YOUR models?
 - [ ] Panel readability at a narrow sidebar width: the finding labels are
       not truncated (the Fix button sits on the detail line below).
 
+## 33. Cut-aware seams + hard-surface unwrap
+
+Driven end to end headless (Smart Sharpen -> 12 sharp-derived seams ->
+unwrap -> every face carrying UV area). What needs eyes is the UV layout
+itself, which no assertion can judge:
+
+- [ ] Cut a few holes and panels into a block, run **Smart Sharpen**, then
+      **Hard-Surface Unwrap**. In the UV editor the seams run along the cut
+      boundaries, and each cut face is its own clean island.
+- [ ] The F9 report says the seams came from **sharp** (and bevel), not from
+      **angle** -- that is the cut-aware path doing the work.
+- [ ] On a model that was never sharpened, untick **From Angle**: nothing is
+      seamed (correct -- there are no marks to follow). Tick it again and the
+      hard edges seam.
+- [ ] Untick **Replace Seams** and re-run: seams you marked by hand survive.
+- [ ] **Padding (px)**: unwrap at 4 px with the texture size set to 1024,
+      then at 4096. The gap between islands should look the same relative to
+      the texture, i.e. half the UV distance at 4k.
+- [ ] **Average Island Scale** on: a small bolt face and a big panel face end
+      up at the same texel density (check with the audit's texel reading).
+- [ ] Conformal vs Angle Based on a curved/lofted piece: both unwrap without
+      errors, angle-based gives the tidier islands on flats.
+- [ ] Multi-object selection: every selected mesh is unwrapped, and you are
+      left in Object Mode with the original active object still active.
+- [ ] Game-Ready audit on a mesh with no UVs: the **Fix** button now unwraps
+      along the cut seams (check the seams exist afterwards), and the UV row
+      turns OK.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`
