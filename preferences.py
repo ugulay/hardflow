@@ -48,6 +48,7 @@ class HARDFLOW_Preferences(AddonPreferences):
     # occasional ones folded so the page opens compact). UI-only booleans.
     ui_show_snapping: BoolProperty(default=True)
     ui_show_boolean: BoolProperty(default=True)
+    ui_show_direct: BoolProperty(default=False)
     ui_show_curves: BoolProperty(default=False)
     ui_show_decals: BoolProperty(default=False)
     ui_show_assets: BoolProperty(default=False)
@@ -472,6 +473,15 @@ class HARDFLOW_Preferences(AddonPreferences):
                     "Subdivision (toggle live with S). EXPERIMENTAL",
         default=False,
     )
+    extrude_manifold: BoolProperty(
+        name="Extrude Manifold",
+        description="Push/Pull and the Offset recess start in Manifold mode: the "
+                    "orthogonal edges around the face are dissolved, so pushing "
+                    "INTO adjoining geometry cuts cleanly instead of leaving "
+                    "interior faces and stray edges (SketchUp-style push). "
+                    "Toggle live with D",
+        default=False,
+    )
     draw_array_count: IntProperty(
         name="Cutter Array",
         description="Default number of array copies stamped into one cutter; "
@@ -584,6 +594,11 @@ class HARDFLOW_Preferences(AddonPreferences):
             if self.auto_trim_after_cut != 'OFF':
                 col.prop(self, "auto_trim_radius")
                 col.prop(self, "auto_trim_lift")
+
+        col = self._section(layout, "ui_show_direct",
+                            "Direct Modeling (Push/Pull, Offset)", 'MOD_SOLIDIFY')
+        if col:
+            col.prop(self, "extrude_manifold")
 
         col = self._section(layout, "ui_show_curves", "Curves (Pipe / Cable / Sweep)",
                             'MOD_SCREW')

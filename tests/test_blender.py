@@ -1048,6 +1048,86 @@ def test_extrude_keep_original_vs_clean():
     assert keep == clean + 1, (clean, keep)
 
 
+def _slab_with_inner_face():
+    """A 2x2x0.4 slab whose top face carries a smaller inset face in the middle
+    -- the shape the issue-#5 push is about. Returns (object, inner face index);
+    `inset_region` keeps the input face as the inner region, so the index holds."""
+    _reset()
+    bpy.ops.mesh.primitive_cube_add(size=2.0, scale=(1, 1, 0.2))
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    ob = bpy.context.active_object
+    top = max(range(len(ob.data.polygons)),
+              key=lambda i: ob.data.polygons[i].center.z)
+    assert geometry.inset_faces(ob, [top], 0.5) is True
+    _activate(ob)
+    return ob, top
+
+
+def test_manifold_push_cuts_instead_of_burying():
+    # issue #5: push the inset face straight down through the slab. The plain
+    # extrude drags the new side walls through the bottom and leaves them
+    # sticking out below the solid; the Manifold push cuts the swept volume out
+    # instead, so nothing reaches past the slab and it stays watertight.
+    hardflow.register()
+    try:
+        ob, inner = _slab_with_inner_face()
+        bpy.ops.mesh.hardflow_push_pull('EXEC_DEFAULT', distance=-1.0,
+                                        face_index=inner, dissolve=False)
+        plain_min = min(v.co.z for v in ob.data.vertices)
+        assert plain_min < -0.5, "plain extrude should bury walls: %f" % plain_min
+
+        ob, inner = _slab_with_inner_face()
+        bpy.ops.mesh.hardflow_push_pull('EXEC_DEFAULT', distance=-1.0,
+                                        face_index=inner, dissolve=True)
+        man_min = min(v.co.z for v in ob.data.vertices)
+        assert man_min > -0.21, "manifold push left geometry below: %f" % man_min
+        health = boolean.mesh_health(ob)
+        assert health['non_manifold'] == 0, health
+    finally:
+        hardflow.unregister()
+
+
+def test_manifold_leaves_outward_pull_alone():
+    # Manifold only changes an INWARD push; pulling a face out is the plain
+    # extrude either way, so the flag must not alter the result.
+    hardflow.register()
+    try:
+        out = []
+        for flag in (False, True):
+            _reset()
+            cube = _add_cube("Pull", size=2.0)
+            _activate(cube)
+            top = max(range(len(cube.data.polygons)),
+                      key=lambda i: cube.data.polygons[i].center.z)
+            bpy.ops.mesh.hardflow_push_pull('EXEC_DEFAULT', distance=1.0,
+                                            face_index=top, dissolve=flag)
+            out.append((len(cube.data.polygons), len(cube.data.vertices),
+                        round(max(v.co.z for v in cube.data.vertices), 6)))
+        assert out[0] == out[1], out
+        assert out[1][2] == 2.0, out[1]
+    finally:
+        hardflow.unregister()
+
+
+def test_manifold_push_falls_back_on_open_mesh():
+    # A plane has no volume to cut, so the Manifold path must decline and let the
+    # plain extrude happen rather than running a meaningless boolean that could
+    # eat the mesh.
+    hardflow.register()
+    try:
+        _reset()
+        bpy.ops.mesh.primitive_plane_add(size=2.0)
+        plane = bpy.context.active_object
+        _activate(plane)
+        before = len(plane.data.polygons)
+        bpy.ops.mesh.hardflow_push_pull('EXEC_DEFAULT', distance=-1.0,
+                                        face_index=0, dissolve=True)
+        assert len(plane.data.polygons) >= before, "the push did not happen"
+        assert min(v.co.z for v in plane.data.vertices) < -0.9, "no extrude"
+    finally:
+        hardflow.unregister()
+
+
 def test_inset_faces_offset():
     # geometry behind Offset: inset adds a ring of faces around the picked face.
     _reset()

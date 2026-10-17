@@ -714,6 +714,15 @@ def build_grid_mesh(segments, name="Hardflow_Grid"):
     return mesh
 
 
+def _delete_source_faces(bm, faces):
+    """Drop the source faces an extrude leaves behind as the interior bottom cap.
+    Only the still-valid ones are handed to bmesh: a bmesh op is free to remove
+    input geometry, and a freed face would take Blender down with it."""
+    stale = [f for f in faces if f.is_valid]
+    if stale:
+        bmesh.ops.delete(bm, geom=stale, context='FACES')
+
+
 def extrude_faces(obj, face_indices, local_vec, keep_original=False):
     """Push/Pull: extrude the given faces (indices into obj.data.polygons) and
     move the new region by `local_vec` (an object-local Vector). Edits obj.data
@@ -723,7 +732,11 @@ def extrude_faces(obj, face_indices, local_vec, keep_original=False):
 
     `keep_original=False` removes the original (now interior) faces for a clean
     extrude, matching Edit Mode. `True` leaves the starting face in place --
-    the Ctrl / "Copy" push-pull that stacks a new volume on the face."""
+    the Ctrl / "Copy" push-pull that stacks a new volume on the face.
+
+    An inward push drags the new side walls through whatever the face meets and
+    buries them in the solid; the Manifold push in `operators/push_pull.py` cuts
+    the swept volume out with a boolean instead (issue #5)."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.faces.ensure_lookup_table()
@@ -732,12 +745,13 @@ def extrude_faces(obj, face_indices, local_vec, keep_original=False):
         bm.free()
         return False
     res = bmesh.ops.extrude_face_region(bm, geom=faces)
-    moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+    moved = [g for g in res['geom']
+             if isinstance(g, bmesh.types.BMVert) and g.is_valid]
     bmesh.ops.translate(bm, vec=local_vec, verts=moved)
     if not keep_original:
         # extrude_face_region leaves the source faces behind as the (interior)
         # bottom cap; drop them so the result is a clean, manifold extrude.
-        bmesh.ops.delete(bm, geom=faces, context='FACES')
+        _delete_source_faces(bm, faces)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(obj.data)
     obj.data.update()
@@ -786,9 +800,10 @@ def inset_extrude_faces(obj, face_indices, thickness, local_vec):
                                use_even_offset=True, use_boundary=True)
     if local_vec.length > 1e-9:
         res = bmesh.ops.extrude_face_region(bm, geom=faces)
-        moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+        moved = [g for g in res['geom']
+                 if isinstance(g, bmesh.types.BMVert) and g.is_valid]
         bmesh.ops.translate(bm, vec=local_vec, verts=moved)
-        bmesh.ops.delete(bm, geom=faces, context='FACES')
+        _delete_source_faces(bm, faces)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(obj.data)
     obj.data.update()
@@ -853,10 +868,11 @@ def edit_extrude_faces(obj, local_vec, keep_original=False):
     if not faces:
         return False
     res = bmesh.ops.extrude_face_region(bm, geom=faces)
-    moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+    moved = [g for g in res['geom']
+             if isinstance(g, bmesh.types.BMVert) and g.is_valid]
     bmesh.ops.translate(bm, vec=local_vec, verts=moved)
     if not keep_original:
-        bmesh.ops.delete(bm, geom=faces, context='FACES')   # drop the old caps
+        _delete_source_faces(bm, faces)                     # drop the old caps
     new_faces = {f for v in moved for f in v.link_faces}
     for f in bm.faces:
         f.select_set(f in new_faces)
@@ -902,9 +918,10 @@ def edit_inset_extrude_faces(obj, thickness, local_vec):
                                use_even_offset=True, use_boundary=True)
     if local_vec.length > 1e-9:
         res = bmesh.ops.extrude_face_region(bm, geom=faces)
-        moved = [g for g in res['geom'] if isinstance(g, bmesh.types.BMVert)]
+        moved = [g for g in res['geom']
+                 if isinstance(g, bmesh.types.BMVert) and g.is_valid]
         bmesh.ops.translate(bm, vec=local_vec, verts=moved)
-        bmesh.ops.delete(bm, geom=faces, context='FACES')
+        _delete_source_faces(bm, faces)
         new_faces = {f for v in moved for f in v.link_faces}
         for f in bm.faces:
             f.select_set(f in new_faces)

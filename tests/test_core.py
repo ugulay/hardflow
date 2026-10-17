@@ -1473,6 +1473,36 @@ def test_dedup_ring_keeps_distinct_and_short_rings():
     assert transform.dedup_ring([(0, 0, 0)]) == [(0, 0, 0)]  # too short: as-is
 
 
+def test_push_is_inward():
+    # pushing against the face normal goes INTO the solid; pulling along it does
+    # not, and neither does standing still or sliding sideways.
+    assert transform.push_is_inward((0, 0, 1), (0, 0, -0.5)) is True
+    assert transform.push_is_inward((0, 0, 1), (0, 0, 0.5)) is False
+    assert transform.push_is_inward((0, 0, 1), (0, 0, 0)) is False
+    assert transform.push_is_inward((0, 0, 1), (1, 0, 0)) is False
+    # an oblique drag counts as long as it has an inward component
+    assert transform.push_is_inward((0, 0, 1), (1, 0, -0.01)) is True
+    # a flipped normal flips the verdict
+    assert transform.push_is_inward((0, 0, -1), (0, 0, 0.5)) is True
+
+
+def test_sweep_prism_span():
+    # the cutter spans the whole push plus a small outward lift: it starts
+    # `lift` ABOVE the face plane and ends exactly at the push depth.
+    off, th = transform.sweep_prism_span(2.0)
+    lift = th - 2.0
+    assert abs(lift - 0.002) < 1e-12, lift            # 0.1% of the push
+    assert abs((off - th / 2) + lift) < 1e-12         # start = -lift
+    assert abs(off + th / 2 - 2.0) < 1e-12            # end = depth
+    # the sign of the push is irrelevant (depth is a magnitude)...
+    assert transform.sweep_prism_span(-2.0) == (off, th)
+    # ...and a tiny push still clears the surface by the floor lift
+    off2, th2 = transform.sweep_prism_span(0.001)
+    assert abs(th2 - 0.0011) < 1e-12, th2
+    # an explicit lift overrides the proportional one
+    assert transform.sweep_prism_span(1.0, lift=0.01) == ((1.0 - 0.01) / 2, 1.01)
+
+
 def test_order_edge_paths_loop_strip_junction():
     # a closed square loop -> one chain that returns to its start vertex
     loops = transform.order_edge_paths([(0, 1), (1, 2), (2, 3), (3, 0)])

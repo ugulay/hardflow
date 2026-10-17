@@ -962,6 +962,37 @@ behaviour (keys, drag, commit) is unchanged, so this is also the regression chec
 - [ ] A T-shaped edge selection produces clean strips (no zig-zag through the
       junction); a loop + a separate strip in one selection both sweep.
 
+## 24. Manifold push (issue #5 — opt-in boolean push)
+
+Ticked items were click-tested in Blender 5.2.2 (2026-10-17) and the geometry
+was measured through the Blender MCP; the rest still needs a human.
+
+- [x] Prefs ▸ **Direct Modeling (Push/Pull, Offset)** section exists and shows
+      **Extrude Manifold**, default **off** (rendered against a live UILayout,
+      no error).
+- [x] HardFlow ▸ Edit ▸ Push/Pull, hover the inset face: the hover highlight is
+      the inset face, the framed HUD and the shortcut bar appear.
+- [x] Press **D**: the `D Manifold` chip lights and the HUD reads
+      `D manifold ON`; type `-3`, Enter.
+- [x] The issue-#5 case: 2 m cube with a 1 m inset top face, pushed −3 m.
+      **D on** → 2×2×2, z ∈ [−1, 1], watertight, the bottom split around a real
+      through-hole, no leftover cutter object or modifier. **D off** → 2×2×3,
+      z ∈ [−2, 1]: the walls hang 1 m below the solid. That contrast is the
+      whole feature.
+- [ ] Drag (instead of typing) with D on: the live preview shows the boolean
+      result each frame and stays responsive on a mid-weight mesh.
+- [ ] F9 after the push: the redo panel shows **Manifold**; unticking it
+      re-applies as the plain extrude.
+- [ ] Fallbacks say why in the HUD and still push: an outward pull, `C` Copy,
+      Edit Mode, and a plane / open mesh (`open mesh -> plain extrude`).
+- [ ] A target over the **Live Preview Max Verts** cap: the drag previews the
+      plain extrude (`manifold on commit` in the HUD) and the committed result
+      is the boolean one.
+- [ ] Undo (Ctrl+Z) once returns the mesh to its pre-push state (the push is a
+      single undo step, cutter included).
+- [ ] Turn the pref on: Push/Pull now *starts* in Manifold mode and `D` turns it
+      off.
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

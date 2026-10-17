@@ -149,3 +149,34 @@ def order_edge_paths(edges):
         take(a, b)
         chains.append(walk(a, b))
     return chains
+
+
+# --- Manifold push (issue #5) ---------------------------------------------
+#
+# A plain inward push extrudes the face into the solid, dragging its new side
+# walls through whatever the face meets and leaving them buried inside the mesh.
+# Blender's own `use_dissolve_ortho_edges` does not fix that (measured: identical
+# output in Blender 5.2.2), so the Manifold push instead CUTS the volume the
+# face sweeps out of the mesh -- a clean pocket, or a hole when the push goes
+# all the way through. These two helpers are the decision and the measurement;
+# `operators/push_pull.py` does the bmesh/boolean part.
+def push_is_inward(normal, vec, eps=1e-9):
+    """True when the displacement `vec` pushes a face carrying `normal` INTO the
+    solid it bounds (i.e. against its own normal). Sequences of three; a
+    zero-length or sideways-only `vec` is not an inward push, so an outward pull
+    keeps the plain, cheap extrude."""
+    return sum(n * v for n, v in zip(normal, vec)) < -eps
+
+
+def sweep_prism_span(distance, lift=None):
+    """Centre offset + thickness of the prism a face sweeps when pushed
+    `distance` into the solid, both measured along the push direction from the
+    face plane. The prism is grown by a small outward `lift` (default: 0.1% of
+    the push, never below 0.1 mm) so its cap never lands exactly on the surface
+    being cut -- coplanar cap faces are what make a boolean solver leave a
+    skin or punch a ragged hole. Returns (offset, thickness) for
+    `geometry.build_prism`, which centres its prism on the corners it is given.
+    """
+    d = abs(distance)
+    e = max(1e-4, d * 1e-3) if lift is None else abs(lift)
+    return (d - e) * 0.5, d + e

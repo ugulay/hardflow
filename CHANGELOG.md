@@ -3,6 +3,43 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic: minor versions add features, patch versions fix bugs.
 
+## [Unreleased]
+
+### Added
+- **Manifold push for Push/Pull**
+  ([#5](https://github.com/ugulay/hardflow/issues/5)): with Manifold on, an
+  INWARD push no longer extrudes the face into the solid — it CUTS the volume
+  the face sweeps out of the mesh. `operators/push_pull._manifold_push` builds
+  the swept prism (`core.transform.sweep_prism_span` → `geometry.build_prism`,
+  lifted a hair off the surface so the solver never meets a coplanar cap) and
+  runs it through `boolean.robust_boolean` as a DIFFERENCE, so the push leaves
+  a clean pocket, or a real hole when it goes all the way through, with no side
+  walls buried in the solid and no stray edges. The decision math is pure
+  (`transform.push_is_inward`, `transform.sweep_prism_span`).
+
+  Opt-in and conservative: the new **Extrude Manifold** preference seeds it,
+  `D` toggles it live (shortcut chip + HUD + F9 redo panel), and anything the
+  boolean cannot answer for falls back to the plain extrude with the reason in
+  the HUD — an outward pull, Copy, Edit Mode, an open / non-watertight target,
+  a failed cutter or a failed solver. On a target over `live_preview_max_verts`
+  the drag previews the plain extrude and the boolean runs once on the commit
+  frame, so a mouse-move never waits on a heavy boolean.
+
+  Measured in Blender 5.2.2 on a 2 m cube with a 1 m inset top face pushed
+  −3 m: Manifold gives 2×2×2, z ∈ [−1, 1], watertight, a through-hole; the plain
+  push gives 2×2×3 with the walls hanging 1 m below the solid.
+
+  (Blender's own `use_dissolve_ortho_edges` was tried first and dropped: in
+  Blender 5.2.2 it changes nothing for a single-face, multi-face, inward,
+  outward or sideways push — the output is identical to the plain extrude, also
+  through Blender's own `mesh.extrude_region_move`.)
+
+### Fixed
+- **Potential crash in the clean extrude**: the four extrude paths deleted the
+  source faces by reference after the extrude. A bmesh op is free to remove its
+  input geometry, and handing bmesh a freed face is a hard crash — the shared
+  `_delete_source_faces` now filters on `is_valid`.
+
 ## [1.21.1] — 2026-08-25
 
 Bug-fix release. Pure suite 144 tests, headless 143, verified in Blender 5.2.0

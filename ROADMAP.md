@@ -833,6 +833,24 @@ path with repeated detail meshes. All pure-core + thin-operator; verified with
       commit (`ensure_smooth_by_angle`): curved custom profiles shade round,
       structural hard corners stay crisp.
 
+## Manifold push (issue #5)
+
+Reported gap: Push/Pull used a plain `extrude_face_region`, so pushing a face
+into adjoining geometry buried interior faces and stray edges in the mesh — the
+cleanup SketchUp's Push/Pull never asks for.
+
+First attempt was Blender's own `use_dissolve_ortho_edges`; measurement killed
+it (identical output in every direction and selection shape in Blender 5.2.2,
+including through Blender's own operator). What actually delivers it is
+Hardflow's own strength: an inward push builds the swept prism and
+`robust_boolean`s it out of the target, so the push cuts a pocket — or punches a
+hole — instead of extruding into the solid. Pure decision math in
+`core/transform` (`push_is_inward`, `sweep_prism_span`), the bmesh/boolean glue
+in `operators/push_pull._manifold_push`, opt-in behind the **Extrude Manifold**
+preference and the `D` toggle, with a plain-extrude fallback (and a HUD reason)
+whenever the boolean cannot answer for the result. Verified: pure 146/146,
+headless 146/146 and a click-through in Blender 5.2.2 (see CLAUDE.md).
+
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
 - [x] **Numeric exact-size entry** in the draw tool — type a dimension to lock
