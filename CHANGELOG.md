@@ -3,7 +3,10 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic: minor versions add features, patch versions fix bugs.
 
-## [Unreleased]
+## [1.22.0] — 2026-10-18
+
+Feature release. Pure suite 146 tests, headless 146, verified in Blender
+5.2.2 LTS (headless plus a UI click-through of the new push).
 
 ### Added
 - **Manifold push for Push/Pull**
