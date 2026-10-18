@@ -14,8 +14,7 @@ class HARDFLOW_PT_assets(Panel):
     bl_idname = "HARDFLOW_PT_assets"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_category = "HF Detail"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -50,7 +49,7 @@ class HARDFLOW_PT_asset_library(Panel):
     bl_idname = "HARDFLOW_PT_asset_library"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
+    bl_category = "HF Detail"
     bl_parent_id = "HARDFLOW_PT_assets"
     bl_options = {'DEFAULT_CLOSED'}
 

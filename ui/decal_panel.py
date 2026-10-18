@@ -12,9 +12,7 @@ class HARDFLOW_PT_decals(Panel):
     bl_idname = "HARDFLOW_PT_decals"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_category = "HF Detail"
 
     def draw(self, context):
         layout = self.layout

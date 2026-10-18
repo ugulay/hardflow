@@ -13,7 +13,7 @@ class HARDFLOW_PT_trim(Panel):
     bl_idname = "HARDFLOW_PT_trim"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
+    bl_category = "HF Detail"
     bl_parent_id = "HARDFLOW_PT_decals"
     bl_options = {'DEFAULT_CLOSED'}
 

@@ -22,7 +22,7 @@ One GPLv3 add-on instead of five paid ones.
 ## See it in action
 
 <p align="center">
-  <img src="docs/img/hardflow-demo.gif" width="640" alt="Hardflow: boolean details added one at a time, then a turntable">
+  <img src="docs/img/hardflow-demo.gif" width="600" alt="Hardflow: boolean details added one at a time, then a turntable">
   <br><sub>Boolean details cut and added one group at a time, then a turntable — every frame is real Hardflow output.</sub>
 </p>
 
@@ -32,8 +32,12 @@ One GPLv3 add-on instead of five paid ones.
 <td width="50%"><img src="docs/img/shot2-shapes.png" alt="Built-in shapes" width="100%"><br><sub><b>Shape library</b> — Box / Circle / N-gon / Slot / Star / Arc footprints.</sub></td>
 </tr>
 <tr>
+<td width="50%"><img src="docs/img/shot5-vent-radial.png" alt="Vent grill and radial bolt circle" width="100%"><br><sub><b>Vents &amp; bolt circles</b> — one drawn rectangle becomes a louvre grill; one hole becomes a radial array.</sub></td>
 <td width="50%"><img src="docs/img/shot3-greeble.png" alt="Rapid hard-surface detailing" width="100%"><br><sub><b>Rapid detailing</b> — raised bays, vent slots, ports and bolt holes.</sub></td>
-<td width="50%"><img src="docs/img/shot4-pipe.png" alt="Surface-draping pipe" width="100%"><br><sub><b>Pipes &amp; sweeps</b> — a profile draped along the surface.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/img/shot6-sweep.png" alt="Structural sweep profiles" width="100%"><br><sub><b>Sweep / Follow-Me</b> — L, U, T and I sections swept along a path.</sub></td>
+<td width="50%"><img src="docs/img/shot4-pipe.png" alt="Surface-draping pipe" width="100%"><br><sub><b>Pipes &amp; cables</b> — a profile draped along the surface.</sub></td>
 </tr>
 </table>
 
@@ -60,13 +64,15 @@ Cutting a row of holes? Pick **Hardflow Draw Cut** from the toolbar (**T**)
 instead: it stays armed, so every cut is just another click, and it keeps the
 array, mirror and inset you dialed in. The N-panel **Mode** dropdown drives it.
 
-Everything also lives in the **N-panel ▸ Hardflow** tab, the **Alt+Q** pie menu
-and the 3D-View header menu, so you never have to memorise a key to find a tool.
+Everything also lives in the sidebar (**N**), the **Alt+Q** pie menu and the
+3D-View header menu, so you never have to memorise a key to find a tool. The
+sidebar is split the way the work goes: **Hardflow** to model, **HF Detail**
+for decals and kit parts, **HF Output** to finish and hand off.
 The three global keys: **Alt+Q** pie · **Ctrl+Shift+D** draw · **Alt+X** mirror.
 
 ## What you can do
 
-<img align="right" width="240" src="docs/tools.png" alt="The Hardflow N-panel">
+<img align="right" width="250" src="docs/tools.png" alt="The Hardflow sidebar: the Boolean hero plus the Build, Edit, Curves and Settings sections, with the HF Detail and HF Output tabs beside it">
 
 **Cut and build.** Draw Box / Circle / Polygon / N-gon / Slot / Star / Arc /
 Vent footprints straight onto a surface and cut, slice, union, intersect or
@@ -95,7 +101,8 @@ Bevel** and **Loop Cut** work in Object Mode, on a picked edge or its whole
 loop, right through subdivision and other modifiers. **Smart Bevel** adds the
 support loops that keep the edge crisp under Subdivision.
 
-**Grab handles in the viewport.** Opt-in gizmos (N-panel ▸ Gizmos, or pick the
+**Grab handles in the viewport.** Opt-in gizmos (Hardflow ▸ Settings ▸
+Gizmos, or pick the
 matching tool from the toolbar): move/rotate/scale, a bevel-width handle,
 Push/Pull on the selected faces, **mirror plane** handles you click to mirror
 across an axis, an **Offset ring** you drag inward to inset a face, and a
@@ -126,7 +133,7 @@ boundaries — and Hardflow already marked those while cutting, so
 even out the island scale and pack with padding you set in *pixels*. Turn the
 angle fallback off and only your cuts become seams.
 
-**Hand it to an engine.** The **Game-Ready** panel checks the things that bite
+**Hand it to an engine.** The **HF Output ▸ Game-Ready** panel checks the things that bite
 you after export — unapplied scale, inverted normals, non-manifold shells,
 n-gons, loose geometry, missing UVs and texel density — and puts a Fix button
 next to each one it can safely repair. Non-manifold geometry is selected for

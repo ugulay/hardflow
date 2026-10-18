@@ -43,7 +43,7 @@ class HARDFLOW_PT_decal_library(Panel):
     bl_idname = "HARDFLOW_PT_decal_library"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
+    bl_category = "HF Detail"
     bl_parent_id = "HARDFLOW_PT_decals"
     bl_options = {'DEFAULT_CLOSED'}
 

@@ -1312,6 +1312,25 @@ no assertion can judge:
 - [ ] Baking with the low poly NOT unwrapped gives a clear error telling you
       to unwrap first, rather than a black image.
 
+## 35. Sidebar reorganised into three tabs
+
+The structure is pinned by a headless test and the Hardflow tab was
+screenshotted in a real sidebar. What needs a human is whether the split
+matches how you actually work:
+
+- [ ] Sidebar (**N**) shows three tabs: **Hardflow**, **HF Detail**,
+      **HF Output**. Each opens with exactly one section expanded.
+- [ ] **Hardflow**: the Boolean hero (Mode + Draw + shape grid) is right
+      there; Build / Edit / Curves / Settings are collapsed below it.
+- [ ] **Settings** holds Snapping, Cutter Options, Gizmos and Help --
+      nothing settings-like is left loose among the tools.
+- [ ] Enter Edit Mode: **Build** disappears (not greyed) and comes back in
+      Object Mode. Same for **Game-Ready** in HF Output.
+- [ ] Every tool you used before is still reachable, and the pie (Alt+Q) and
+      header menu are unchanged.
+- [ ] Panel open/closed states survive a Blender restart (Blender stores
+      them per screen, so a fresh file starts from the defaults above).
+
 ---
 
 When every box is ticked, update the live-verification note in `CLAUDE.md`

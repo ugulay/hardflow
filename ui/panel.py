@@ -151,7 +151,14 @@ class HARDFLOW_PT_build(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Hardflow"
+    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "HARDFLOW_PT_tools"
+
+    @classmethod
+    def poll(cls, context):
+        # Every primitive here adds an object, which is Object Mode only --
+        # greying the whole panel out in Edit Mode is just noise.
+        return context.mode == 'OBJECT'
 
     def draw(self, context):
         col = self.layout.column(align=True)
@@ -202,6 +209,7 @@ class HARDFLOW_PT_edit(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Hardflow"
+    bl_options = {'DEFAULT_CLOSED'}
     bl_parent_id = "HARDFLOW_PT_tools"
 
     def draw(self, context):
@@ -274,8 +282,7 @@ class HARDFLOW_PT_display(Panel):
     bl_idname = "HARDFLOW_PT_display"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_category = "HF Output"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -300,7 +307,7 @@ class HARDFLOW_PT_help(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_parent_id = "HARDFLOW_PT_settings"
     bl_options = {'DEFAULT_CLOSED'}
 
     @staticmethod
@@ -373,7 +380,7 @@ class HARDFLOW_PT_gizmos(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_parent_id = "HARDFLOW_PT_settings"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -407,15 +414,18 @@ class HARDFLOW_PT_gameready(Panel):
     bl_idname = "HARDFLOW_PT_gameready"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
-    bl_options = {'DEFAULT_CLOSED'}
+    bl_category = "HF Output"
 
     _ICONS = {
         'OK': 'CHECKMARK',
         'WARN': 'ERROR',
         'FAIL': 'CANCEL',
     }
+
+    @classmethod
+    def poll(cls, context):
+        # Audit, unwrap and bake all operate on whole objects.
+        return context.mode == 'OBJECT'
 
     def draw(self, context):
         from ..core import gameready as gr
@@ -477,13 +487,34 @@ class HARDFLOW_PT_gameready(Panel):
             foot.prop(prefs, "gameready_texture_size")
 
 
+class HARDFLOW_PT_settings(Panel):
+    """One roof for the settings, so they stop competing with the tools.
+
+    Snapping, Cutter Options and the gizmo toggles are preferences, not
+    actions, but as sibling panels they sat at the same level as Boolean and
+    Build -- which is most of why the tab read as a wall. Nested one level
+    down they are still two clicks away and no longer in the way."""
+
+    bl_label = "Settings"
+    bl_idname = "HARDFLOW_PT_settings"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Hardflow"
+    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        # Deliberately empty: this panel exists to group its children.
+        pass
+
+
 class HARDFLOW_PT_snap(Panel):
     bl_label = "Snapping & Settings"
     bl_idname = "HARDFLOW_PT_snap"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_parent_id = "HARDFLOW_PT_settings"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -545,7 +576,7 @@ class HARDFLOW_PT_cutter_options(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_parent_id = "HARDFLOW_PT_settings"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -585,8 +616,7 @@ class HARDFLOW_PT_modifiers(Panel):
     bl_idname = "HARDFLOW_PT_modifiers"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_category = "HF Output"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -623,8 +653,7 @@ class HARDFLOW_PT_cutters(Panel):
     bl_idname = "HARDFLOW_PT_cutters"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "Hardflow"
-    bl_parent_id = "HARDFLOW_PT_tools"
+    bl_category = "HF Output"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):

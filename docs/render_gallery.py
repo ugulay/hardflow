@@ -282,6 +282,63 @@ try:
         report["errors"].append("shot3: " + traceback.format_exc())
         clear_scene()
 
+    # NOTE on scale: cube() halves the size arguments it is given (see its
+    # body: v.co *= sx / 2.0 on a unit cube), while cyl() takes its radius
+    # literally. Shots 1-4 were authored against that, so rather than change
+    # it, the two shots below work in TRUE extents and double what they hand
+    # to cube(). plate(sx=4.0) is therefore a 2.0-wide plate.
+
+    def box_cut(name, x0, y0, x1, y1):
+        """A through-cutter spanning the given TRUE rectangle."""
+        return cube(name, (x1 - x0) * 2.0, (y1 - y0) * 2.0, 2.0,
+                    loc=((x0 + x1) / 2.0, (y0 + y1) / 2.0, 0))
+
+    # Shot 5 — Vent grill + radial bolt circle (v1.20): one drawn rectangle
+    # expanded into louvre slots by core.grid.vent_slats, and one hole spun
+    # into a bolt circle by core.grid.radial_sets. Both are the add-on's own
+    # generators, and the gallery had nothing showing either.
+    try:
+        p = plate("VentPanel", sx=4.0, sy=3.2, sz=0.34)   # true 2.0 x 1.6
+        rect = C_grid.box_points((-0.85, -0.55), (-0.1, 0.55))
+        for i, slat in enumerate(C_grid.vent_slats(rect, 6, ratio=0.55)):
+            xs = [q[0] for q in slat]
+            ys = [q[1] for q in slat]
+            cut(p, box_cut("v_slat%d" % i, min(xs), min(ys), max(xs), max(ys)))
+        # radial_sets decides WHERE the bolts go: one outline spun about a
+        # pivot into eight, each landing as a through-cut.
+        hole = C_grid.circle_points((0.5, 0.3), (0.56, 0.3), 20)
+        for i, ring in enumerate(C_grid.radial_sets(hole, 8,
+                                                    center=(0.5, 0.0))):
+            cx = sum(q[0] for q in ring) / len(ring)
+            cy = sum(q[1] for q in ring) / len(ring)
+            cut(p, cyl("b_hole%d" % i, 0.055, 2.0, loc=(cx, cy, 0)))
+        cut(p, cyl("v_port", 0.14, 2.0, loc=(0.5, 0.0, 0)))
+        render_to("shot5-vent-radial.png")
+        clear_scene()
+    except Exception:
+        import traceback
+        report["errors"].append("shot5: " + traceback.format_exc())
+        clear_scene()
+
+    # Shot 6 — Sweep / Follow-Me (v1.13): structural L / U / T / I sections
+    # swept along a path by core.geometry.profile_points + build_pipe_mesh.
+    try:
+        plate("SweepBase", sx=4.6, sy=2.6, sz=0.2, bevel=0.02)  # true 2.3x1.3
+        z = 0.1
+        for i, prof in enumerate(('L', 'U', 'T', 'I')):
+            x = -0.78 + i * 0.52
+            pts = [Vector((x, -0.45, z)), Vector((x, 0.45, z))]
+            section = C_geo.profile_points(prof, 0.1)
+            me = C_geo.build_pipe_mesh(pts, section, name="HF_%s" % prof)
+            if me is not None:
+                _link(bpy.data.objects.new("HF_Sweep_%s" % prof, me))
+        render_to("shot6-sweep.png")
+        clear_scene()
+    except Exception:
+        import traceback
+        report["errors"].append("shot6: " + traceback.format_exc())
+        clear_scene()
+
     # Shot 4 — Pipe draped flat across a panel (build_pipe returns CURVE data).
     try:
         plate("PipePanel", sx=3.4, sy=3.4, sz=0.5)

@@ -98,23 +98,29 @@ _classes = (
     menu.HARDFLOW_MT_menu_display,
     menu.HARDFLOW_MT_menu_decals,
     menu.HARDFLOW_MT_menu_assets,
+    # Panels, grouped by the sidebar tab they live in. A sub-panel's parent
+    # must already be registered, so every parent precedes its children.
+    # --- tab "Hardflow": model it ---
     panel.HARDFLOW_PT_tools,
     panel.HARDFLOW_PT_build,
     panel.HARDFLOW_PT_edit,
     panel.HARDFLOW_PT_curves,
-    panel.HARDFLOW_PT_display,
-    panel.HARDFLOW_PT_help,
-    panel.HARDFLOW_PT_gizmos,
-    panel.HARDFLOW_PT_gameready,
+    panel.HARDFLOW_PT_settings,
     panel.HARDFLOW_PT_snap,
     panel.HARDFLOW_PT_cutter_options,
-    panel.HARDFLOW_PT_modifiers,
-    panel.HARDFLOW_PT_cutters,
+    panel.HARDFLOW_PT_gizmos,
+    panel.HARDFLOW_PT_help,
+    # --- tab "HF Detail": dress it ---
     decal_panel.HARDFLOW_PT_decals,
     decal_library.HARDFLOW_PT_decal_library,
     trim_panel.HARDFLOW_PT_trim,
     asset_panel.HARDFLOW_PT_assets,
     asset_panel.HARDFLOW_PT_asset_library,
+    # --- tab "HF Output": finish it ---
+    panel.HARDFLOW_PT_gameready,
+    panel.HARDFLOW_PT_cutters,
+    panel.HARDFLOW_PT_modifiers,
+    panel.HARDFLOW_PT_display,
     # Viewport Asset Shelf: the operator first, so the shelf's
     # bl_activate_operator resolves to something that exists.
     shelf.HARDFLOW_OT_shelf_place,

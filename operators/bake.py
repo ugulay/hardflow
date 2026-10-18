@@ -140,7 +140,7 @@ class HARDFLOW_OT_bake_highlow(Operator):
     bl_label = "Bake High to Low"
     bl_description = ("Bake the selected high poly onto the active low poly "
                       "through a cage. Needs the low poly unwrapped -- the "
-                      "Game-Ready panel's Unwrap does that along your cuts")
+                      "HF Output > Game-Ready panel's Unwrap does that)")
     bl_options = {'REGISTER', 'UNDO'}
 
     bake_type: EnumProperty(name="Type", items=_BAKE_TYPE_ITEMS,
@@ -181,8 +181,9 @@ class HARDFLOW_OT_bake_highlow(Operator):
             return {'CANCELLED'}
         if not low.data.uv_layers:
             self.report({'ERROR'},
-                        "'%s' has no UV map -- unwrap it first (Game-Ready "
-                        "> Hard-Surface Unwrap)" % low.name)
+                        "'%s' has no UV map -- unwrap it first "
+                        "(HF Output > Game-Ready > Hard-Surface Unwrap)"
+                        % low.name)
             return {'CANCELLED'}
 
         image = self._target_image(low)

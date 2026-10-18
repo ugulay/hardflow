@@ -4437,6 +4437,57 @@ def test_gameready_unknown_fix_is_refused():
         hardflow.unregister()
 
 
+def test_sidebar_is_grouped_into_three_workflow_tabs():
+    # The sidebar used to be one tab with 13 sibling panels -- tools and
+    # settings at the same level, Build and Edit open on top of the hero.
+    # This pins the grouping so it cannot drift back.
+    _reset()
+    import hardflow
+    hardflow.register()
+    try:
+        panels = {}
+        for name in dir(bpy.types):
+            if not name.startswith("HARDFLOW_PT_"):
+                continue
+            cls = getattr(bpy.types, name)
+            panels[name] = (getattr(cls, 'bl_category', ''),
+                            getattr(cls, 'bl_parent_id', ''),
+                            'DEFAULT_CLOSED' in getattr(cls, 'bl_options',
+                                                        set()))
+        cats = {}
+        for name, (cat, _p, _c) in panels.items():
+            cats.setdefault(cat, []).append(name)
+        assert set(cats) == {"Hardflow", "HF Detail", "HF Output"}, sorted(cats)
+
+        # A sub-panel's parent must exist AND share its tab, or Blender
+        # refuses to register it (and the registration order must match).
+        for name, (cat, parent, _c) in panels.items():
+            if not parent:
+                continue
+            assert parent in panels, (name, parent)
+            assert panels[parent][0] == cat, (name, cat, panels[parent][0])
+
+        # Exactly one panel opens by default per tab: the tab's hero.
+        for cat, names in cats.items():
+            roots_open = [n for n in names
+                          if not panels[n][1] and not panels[n][2]]
+            assert len(roots_open) == 1, (cat, roots_open)
+
+        # The settings are nested one level down rather than competing with
+        # the tools for attention.
+        for name in ("HARDFLOW_PT_snap", "HARDFLOW_PT_cutter_options",
+                     "HARDFLOW_PT_gizmos", "HARDFLOW_PT_help"):
+            assert panels[name][1] == "HARDFLOW_PT_settings", name
+        assert panels["HARDFLOW_PT_settings"][1] == "HARDFLOW_PT_tools"
+
+        # No tab is a wall again: at most 5 top-level entries each.
+        for cat, names in cats.items():
+            roots = [n for n in names if not panels[n][1]]
+            assert len(roots) <= 5, (cat, roots)
+    finally:
+        hardflow.unregister()
+
+
 def test_gameready_panel_icons_and_prefs_guard():
     # Icons and prefs rows are the two things that only fail when a panel
     # actually draws. The icon ids are checked the same way the menu tables

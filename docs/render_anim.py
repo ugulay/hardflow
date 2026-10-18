@@ -182,7 +182,10 @@ def setup_render():
     return cam
 
 
-def place_cam(cam, angle_deg, elev=5.2, radius=9.0, oscale=5.5):
+# oscale is the orthographic frame width: the part filled barely a third
+# of the old 5.5 frame, which is most of why the GIF read as small and
+# distant. 3.6 crops to the work without clipping the turntable corners.
+def place_cam(cam, angle_deg, elev=5.2, radius=9.0, oscale=3.6):
     a = math.radians(angle_deg)
     cam.location = (radius * math.cos(a), radius * math.sin(a), elev)
     d = Vector((0.0, 0.0, -0.05)) - Vector(cam.location)

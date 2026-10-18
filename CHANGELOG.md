@@ -28,6 +28,25 @@ Blender 5.2.2 LTS.
   from a cold start. The gate is the pure `core.path.is_drag` the curve tools
   already used for their freehand stroke, so a drag now means the same thing in
   every Hardflow tool (and `pipe`'s private copy of the maths is gone).
+- **The sidebar is split into three workflow tabs.** It had grown to 17
+  panels, 13 of them siblings under one tab, with tools and settings
+  competing at the same level -- opening Hardflow meant facing a wall.
+  Now: **Hardflow** to model (the Boolean hero, with Build / Edit / Curves
+  and a new **Settings** group folding away Snapping, Cutter Options,
+  Gizmos and Help), **HF Detail** to dress (decals, trim sheets, kit
+  parts), **HF Output** to finish (Game-Ready audit / unwrap / bake,
+  cutters, modifier stack, display). One section opens per tab, and
+  Build / Game-Ready now disappear outside Object Mode instead of greying
+  out. Nothing was removed: the pie and header menu are unchanged.
+
+### Documentation
+- The README gallery and hero GIF were re-rendered from the current code
+  (they predated about half the feature set) and gained two shots of what
+  is actually distinctive now: a **vent grill + radial bolt circle**, and
+  the **L / U / T / I sweep profiles**. The GIF is framed much tighter --
+  the part used to sit at a third of the frame. The sidebar screenshot was
+  retaken for the new tabs.
+
 - **Cage-based high-to-low baking**: bake the detailed mesh onto the game
   mesh through a real cage instead of a ray distance. The cage matters --
   with a plain ray distance the rays fan out along the low poly's own
