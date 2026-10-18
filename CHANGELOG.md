@@ -3,11 +3,16 @@
 Notable changes in this project. Versioning follows [SemVer](https://semver.org)
 logic: minor versions add features, patch versions fix bugs.
 
-## [Unreleased]
+## [1.23.0] — 2026-10-18
 
-Review pass: modal-teardown hardening, the artist-facing UX gaps, and the
-Mirror that v1.13 removed. Pure suite 158 tests, headless 158, verified in
-Blender 5.2.2 LTS.
+Feature release, and the largest since 1.0. It began as a review pass --
+modal-teardown hardening and the artist-facing UX gaps -- and grew into the
+pipeline half the add-on was missing: the Mirror that v1.13 removed, a
+bundled starter library, drag-and-drop, an Asset Shelf, three more gizmos,
+a game-ready audit, cut-aware unwrapping and cage-based baking. The sidebar
+was then split into three workflow tabs because all of that no longer fit in
+one. Pure suite 192 tests, headless 199 (a real Cycles cage bake among
+them), verified in Blender 5.2.2 LTS against the 4.2 LTS floor.
 
 ### Added
 - **Mirror / symmetry** (`object.hardflow_mirror`, **Alt+X**): one press mirrors

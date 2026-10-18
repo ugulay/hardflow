@@ -797,7 +797,7 @@ machinery; verified with 129 pure + 138 headless tests, live in Blender 5.1.2.
 The Pipe/Cable/Sweep fluidity pass: draw curves instead of clicking them, hang
 cables with real (deterministic) physics, sweep any cross-section, and dress a
 path with repeated detail meshes. All pure-core + thin-operator; verified with
-144 pure + 142 headless tests in Blender 5.1.2.
+144 pure + 142 headless tests in Blender 5.1.2 (the counts at the time of that pass).
 - [x] **Freehand click-or-stroke drawing** — LMB press-drag past a pixel gate
       records a freehand stroke through the same snap chain (the ink hugs the
       surface), reduced to clean anchors on release via the pure
@@ -850,6 +850,65 @@ in `operators/push_pull._manifold_push`, opt-in behind the **Extrude Manifold**
 preference and the `D` toggle, with a plain-extrude fallback (and a HUD reason)
 whenever the boolean cannot answer for the result. Verified: pure 146/146,
 headless 146/146 and a click-through in Blender 5.2.2 (see CLAUDE.md).
+
+## v1.23 — Pipeline pass (library · shelf · audit · unwrap · bake)
+
+Started as a review of the code and the interface, and turned into the half
+of the pipeline the add-on did not have. The review itself found real
+defects rather than style nits, so those came first:
+
+- [x] **Modal teardown**. No modal operator defined `cancel()`, so an
+      external teardown (file read, window close, editor change, quit) left
+      the GPU draw handler firing against a dead operator, the status bar
+      stuck, temp modifiers on the targets and preview objects in the
+      .blend. Added across the three shared bases plus every standalone
+      modal, with `modal()` exception guards and `context.area` checks to
+      match. The live-boolean preview was also silently ignoring the solver
+      it asked for on Blender 5.x (`FAST` was renamed `FLOAT`).
+- [x] **Press-drag-release drawing** — the first gesture a BoxCutter user
+      tries, and until now a dead movement. Click-click still works; the
+      gate is the pure `core.path.is_drag` the curve tools already used.
+- [x] **Persistent draw tool** + in-session memory of the in-draw settings,
+      so a row of cuts is one click each instead of re-invoking per hole.
+- [x] **Mirror** (`Alt+X`), which v1.13 removed on the grounds that
+      Blender's modifier covers it. It does not: the decision -- which
+      axis, which half, where in the stack -- is the work. Axis from the
+      view, the visible half kept, `HF_Mirror` sorted into place.
+
+Then the pipeline, each piece leaning on something only this add-on knows:
+
+- [x] **Bundled starter library** — 16 decals, a 4x4 trim sheet and 8 INSERT
+      kit parts, all generated in-house (`tools/make_library.py`, GPLv3), so
+      the decal / trim / POM / atlas / INSERT features are reachable on a
+      fresh install instead of opening as empty grids.
+- [x] **Drag and drop** a PNG or `.blend` onto a model, and a **viewport
+      Asset Shelf** for the library (which meant registering the bundled
+      folder as a real asset library, marking the content and giving it
+      previews).
+- [x] **Mirror / Offset / Loop-Slide gizmos**, closing the gap where only
+      Push/Pull and Bevel had viewport handles.
+- [x] **Game-Ready audit** — scale, normals (by signed volume, so it is
+      exact rather than a centroid guess), manifoldness, n-gons, loose
+      geometry, UVs and texel density, each with the fix that is safe to
+      apply. Non-manifold geometry is selected, not repaired; texel density
+      is reported, not corrected.
+- [x] **Cut-aware seams + hard-surface unwrap** — the differentiator. Smart
+      Sharpen already marks every boolean cut while cutting, so the seams
+      follow the modelling history rather than being inferred from
+      geometry. Padding is specified in pixels.
+- [x] **Cage high-to-low bake** — a real cage, built from the low poly along
+      its smooth normals, measured against the high poly and widened if it
+      falls short, because rays that fan out at bevelled corners are where
+      smeared normal maps come from.
+- [x] **Sidebar split into three workflow tabs** (model / detail / output).
+      It had reached 17 panels with 13 siblings under one root; the README
+      gallery and hero GIF were re-rendered at the same time, since they
+      predated about half the feature set.
+
+Verified: pure 192/192, headless 199/199 (including a real Cycles cage
+bake), Blender 5.2.2 LTS against the 4.2 LTS floor. The modal, gesture and
+bake-quality items that no assertion can judge are in
+`tests/manual_checklist.md` sections 25-35.
 
 ## Feature gap pass (pre-publish)
 A feature audit of common hard-surface workflows. Closed in this pass:
